@@ -12,7 +12,8 @@ both side by side is the operator's concern, not the plugin's.
 
 The repo is public at `DonnieFi/oc-family-pack`. `.gitignore` is an allowlist.
 
-- Plugin code, `README.md`, `FAQ.md`, `LICENSE`, package/manifest files,
+- Plugin code, the built `dist/` (git installs run no build), `README.md`,
+  `FAQ.md`, `LICENSE`, package/manifest files,
   this file, planning notes (`fpack_audit.md`), agent config (`.agents/`,
   `.claude/`, `.codex/`) and the beads plan ship.
 - The plan ships as `.beads/issues.jsonl` (`bd export`) plus
@@ -119,7 +120,8 @@ token; OpenClaw uses its own bot.
 
 - Feature plugin on OpenClaw 2026.9.7 or newer, using only the public
   `openclaw/plugin-sdk/*` imports (`feature-contract`, `feature-plugin`,
-  `control-ui`). These APIs are experimental: pin and test against the host
+  `control-ui`, and `tool-plugin` only for the config-schema bridge in
+  `src/index.ts` until s5k.31.2 lands). These APIs are experimental: pin and test against the host
   version.
 - One feature contract serves chat tools, the page, and commands. Calendar
   writes go through one `CalendarWrite` pipeline (permissions, write mode,
