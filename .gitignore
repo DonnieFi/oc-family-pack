@@ -1,4 +1,4 @@
-# Allowlist: plugin code, docs, planning (beads export, audit) and agent
+# Allowlist: plugin code, docs, the beads plan export, and agent
 # config are published. Local state and the beads database stay here.
 /*
 !/.gitignore
@@ -15,7 +15,6 @@
 !/assets/
 !/skills/
 !/AGENTS.md
-!/fpack_audit.md
 !/.agents/
 !/.claude/
 !/.codex/
@@ -26,7 +25,6 @@
 !/FAQ.md
 !/skills/**/SKILL.md
 !/AGENTS.md
-!/fpack_audit.md
 !/.agents/**/*.md
 !/.beads/README.md
 

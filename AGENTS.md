@@ -14,8 +14,8 @@ The repo is public at `DonnieFi/oc-family-pack`. `.gitignore` is an allowlist.
 
 - Plugin code, the built `dist/` (git installs run no build), `README.md`,
   `FAQ.md`, `LICENSE`, package/manifest files,
-  this file, planning notes (`fpack_audit.md`), agent config (`.agents/`,
-  `.claude/`, `.codex/`) and the beads plan ship.
+  this file, agent config (`.agents/`, `.claude/`, `.codex/`) and the beads
+  plan ship. Audits (`fpack_audit.md`) stay local.
 - The plan ships as `.beads/issues.jsonl` (`bd export`) plus
   `.beads/interactions.jsonl`. Re-export after bead changes you commit:
   `bd export > .beads/issues.jsonl`. The Dolt database, backups, and hooks
