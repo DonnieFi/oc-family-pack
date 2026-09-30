@@ -15,27 +15,35 @@ stores no Google credentials of its own. The plugin runs
 `gog calendar events <id> --from ... --to ... --json` once per configured
 calendar, with a 20 second timeout and no shell.
 
-If gog is missing or not signed in, the Family tab shows the setup steps. If
+If gog is missing or not signed in, the Family page shows the setup steps. If
 the Gateway runs as a service without your shell `PATH`, set `gogPath` to the
 full path of the binary.
 
-## Why doesn't the Family tab appear, or stay blank?
+## Why doesn't the Family page appear?
 
-External plugin tabs run in a sandboxed frame. They get access through a short
-cookie grant, and browsers only allow that cookie in a secure context. Use one
-of these:
+Family is a native Control UI page, so it needs three things:
 
-- HTTPS, for example `tailscale serve` in front of the Gateway.
-- `http://127.0.0.1` or `http://localhost` on the Gateway host.
+- The plugin is installed and enabled, and the Gateway has restarted since.
+- **Settings → Labs → Custom plugin UI** is on
+  (`gateway.controlUi.experimental.customPlugins: true`). It is off by default.
+- The Control UI is open over HTTPS or on `http://127.0.0.1` / `http://localhost`.
+  Native plugin assets use secure cookies, so plain HTTP on a LAN address
+  cannot load the page. `tailscale serve` in front of the Gateway works.
 
-Plain HTTP over a LAN address will not load the tab. Browsers that block all
-third-party cookies will not load it either. The page still works directly at
-`/plugins/family/` with Gateway auth.
+Then **Family** appears in the sidebar. The page lives at
+`/plugin?plugin=oc-family-pack&id=family` under your Control UI URL.
+
+## Can I install it straight from Git?
+
+Yes. `openclaw plugins install git:https://github.com/DonnieFi/oc-family-pack.git`
+clones the repository and installs its dependencies, but it does not run a
+build. The repository therefore ships the compiled `dist/` folder, and the
+installer asks you to accept the plugin's capabilities first.
 
 ## Where does my family data go?
 
 Nowhere new. Calendar events are read by gog on your Gateway host and rendered
-by your Gateway. Nothing is stored; each page load reads the week again. The
+in your Control UI. Nothing is stored; each page load reads the week again. The
 only outside request the plugin makes is the Environment Canada weather lookup.
 That lookup sends a search box around your configured coordinates.
 The page loads no fonts, scripts, or images from other sites.
@@ -47,8 +55,8 @@ a moved pickup or a deleted appointment. The first version shows the week
 accurately and leaves edits to your calendar app. Reminders and chores are
 planned, and they will be explicit actions.
 
-## Who can see the Family tab?
+## Who can see the Family page?
 
-Anyone signed in to the Control UI with at least `operator.read`. The Chat with
-strip uses that person's own agent list, so it only shows agents they can
-already open.
+Anyone signed in to the Control UI with at least `operator.read`, once custom
+plugin UI is on. The Chat with strip uses that person's own agent list, so it
+only shows agents they can already open.

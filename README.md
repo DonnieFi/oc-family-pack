@@ -63,14 +63,12 @@ Weather uses Environment Canada's public API, so it needs no key and covers Cana
 ## Install
 
 ```bash
-git clone https://github.com/DonnieFi/oc-family-pack.git
-cd oc-family-pack
-npm install
-npm run build
-openclaw plugins install .
+openclaw plugins install git:https://github.com/DonnieFi/oc-family-pack.git --accept-capabilities
 ```
 
-Add your configuration (see below), then enable the plugin:
+The repository ships its built `dist/`, so no build step is needed. `--accept-capabilities` confirms the plugin's native Control UI page, which runs with the signed-in operator's Gateway permissions.
+
+To try it without calendars first, set `demo: true` (see below). Add your configuration, then enable the plugin:
 
 ```bash
 openclaw plugins enable oc-family-pack
