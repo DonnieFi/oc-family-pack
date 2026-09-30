@@ -9,10 +9,10 @@
 !/pnpm-lock.yaml
 !/package-lock.json
 !/tsconfig.json
+!/tsconfig.build.json
 !/openclaw.plugin.json
-!/index.ts
 !/src/
-!/assets/
+!/dist/
 !/skills/
 !/AGENTS.md
 !/.agents/
@@ -35,7 +35,6 @@
 /docs/
 
 node_modules/
-dist/
 coverage/
 *.log
 *.sqlite
