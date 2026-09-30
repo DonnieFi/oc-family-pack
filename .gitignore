@@ -31,6 +31,9 @@
 /.beads/backup/
 /.beads/hooks/
 
+# Planning, research, audits and proof artifacts: local only.
+/docs/
+
 node_modules/
 dist/
 coverage/
