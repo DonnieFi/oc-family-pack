@@ -1,0 +1,33 @@
+# Allowlist: only plugin code and user-facing docs are published.
+# Planning notes, agent files, beads, and local state stay on this machine.
+/*
+!/.gitignore
+!/README.md
+!/FAQ.md
+!/LICENSE
+!/package.json
+!/pnpm-lock.yaml
+!/package-lock.json
+!/tsconfig.json
+!/openclaw.plugin.json
+!/index.ts
+!/src/
+!/assets/
+!/skills/
+
+**/*.md
+!/README.md
+!/FAQ.md
+!/skills/**/SKILL.md
+
+node_modules/
+dist/
+coverage/
+*.log
+*.sqlite
+*.sqlite-*
+*.db
+.env*
+.DS_Store
+**/fixtures/private/
+**/*.local.*
