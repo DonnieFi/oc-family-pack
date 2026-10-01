@@ -58,5 +58,7 @@ planned, and they will be explicit actions.
 ## Who can see the Family page?
 
 Anyone signed in to the Control UI with at least `operator.read`, once custom
-plugin UI is on. The Chat with strip uses that person's own agent list, so it
-only shows agents they can already open.
+plugin UI is on, currently sees the whole household week. Per-person filtering
+(parents see every calendar; kids see shared, school, and their own) is the
+planned server check against the signed-in client. The Chat with strip uses
+that person's own agent list, so it only shows agents they can already open.

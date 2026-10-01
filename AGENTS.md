@@ -4,9 +4,10 @@
 (shared calendar, weather, briefs, reminders, chat with any agent) to an
 OpenClaw Gateway. The operator built it for his own household first and
 shares it; build for any household (gog for calendars, Discord channels chosen
-in setup), never for one install. The operator's older family bot at
-`/opt/family-bot` is reference material only: read it, never edit it. Running
-both side by side is the operator's concern, not the plugin's.
+in setup), never for one install. The operator's older family bot at `/opt/family-bot` is the donor for
+behavior this plugin still owes. Port from it where that code still fits, as
+in the architecture rules below, and leave that tree unchanged. Running both
+side by side is the operator's concern, not the plugin's.
 
 ## What gets published
 
@@ -17,9 +18,9 @@ The repo is public at `DonnieFi/oc-family-pack`. `.gitignore` is an allowlist.
   this file, agent config (`.agents/`, `.claude/`, `.codex/`) and the beads
   plan ship.
 - `docs/` is local only (gitignored): planning, research, audits
-  (`docs/fpack_audit.md`), design notes (`docs/research/`) and proof
-  screenshots/logs (`docs/proof/`). Put new planning and research there, not
-  in `/tmp` or the repo root.
+  (`docs/fpack_audit.md`), the plan map (`docs/overview.html`), design notes
+  (`docs/research/`) and proof screenshots/logs (`docs/proof/`). Put new
+  planning and research there, not in `/tmp` or the repo root.
 - The plan ships as `.beads/issues.jsonl` (`bd export`) plus
   `.beads/interactions.jsonl`. Re-export after bead changes you commit:
   `bd export > .beads/issues.jsonl`. The Dolt database, backups, and hooks
@@ -43,16 +44,17 @@ Each sub-epic of `oc-family-pack-s5k` maps to one branch (also stored as
 | `s5k.33` Calendar read | `epic/calendar-read` | after foundation |
 | `s5k.34` Calendar writes | `epic/calendar-writes` | after calendar-read |
 | `s5k.35` Briefs, reminders, and delivery | `epic/briefs-delivery` | after calendar-read |
-| `s5k.36` Control UI and agent surfaces | `epic/control-ui` | after calendar-read |
+| `s5k.36` Control UI and agent surfaces | `epic/control-ui` | after calendar-read; `s5k.35.2` also after briefs |
 | `s5k.37` Later (deferred) | none | promote a child into an active epic first |
 
 The root epic `s5k` is the v1 umbrella, not a branch.
 
 - New work goes under the epic that owns it (`bd create --parent <epic>`);
   cross-epic ordering is expressed with `bd dep add`, not by nesting.
-- The in-flight feature-plugin rework lands on `epic/foundation` even though
-  it touches `s5k.5` (event fields) and `s5k.24` (page skeleton); `s5k.24`
-  stays open in control-ui for the remaining page work.
+- The feature-plugin rework landed on `epic/foundation`, including the native
+  page (`s5k.24`, closed on that branch). Remaining page UX is `s5k.31.4`.
+  Brief delivery status (`s5k.35.2`) is a control-ui child and also waits on
+  the briefs delivery log. The Today widget does not wait on garbage.
 
 ## Workflow
 
@@ -87,7 +89,11 @@ authority covers these steps only. A current "don't commit/push" still wins.
    PR merged). If `main` moved, rebase the branch onto it, rerun the checks,
    force-push the branch with `--force-with-lease`, and retry. Never create a
    merge commit.
-7. Delete the merged branch locally and on the remote, then close the epic.
+7. Refresh the plan map at `docs/overview.html` from the beads. Every bead's
+   status, parent, blockers, and feature-shelf place match `bd show`, and
+   hovering a bead still shows its description, design, acceptance, and notes.
+   The file stays in `docs/`.
+8. Delete the merged branch locally and on the remote, then close the epic.
 
 **Beads without code:** decisions and setup beads (`s5k.1`, `s5k.29`, and
 `s5k.26`, which also needs approval because it changes the live Gateway)
@@ -130,9 +136,18 @@ token; OpenClaw uses its own bot.
 - One feature contract serves chat tools, the page, and commands. Calendar
   writes go through one `CalendarWrite` pipeline (permissions, write mode,
   idempotency key, write log); never add a second write path.
-- Requester identity is resolved once at the boundary. Plugins cannot see the
-  Gateway profile; Discord uses the roster's Discord ID stub, the page relies
-  on the operator's scopes.
+- Where `/opt/family-bot` already implements behavior a bead asks for, port
+  that code into the plugin. Adapt it to the feature contract, plugin config,
+  and family-neutral wording. Leave the family-bot tree unchanged. A bead
+  that names a Bernie module means start from that module.
+- Requester identity is resolved once at the boundary, on the server.
+  Discord tool calls match `requesterSenderId` to the roster `discordId`.
+  Page and read scoping use a plugin Gateway method that reads the
+  authenticated client: roster `profileId` is the trusted-proxy username
+  (the `X-Forwarded-User` value, lowercased), matched to `profile.emails[0]`
+  or `displayName` from `users.self`. A member id sent by the browser is not
+  identity. Page writes also require `operator.write`, which the kid role
+  does not have. Token auth is the shared owner until per-person auth is on.
 - Settings live in plugin config (`plugins.entries.oc-family-pack.config`).
   Persistent data lives in a plugin-owned SQLite file under the state dir,
   opened in a worker thread, never on the Gateway main thread. Never write to

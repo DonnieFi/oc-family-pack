@@ -90,7 +90,7 @@ Then open **Family** from the Control UI sidebar.
 
 ## Configuration
 
-Family Pack reads `plugins.entries["oc-family-pack"].config`. Members are keyed by their OpenClaw Gateway profile ID. A calendar's owners are the people it belongs to; a school calendar belongs to the student.
+Family Pack reads `plugins.entries["oc-family-pack"].config`. Each `profileId` is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. When the header is an email, `profileId` is the part before `@`. It is not the Gateway's internal profile id. A calendar's owners are those same ids. A school calendar belongs to the student.
 
 ```json5
 {
@@ -102,14 +102,14 @@ Family Pack reads `plugins.entries["oc-family-pack"].config`. Members are keyed 
           timezone: "America/Toronto",
           location: { lat: 45.42, lon: -75.7, label: "Home" },
           members: [
-            { profileId: "prof_parent_a", displayName: "Alex", role: "parent" },
-            { profileId: "prof_parent_b", displayName: "Sam", role: "parent" },
-            { profileId: "prof_kid_a", displayName: "Riley", role: "kid" },
+            { profileId: "alex", displayName: "Alex", role: "parent" },
+            { profileId: "sam", displayName: "Sam", role: "parent" },
+            { profileId: "riley", displayName: "Riley", role: "kid" },
           ],
           calendars: [
             { id: "family@group.calendar.google.com", label: "Family", kind: "shared", owners: [] },
-            { id: "alex@example.com", label: "Alex", kind: "personal", owners: ["prof_parent_a"] },
-            { id: "school-feed@group.calendar.google.com", label: "School", kind: "school", owners: ["prof_kid_a"] },
+            { id: "alex@example.com", label: "Alex", kind: "personal", owners: ["alex"] },
+            { id: "school-feed@group.calendar.google.com", label: "School", kind: "school", owners: ["riley"] },
           ],
         },
       },
@@ -126,8 +126,9 @@ Family Pack reuses what OpenClaw already owns instead of rebuilding it.
 
 | Need | Owned by |
 | --- | --- |
-| Who someone is | Gateway profiles and channel identity links |
-| Sign-in for each family member | [Multi-user Gateway](https://docs.openclaw.ai/concepts/multi-user) with Tailscale Serve |
+| Who someone is on the page | A plugin Gateway method on the signed-in client. `profileId` matches the proxy username |
+| Who someone is in Discord | The roster Discord id matched to the sender |
+| Sign-in for each family member | [Multi-user Gateway](https://docs.openclaw.ai/concepts/multi-user): Caddy basic auth on a trusted LAN, or Tailscale Serve / Cloudflare Access on the internet |
 | Google Calendar access | `gog` |
 | Chat surfaces | Control UI chat and the Discord channel |
 | Scheduling | Plugin-owned automations |
