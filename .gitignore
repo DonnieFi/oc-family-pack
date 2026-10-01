@@ -10,7 +10,9 @@
 !/package-lock.json
 !/tsconfig.json
 !/tsconfig.build.json
+!/tsconfig.scripts.json
 !/openclaw.plugin.json
+!/scripts/
 !/src/
 !/dist/
 !/skills/
