@@ -126,8 +126,8 @@ Family Pack reuses what OpenClaw already owns instead of rebuilding it.
 
 | Need | Owned by |
 | --- | --- |
-| Who someone is on the page | A plugin Gateway method on the signed-in client. `profileId` matches the proxy username |
-| Who someone is in Discord | The roster Discord id matched to the sender |
+| Who someone is on the page | Not built yet. Until then everyone signed in sees the same week. A later Gateway method will match `profileId` to the proxy username |
+| Who someone is in Discord | Not built yet. A later match will compare the roster Discord id to the sender |
 | Sign-in for each family member | [Multi-user Gateway](https://docs.openclaw.ai/concepts/multi-user): Caddy basic auth on a trusted LAN, or Tailscale Serve / Cloudflare Access on the internet |
 | Google Calendar access | `gog` |
 | Chat surfaces | Control UI chat and the Discord channel |
@@ -139,9 +139,9 @@ Each family operation is defined once and shared by the page and the agent tools
 
 Everything runs on your own OpenClaw Gateway. Calendar data is read through your local `gog` sign-in, weather requests send only your coordinates to Environment Canada, and nothing is sent to a third-party service by this plugin.
 
-Everyone signed in to the Control UI sees every configured calendar. The member chips only filter the view, so leave out any calendar that should stay private.
+Everyone signed in to the Control UI sees every configured calendar. The member chips only dim events in the view, so leave out any calendar that should stay private.
 
-The plugin keeps its own SQLite database (today it holds only update records) on the Gateway host, under `plugins/oc-family-pack/` in the OpenClaw state directory. Uninstall removes the plugin config and the installed code, and leaves that database in place. To delete it after uninstall:
+The plugin keeps its own SQLite database on the Gateway host, under `plugins/oc-family-pack/` in the OpenClaw state directory. Today the file holds the schema migration record only. Later epics add the write log and delivery records. Uninstall removes the plugin config and the installed code, and leaves that database in place. To delete it after uninstall:
 
 ```bash
 rm -rf "${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/plugins/oc-family-pack"
@@ -171,7 +171,7 @@ It boots a throwaway Gateway on a temp state dir and a free loopback port, never
 
 ## Roadmap
 
-- [ ] Family page: calendar, weather, and chat dock
+- [x] Family page: calendar, weather, and chat dock
 - [ ] Add events from chat and the page
 - [ ] Today dashboard widget
 - [ ] Daily and weekly briefs
