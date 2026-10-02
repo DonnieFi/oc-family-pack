@@ -140,22 +140,30 @@ test("a usable calendar account ends at the calendar list", async () => {
   assert.deepEqual(calls.at(-1), "calendar calendars --json --no-input");
 });
 
-test("openclaw family gog prints the plan and sets a failing exit until gog is ready", async () => {
-  const lines: string[] = [];
-  let action: ((opts: { account?: string; desktop?: boolean }) => void | Promise<void>) | undefined;
-  const command = () => {
-    const node = {
-      description: () => node,
-      command: () => node,
-      option: () => node,
-      action: (fn: (opts: { account?: string; desktop?: boolean }) => void | Promise<void>) => {
-        action = fn;
-        return node;
+type Action = (...args: any[]) => void | Promise<void>;
+
+function fakeProgram(): { program: { command: (name: string) => any }; actions: Map<string, Action> } {
+  const actions = new Map<string, Action>();
+  const node = (name: string): any => {
+    const self: any = {
+      description: () => self,
+      argument: () => self,
+      option: () => self,
+      command: (child: string) => node(child),
+      action: (fn: Action) => {
+        actions.set(name, fn);
+        return self;
       },
     };
-    return node;
+    return self;
   };
-  registerFamilyCli({ command }, {
+  return { program: { command: (name: string) => node(name) }, actions };
+}
+
+test("openclaw family gog prints the plan and sets a failing exit until gog is ready", async () => {
+  const lines: string[] = [];
+  const { program, actions } = fakeProgram();
+  registerFamilyCli(program, {
     run: async () => {
       const error = new Error("missing") as Error & { code: string };
       error.code = "ENOENT";
@@ -163,10 +171,32 @@ test("openclaw family gog prints the plan and sets a failing exit until gog is r
     },
     write: (text) => lines.push(text),
   });
+  const action = actions.get("gog");
   assert.ok(action);
   const previous = process.exitCode;
   await action({});
   assert.equal(process.exitCode, 1);
   process.exitCode = previous;
   assert.equal(lines[0]?.split("\n").at(-1), "Next: brew install openclaw/tap/gogcli");
+});
+
+test("openclaw family access reports from the host config and prints a mode's setup", async () => {
+  const lines: string[] = [];
+  const { program, actions } = fakeProgram();
+  const gateway = { port: 18790, auth: { mode: "token", token: "SENTINEL" } };
+  registerFamilyCli(program, { run: async () => ({ stdout: "" }), gateway, write: (text) => lines.push(text) });
+  const action = actions.get("access");
+  assert.ok(action);
+  const previous = process.exitCode;
+  await action(undefined, [], {});
+  assert.equal(process.exitCode, 1);
+  assert.match(lines[0] ?? "", /^This Gateway is in solo mode\. 1 step left:/);
+  await action("lan", ["sam"], { parent: ["alex"], kid: ["riley"] });
+  assert.equal(process.exitCode, 0);
+  assert.match(lines[1] ?? "", /reverse_proxy 127\.0\.0\.1:18790/);
+  assert.match(lines[1] ?? "", /"profileId":"PROFILE_sam","role":"guest"/);
+  await action("lan", [], { parent: ["Alex Smith"] });
+  assert.equal(process.exitCode, 1);
+  process.exitCode = previous;
+  assert.equal(lines.join("\n").includes("SENTINEL"), false);
 });

@@ -56,7 +56,7 @@ Briefs stay short on purpose. Routine items fold into a single line so only the 
 | Node.js `>=24.16.0 <25` or `>=26.1.0` | Matches the OpenClaw runtime |
 | [`gog`](https://github.com/openclaw/gogcli) with Calendar access | Reads and writes Google Calendar using your existing sign-in |
 | **Custom plugin UI** lab enabled | Required for native pages from non-bundled plugins |
-| HTTPS, Tailscale Serve, or `127.0.0.1` | Native plugin pages need a secure origin |
+| HTTPS or `127.0.0.1` | Native plugin pages need a secure origin |
 
 Weather uses Environment Canada's public API, so it needs no key and covers Canadian locations.
 
@@ -130,12 +130,21 @@ Family Pack reuses what OpenClaw already owns instead of rebuilding it.
 | --- | --- |
 | Who someone is on the page | Not built yet. Until then everyone signed in sees the same week. A later Gateway method will match `profileId` to the proxy username |
 | Who someone is in Discord | Not built yet. A later match will compare the roster Discord id to the sender |
-| Sign-in for each family member | [Multi-user Gateway](https://docs.openclaw.ai/concepts/multi-user): Caddy basic auth on a trusted LAN, or Tailscale Serve / Cloudflare Access on the internet |
+| Sign-in for each family member | [Multi-user Gateway](https://docs.openclaw.ai/concepts/multi-user). See [Household access](#household-access) |
 | Google Calendar access | `gog` |
 | Chat surfaces | Control UI chat and the Discord channel |
 | Scheduling | Plugin-owned automations |
 
 Each family operation is defined once and shared by the page and the agent tools, so asking in chat and clicking in the UI behave the same way.
+
+## Household access
+
+Family Pack is local only. `openclaw family access` says which mode the Gateway is in and what's left to set up. It changes nothing.
+
+- **Solo.** Everyone who opens the Control UI is the owner. Family members use Discord, where the bot knows who's talking. Nothing extra to install.
+- **LAN.** Needs a proxy on the Gateway machine that serves HTTPS and signs each person in. Caddy is the worked example, and any proxy that follows the printed rules works. Each person signs in with their own username and password. `openclaw family access lan --parent alex --kid riley` prints the Caddyfile, the Gateway config, the roles and the `users.setRole` steps. Passwords are never asked for or stored.
+
+In LAN mode there's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.
 
 ## Privacy
 

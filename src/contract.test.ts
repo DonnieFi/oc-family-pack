@@ -51,7 +51,7 @@ test("registered queries are operator.read session actions and there is no comma
       commands += 1;
     },
     registerCli(
-      registrar: (ctx: { program: { command: (name: string) => unknown } }) => void,
+      registrar: (ctx: { program: { command: (name: string) => unknown }; config: { gateway?: unknown } }) => void,
       opts?: { commands?: readonly string[]; descriptors?: readonly { name: string; hasSubcommands?: boolean }[] },
     ) {
       const declared = [...(opts?.commands ?? []), ...(opts?.descriptors?.map((descriptor) => descriptor.name) ?? [])];
@@ -64,10 +64,11 @@ test("registered queries are operator.read session actions and there is no comma
           cli.push(name);
           return node;
         },
+        argument: () => node,
         option: () => node,
         action: () => node,
       };
-      registrar({ program: { command: (name: string) => { cli.push(name); return node; } } });
+      registrar({ program: { command: (name: string) => { cli.push(name); return node; } }, config: {} });
     },
   } as unknown as Parameters<typeof plugin.register>[0]);
   assert.deepEqual(actions, [
@@ -77,7 +78,7 @@ test("registered queries are operator.read session actions and there is no comma
   ]);
   assert.equal(commands, 0);
   assert.deepEqual(cliCommands, ["family"]);
-  assert.deepEqual(cli, ["family", "gog"]);
+  assert.deepEqual(cli, ["family", "gog", "access"]);
 });
 
 test("calendar-changed matches the feature event id pattern and is not registered", () => {

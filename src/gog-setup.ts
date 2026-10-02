@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { runAccess } from "./access.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -236,25 +237,36 @@ export function formatGogSetup(plan: GogSetupPlan): string {
 type FamilyCliCommand = {
   description: (text: string) => FamilyCliCommand;
   command: (name: string) => FamilyCliCommand;
+  argument: (name: string, description: string) => FamilyCliCommand;
   option: (flags: string, description: string, defaultValue?: string | boolean) => FamilyCliCommand;
-  action: (fn: (opts: { account?: string; desktop?: boolean; authUrl?: string }) => Promise<void> | void) => FamilyCliCommand;
+  action: (fn: (...args: any[]) => Promise<void> | void) => FamilyCliCommand;
 };
 
-/** `openclaw family gog` prints the one command that moves setup forward. */
+type GogOptions = { account?: string; desktop?: boolean; authUrl?: string };
+type AccessOptions = { parent?: string[]; kid?: string[]; guest?: string[] };
+
+function gatewayPort(gateway: unknown): number | undefined {
+  const port = typeof gateway === "object" && gateway !== null ? (gateway as { port?: unknown }).port : undefined;
+  return typeof port === "number" ? port : undefined;
+}
+
+/**
+ * `openclaw family gog` prints the one command that moves gog setup forward.
+ * `openclaw family access` reports the household sign-in mode, or prints the setup for one.
+ */
 export function registerFamilyCli(
   program: { command: (name: string) => FamilyCliCommand },
-  deps: { run: RunGog; gogPath?: string; write?: (text: string) => void },
+  deps: { run: RunGog; gogPath?: string; gateway?: unknown; write?: (text: string) => void },
 ): void {
   const write = deps.write ?? ((text: string) => console.log(text));
-  program
-    .command("family")
-    .description("Family Pack setup")
+  const family = program.command("family").description("Family Pack setup");
+  family
     .command("gog")
     .description("Print the next gog command for this host")
     .option("--account <email>", "Google account to authorize", PLACEHOLDER_EMAIL)
     .option("--desktop", "Print a browser login instead of the headless --remote flow")
     .option("--auth-url <url>", "Browser redirect URL from the headless auth step")
-    .action(async (opts) => {
+    .action(async (opts: GogOptions) => {
       const plan = await diagnoseGog(deps.run, {
         ...(deps.gogPath ? { gogPath: deps.gogPath } : {}),
         ...(opts.account ? { email: opts.account } : {}),
@@ -263,5 +275,29 @@ export function registerFamilyCli(
       });
       write(formatGogSetup(plan));
       process.exitCode = plan.status === "ready" ? 0 : 1;
+    });
+  family
+    .command("access")
+    .description("Report the household sign-in mode, or print the setup for one")
+    .argument("[mode]", "solo or lan")
+    .argument("[names...]", "People with no role flag, set up as guests")
+    .option("--parent <name...>", "Parents: full access and every session")
+    .option("--kid <name...>", "Kids: read, and write their own sessions")
+    .option("--guest <name...>", "Guests: read only")
+    .action((mode: string | undefined, names: string[] | undefined, opts: AccessOptions) => {
+      const port = gatewayPort(deps.gateway);
+      const result = runAccess(
+        deps.gateway,
+        mode,
+        {
+          ...(opts.parent ? { parent: opts.parent } : {}),
+          ...(opts.kid ? { kid: opts.kid } : {}),
+          ...(opts.guest ? { guest: opts.guest } : {}),
+          ...(names ? { names } : {}),
+        },
+        port !== undefined ? { port } : {},
+      );
+      write(result.text);
+      process.exitCode = result.ok ? 0 : 1;
     });
 }

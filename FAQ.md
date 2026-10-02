@@ -28,7 +28,8 @@ Family is a native Control UI page, so it needs three things:
   (`gateway.controlUi.experimental.customPlugins: true`). It is off by default.
 - The Control UI is open over HTTPS or on `http://127.0.0.1` / `http://localhost`.
   Native plugin assets use secure cookies, so plain HTTP on a LAN address
-  cannot load the page. `tailscale serve` in front of the Gateway works.
+  cannot load the page. For phones, use LAN mode. Caddy serves the Family
+  page over HTTPS on your home network (`openclaw family access lan`).
 
 Then **Family** appears in the sidebar. The page lives at
 `/plugin?plugin=oc-family-pack&id=family` under your Control UI URL.
@@ -86,3 +87,11 @@ filter the view; they do not hide anyone's events from anyone. Roles don't
 limit what anyone can see. If a calendar should stay
 private, leave it out of the config. The Chat with strip uses that person's
 own agent list, so it only shows agents they can already open.
+
+## Why can't I sign out?
+
+LAN mode uses Caddy basic auth, which has no sign-out and no way to switch
+accounts. A browser stays signed in as whoever used it first, until you clear
+its saved data for this site. On a shared laptop, give each person their own
+browser profile. If you want a sign-in page, sign-out or passkeys, upgrade to
+Authelia.
