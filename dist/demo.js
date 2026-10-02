@@ -17,7 +17,7 @@ export const DEMO_CALENDARS = Object.values(CALENDARS);
 const TIMED = [
     [0, 8.25, 8.75, "School drop-off", "family"],
     [0, 18, 19, "Swim practice", "riley", "Community Pool"],
-    [1, 9.5, 10.5, "Dentist", "alex", "Bank Street Dental"],
+    [1, 9.5, 10.5, "Dentist", "alex", "Family Dental"],
     [1, 16.5, 17.5, "Piano lesson", "jordan", "Music Studio"],
     [2, 12, 13, "Team lunch", "sam"],
     [2, 19, 20.5, "Parent-teacher night", "family", "Elementary School"],

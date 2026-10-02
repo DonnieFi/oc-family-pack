@@ -123,7 +123,7 @@ function busiestWeek(eventCount: number, event: (index: number) => Omit<FamilyEv
     weather: {
       status: "ok",
       data: {
-        stationName: "Ottawa",
+        stationName: "Home",
         observedAt: "2026-09-30T15:00:00Z",
         tempC: 14,
         condition: "Cloudy",

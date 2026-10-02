@@ -29,9 +29,9 @@ test("a minimal live config fills defaults and keys calendars by position", () =
 
 test("a config without a timezone uses the Gateway host's zone", () => {
   const previous = process.env.TZ;
-  process.env.TZ = "America/Halifax";
+  process.env.TZ = "America/Chicago";
   try {
-    assert.equal(parseConfig({ members: [member] }).timezone, "America/Halifax");
+    assert.equal(parseConfig({ members: [member] }).timezone, "America/Chicago");
   } finally {
     if (previous === undefined) delete process.env.TZ;
     else process.env.TZ = previous;
@@ -56,8 +56,8 @@ test("config errors name the offending field", () => {
 });
 
 test("demo mode reads its location", () => {
-  const config = parseConfig({ demo: true, location: { lat: 45.42, lon: -75.7, label: "Ottawa" } });
-  assert.deepEqual(config.location, { lat: 45.42, lon: -75.7, label: "Ottawa" });
+  const config = parseConfig({ demo: true, location: { lat: 45.42, lon: -75.7, label: "Home" } });
+  assert.deepEqual(config.location, { lat: 45.42, lon: -75.7, label: "Home" });
   assert.equal(config.demo, true);
 });
 

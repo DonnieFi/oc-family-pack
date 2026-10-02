@@ -22,6 +22,7 @@ import { Value } from "typebox/value";
 import { parseConfig } from "../src/config.ts";
 import { MAX_WEEK_EVENTS, contract } from "../src/contract.ts";
 import { buildWeekPayload, fitsHostLimits, jsonNodeCount } from "../src/payload.ts";
+import { isolatedGatewayEnv } from "./isolated-env.ts";
 
 const ROOT = dirname(dirname(new URL(import.meta.url).pathname));
 const PLUGIN_ID = "oc-family-pack";
@@ -643,7 +644,7 @@ async function main(): Promise<void> {
   const logPath = join(workDir, "gateway.log");
   mkdirSync(stateDir, { recursive: true });
   const port = await freePort();
-  const env: NodeJS.ProcessEnv = { ...process.env, OPENCLAW_STATE_DIR: stateDir, OPENCLAW_CONFIG_PATH: configPath };
+  const env = isolatedGatewayEnv(process.env, { stateDir, configPath });
   writeFileSync(
     configPath,
     JSON.stringify(
