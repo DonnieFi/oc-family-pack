@@ -24,6 +24,9 @@ const plugin = defineFeaturePlugin({
     setup(api) {
         api.registerCli(({ program }) => {
             registerFamilyCli(program, { run: execGog(), gogPath: configuredGogPath(api.pluginConfig) });
+        }, {
+            commands: ["family"],
+            descriptors: [{ name: "family", description: "Family Pack setup", hasSubcommands: true }],
         });
         // Discovery loads the plugin without starting it. The worker belongs to the
         // service start, which the host only calls in a live Gateway.

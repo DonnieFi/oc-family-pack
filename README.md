@@ -68,7 +68,7 @@ openclaw plugins install git:https://github.com/DonnieFi/oc-family-pack.git --ac
 
 The repository ships its built `dist/`, so no build step is needed. `--accept-capabilities` confirms the plugin's native Control UI page, which runs with the signed-in operator's Gateway permissions.
 
-Calendar sign-in is `gog`, including on a headless Gateway. Run `openclaw family gog` and follow the single command it prints. Repeat until it tells you to list calendars, then put those ids in the config below. The command never passes `--readonly`.
+Calendar sign-in is `gog`, including on a headless Gateway. Run `openclaw family gog` and follow what it prints. A headless host takes two `gog auth add` commands: the first prints a URL, and the second exchanges the browser redirect (`openclaw family gog --auth-url '…'`). Repeat until it tells you to list calendars, then put those ids in the config below. The commands never pass `--readonly`.
 
 To try it without calendars first, set `demo: true` (see below). Add your configuration, then enable the plugin:
 

@@ -29,8 +29,16 @@ const doctorKeyring = JSON.stringify({
 });
 const clients = JSON.stringify({ clients: [{ client: "default" }] });
 const noClients = JSON.stringify({ clients: [] });
-const calendarAccount = JSON.stringify({ accounts: [{ email: "person@example.com", services: ["calendar"] }] });
-const readonlyAccount = JSON.stringify({ accounts: [{ email: "person@example.com", services: ["gmail"], readonly: true }] });
+const calendarAccount = JSON.stringify({
+  accounts: [{ email: "person@example.com", services: ["calendar"], scopes: ["https://www.googleapis.com/auth/calendar", "openid"] }],
+});
+const readonlyAccount = JSON.stringify({
+  accounts: [{
+    email: "person@example.com",
+    services: ["calendar"],
+    scopes: ["https://www.googleapis.com/auth/calendar.readonly", "openid"],
+  }],
+});
 const noAccounts = JSON.stringify({ accounts: [] });
 
 test("a missing gog binary is the install command and nothing else is run", async () => {
@@ -81,22 +89,39 @@ test("no stored account authorizes calendar without --readonly, and a headless h
   });
   const headless = await diagnoseGog(run, { email: "person@example.com" });
   const desktop = await diagnoseGog(run, { email: "person@example.com", headless: false });
-  assert.equal(headless.command, "gog auth add person@example.com --services calendar --remote");
+  const exchange = await diagnoseGog(run, {
+    email: "person@example.com",
+    authUrl: "http://127.0.0.1:8080/oauth2/callback?code=abc&state=xyz",
+  });
+  const rejected = await diagnoseGog(run, { email: "person@example.com", authUrl: "http://evil.example/';touch /tmp/x" });
+  assert.equal(headless.command, "gog auth add person@example.com --services calendar --remote --step 1");
+  assert.equal(headless.message.includes("gog auth add person@example.com --services calendar --remote --step 2 --auth-url 'PASTE_REDIRECT_URL'"), true);
   assert.equal(desktop.command, "gog auth add person@example.com --services calendar");
+  assert.equal(exchange.command, "gog auth add person@example.com --services calendar --remote --step 2 --auth-url 'http://127.0.0.1:8080/oauth2/callback?code=abc&state=xyz'");
+  assert.equal(rejected.command.includes("--step 1"), true);
+  assert.equal(rejected.message.includes("touch"), false);
   assert.equal(headless.command.includes("--readonly"), false);
+  assert.equal(exchange.command.includes("--readonly"), false);
   assert.equal(gogAccount("-inject@example.com"), "you@example.com");
   assert.equal(gogAccount("not an email"), "you@example.com");
+  assert.equal(gogAccount("a;curl http://x@b"), "you@example.com");
 });
 
 test("a read-only grant asks for calendar consent again", async () => {
-  const plan = await diagnoseGog(scripted({
-    "auth doctor --json --no-input": { stdout: doctorOk },
-    "auth credentials list --json --no-input": { stdout: clients },
-    "auth list --json --no-input": { stdout: readonlyAccount },
-  }));
+  const calls: string[] = [];
+  const plan = await diagnoseGog(async (_file, args) => {
+    const key = args.join(" ");
+    calls.push(key);
+    if (key === "auth doctor --json --no-input") return { stdout: doctorOk };
+    if (key === "auth credentials list --json --no-input") return { stdout: clients };
+    if (key === "auth list --json --no-input") return { stdout: readonlyAccount };
+    throw new Error(`unexpected gog ${key}`);
+  });
   assert.equal(plan.status, "readonly");
-  assert.equal(plan.command, "gog auth add you@example.com --services calendar --remote --force-consent");
+  assert.equal(plan.command, "gog auth add you@example.com --services calendar --remote --step 1 --force-consent");
+  assert.equal(plan.message.includes("--step 2 --auth-url 'PASTE_REDIRECT_URL' --force-consent"), true);
   assert.equal(plan.command.includes("--readonly"), false);
+  assert.equal(calls.includes("calendar calendars --json --no-input"), false);
 });
 
 test("a usable calendar account ends at the calendar list", async () => {

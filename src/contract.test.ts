@@ -40,6 +40,7 @@ test("registered queries are operator.read session actions and there is no comma
   const actions: { id: string; requiredScopes: string[] }[] = [];
   const cli: string[] = [];
   let commands = 0;
+  let cliCommands: readonly string[] = [];
   plugin.register({
     id: contract.pluginId,
     pluginConfig: { demo: true, timezone: "UTC" },
@@ -49,7 +50,14 @@ test("registered queries are operator.read session actions and there is no comma
     registerCommand() {
       commands += 1;
     },
-    registerCli(registrar: (ctx: { program: { command: (name: string) => unknown } }) => void) {
+    registerCli(
+      registrar: (ctx: { program: { command: (name: string) => unknown } }) => void,
+      opts?: { commands?: readonly string[]; descriptors?: readonly { name: string; hasSubcommands?: boolean }[] },
+    ) {
+      const declared = [...(opts?.commands ?? []), ...(opts?.descriptors?.map((descriptor) => descriptor.name) ?? [])];
+      if (declared.length === 0) return;
+      cliCommands = opts?.commands ?? [];
+      assert.equal(opts?.descriptors?.[0]?.hasSubcommands, true);
       const node = {
         description: () => node,
         command: (name: string) => {
@@ -68,6 +76,7 @@ test("registered queries are operator.read session actions and there is no comma
     { id: "family.week", requiredScopes: ["operator.read"] },
   ]);
   assert.equal(commands, 0);
+  assert.deepEqual(cliCommands, ["family"]);
   assert.deepEqual(cli, ["family", "gog"]);
 });
 
