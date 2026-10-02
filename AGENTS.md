@@ -121,13 +121,14 @@ query matches the contract schema, the page registers with its built assets
 present in the root the host loaded, the plugin's host-payload limits still
 agree with the counter in the host under test, and the update path resolves the
 install. A cancelled run never reports success: every step boundary checks for
-an interrupt, and the host calls are async so a Ctrl-C is not stuck behind a
-synchronous child process. What it does not yet prove: the scheduler step is a
-host liveness probe, the store step only checks the plugin state dir is
-writable and that no file naming this plugin appeared outside it, and the
-update step cannot exercise a git refresh because the smoke installs from a
-local copy. No plugin code writes state or registers jobs until s5k.19 and the
-briefs epic.
+an interrupt, each host call is async with stdin closed, bounded by a timeout,
+and killed on a signal, so a Ctrl-C is neither stuck behind a synchronous child
+nor left waiting on a host that prompts. What it does not yet prove: the
+scheduler step is a host liveness probe, the store step only checks the plugin
+state dir is writable and that no file naming this plugin appeared outside it,
+and the update step cannot exercise a git refresh because the smoke installs
+from a local copy. No plugin code writes state or registers jobs until s5k.19
+and the briefs epic.
 
 Two builds of the same OpenClaw version can disagree on the Control UI bundle
 hash, because the difference is only in minifier identifier names. So `dist/`

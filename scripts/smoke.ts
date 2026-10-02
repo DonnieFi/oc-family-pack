@@ -12,19 +12,17 @@
  * The live Gateway is never touched. State, config, and the port all live under
  * a temp dir that is deleted on the way out, and the port is never 18789.
  */
-import { execFile as execFileCallback, execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve as pathResolve } from "node:path";
-import { promisify } from "node:util";
 import { Value } from "typebox/value";
 import { parseConfig } from "../src/config.ts";
 import { MAX_WEEK_EVENTS, contract } from "../src/contract.ts";
 import { buildWeekPayload, fitsHostLimits, jsonNodeCount } from "../src/payload.ts";
 
-const execFile = promisify(execFileCallback);
 const ROOT = dirname(dirname(new URL(import.meta.url).pathname));
 const PLUGIN_ID = "oc-family-pack";
 const TOKEN = "ocfp-smoke-token";
@@ -87,35 +85,72 @@ function fail(step: Step, detail: string): never {
 /**
  * Records a completed step, and refuses to keep going if the run was cancelled.
  * Every step boundary goes through here, which is what stops a Ctrl-C partway
- * through from printing a false "all steps passed": a signal arriving during a
- * synchronous host call is only delivered once that call returns, so without
- * this the remaining steps would run to completion and the cancelled run would
- * look clean.
+ * through from printing a false "all steps passed": without this the remaining
+ * steps would run to completion and the cancelled run would look clean.
  */
-function note(message: string): void {
-  if (interrupted) fail("plugin load", `interrupted by ${interrupted} after "${message}"`);
+function note(message: string, step: Step = "plugin load"): void {
+  if (interrupted) fail(step, `interrupted by ${interrupted} after "${message}"`);
   process.stdout.write(`  ${message}\n`);
 }
 
+/** A host call must not hang the smoke: an interactive prompt would wait forever. */
+const HOST_CALL_TIMEOUT_MS = 120_000;
+
 /**
  * Runs the resolved host CLI against the isolated state, returning stdout.
- * Deliberately async: a synchronous child process blocks the event loop, so a
- * Ctrl-C during a multi-second host call would not be delivered until the call
- * returned, letting the remaining steps finish and the cancelled run report
- * success. The host calls here take seconds, so that mattered.
+ *
+ * Hand-rolled rather than promisified execFile for three reasons that all
+ * mattered in practice:
+ * - async, because a synchronous child blocks the event loop and a Ctrl-C
+ *   during a multi-second host call would not be delivered until it returned,
+ *   letting the cancelled run finish and report success;
+ * - stdin is /dev/null, so a host that prompts for input gets EOF instead of
+ *   hanging the smoke unkillably;
+ * - the call is raced against an interrupt and a timeout, and the child is
+ *   killed on either, so a hung host cannot outlive the run.
  */
-async function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"): Promise<string> {
-  try {
-    const { stdout } = await execFile(hostBinary, args, {
+function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(hostBinary, args, {
       env,
-      encoding: "utf8",
-      maxBuffer: 32 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    return stdout;
-  } catch (error) {
-    const err = error as { stderr?: string; status?: number | null };
-    fail(step, `${hostBinary} ${args.join(" ")} exited ${err.status}: ${(err.stderr ?? "").trim().slice(0, 500)}`);
-  }
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    const kill = () => {
+      if (child.exitCode === null) child.kill("SIGTERM");
+    };
+    const onSignal = () => {
+      kill();
+      reject(new Error(`interrupted by ${interrupted ?? "signal"} during ${step}`));
+    };
+    const timer = setTimeout(() => {
+      kill();
+      reject(new Error(`${step} timed out after ${HOST_CALL_TIMEOUT_MS}ms running: ${hostBinary} ${args.join(" ")}`));
+    }, HOST_CALL_TIMEOUT_MS);
+    timer.unref();
+    process.once("SIGINT", onSignal);
+    process.once("SIGTERM", onSignal);
+    const settle = (fn: () => void) => {
+      clearTimeout(timer);
+      process.off("SIGINT", onSignal);
+      process.off("SIGTERM", onSignal);
+      fn();
+    };
+    child.on("error", (error) => settle(() => reject(error)));
+    child.on("close", (code) =>
+      settle(() => {
+        if (code === 0) resolve(stdout);
+        else reject(new Error(`${hostBinary} ${args.join(" ")} exited ${code ?? "by signal"}: ${stderr.trim().slice(0, 500)}`));
+      }),
+    );
+  });
 }
 
 /**
@@ -126,14 +161,26 @@ async function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin l
  */
 async function loadHostJsonCheck(): Promise<(value: unknown) => boolean> {
   const dist = hostDistDir();
-  const match = readdirSync(dist).find((name) => name.startsWith("host-hook-json-") && name.endsWith(".mjs"));
+  let match: string | undefined;
+  try {
+    match = readdirSync(dist).find((name) => name.startsWith("host-hook-json-") && name.endsWith(".mjs"));
+  } catch (error) {
+    fail("host json limits", `could not read ${dist} from the host at ${hostBinary}: ${(error as Error).message}`);
+  }
   if (!match) {
     fail(
       "host json limits",
       `the host at ${hostBinary} no longer ships a host-hook-json module under ${dist}; re-derive HOST_MAX_NODES in src/payload.ts`,
     );
   }
-  const module = (await import(join(dist, match))) as { t: (value: unknown) => boolean };
+  // The point of this step is to report a moved host by name, so importing the
+  // host's module must not surface as a raw module-resolution error.
+  let module: { t?: (value: unknown) => boolean };
+  try {
+    module = (await import(join(dist, match))) as { t?: (value: unknown) => boolean };
+  } catch (error) {
+    fail("host json limits", `could not import ${match} from the host at ${hostBinary}: ${(error as Error).message}`);
+  }
   if (typeof module.t !== "function") fail("host json limits", `${match} no longer exports its JSON value check as \`t\``);
   return module.t;
 }
@@ -220,14 +267,22 @@ function stagePlugin(target: string): void {
   }
 }
 
-/** SIGKILL timers, so cleanup can await the child instead of racing it. */
-const killTimers = new Set<NodeJS.Timeout>();
+/**
+ * SIGKILL escalations in flight, so cleanup can await the child instead of
+ * racing it. Kept across the signal handler, which stops the Gateway first:
+ * the later stopGateway() in the cleanup path is then a no-op, so the promise
+ * recorded here is what the cleanup actually waits on.
+ */
+const gatewayStops = new Set<Promise<void>>();
 
 function stopGateway(): Promise<void> {
   const child = gateway;
   gateway = undefined;
-  if (!child) return Promise.resolve();
-  return new Promise((resolve) => {
+  if (!child) {
+    // An earlier stop may still be waiting for the child to die.
+    return Promise.all([...gatewayStops]).then(() => undefined);
+  }
+  const stopped = new Promise<void>((resolve) => {
     if (child.exitCode !== null || child.signalCode !== null) {
       resolve();
       return;
@@ -238,22 +293,23 @@ function stopGateway(): Promise<void> {
     // Do not let the escalation timer hold the process open once the main flow
     // has finished; the child's own exit still clears it.
     escalate.unref();
-    killTimers.add(escalate);
     child.once("exit", () => {
       clearTimeout(escalate);
-      killTimers.delete(escalate);
       resolve();
     });
     child.kill("SIGTERM");
   });
+  gatewayStops.add(stopped);
+  void stopped.then(() => gatewayStops.delete(stopped));
+  return stopped;
 }
 
 /**
  * On an interrupt, stop the Gateway and let the failure path unwind normally so
  * the `finally` block still deletes the temp state. Calling process.exit() here
- * would skip that and leak the directory. The interrupt is also checked between
- * every step, because stopping the Gateway makes the remaining steps fail for
- * the wrong reason, and a run that was cancelled must never report success.
+ * would skip that and leak the directory. The interrupt is also checked at every
+ * step boundary, because stopping the Gateway makes the remaining steps fail for
+ * the wrong reason, and a cancelled run must never report success.
  */
 let interrupted: NodeJS.Signals | undefined;
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -261,11 +317,6 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     interrupted ??= signal;
     void stopGateway();
   });
-}
-
-/** Called at each step boundary so a cancelled run cannot pass. */
-function checkInterrupted(): void {
-  if (interrupted) fail("plugin load", `interrupted by ${interrupted}`);
 }
 
 async function waitForReady(logPath: string): Promise<void> {
@@ -330,14 +381,14 @@ async function main(): Promise<void> {
   const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
     openclaw: { build: { openclawVersion: string }; compat: { pluginApi: string } };
   };
-  note(`host ${hostVersion}`);
+  note(`host ${hostVersion}`, "host version");
   if (!hostVersion.includes(pkg.openclaw.build.openclawVersion)) {
     fail(
       "host version",
       `installed host ${hostVersion} does not match pinned build.openclawVersion ${pkg.openclaw.build.openclawVersion}; re-run the smoke and bump both together`,
     );
   }
-  note(`pinned build.openclawVersion ${pkg.openclaw.build.openclawVersion} and compat.pluginApi ${pkg.openclaw.compat.pluginApi} match`);
+  note(`pinned build.openclawVersion ${pkg.openclaw.build.openclawVersion} and compat.pluginApi ${pkg.openclaw.compat.pluginApi} match`, "host version");
 
   // 2. An isolated Gateway on the installed build, with this working tree linked in.
   workDir = mkdtempSync(join(tmpdir(), "ocfp-smoke-"));
@@ -371,8 +422,8 @@ async function main(): Promise<void> {
       2,
     ),
   );
-  note(`isolated state at ${stateDir}, loopback:${port}`);
-  note(`host binary ${hostBinary}`);
+  note(`isolated state at ${stateDir}, loopback:${port}`, "plugin load");
+  note(`host binary ${hostBinary}`, "host version");
 
   // Install the way a real household does: a clean copy carrying only the files
   // that ship, plus its runtime dependency. The working tree is not installed
@@ -405,7 +456,7 @@ async function main(): Promise<void> {
     throw error;
   }
   if (validated.valid !== true) fail("manifest", `plugins validate reported ${JSON.stringify(validated.errors ?? validated)}`);
-  note("manifest validates");
+  note("manifest validates", "manifest");
 
   const out = openSync(logPath, "w");
   gateway = spawn(hostBinary, ["gateway", "run", "--port", String(port), "--bind", "loopback"], {
@@ -413,10 +464,9 @@ async function main(): Promise<void> {
     stdio: ["ignore", out, out],
   });
   await waitForReady(logPath);
-  note("isolated Gateway ready");
+  note("isolated Gateway ready", "plugin load");
 
   const call = async (method: string, params: unknown, step: Step): Promise<Record<string, unknown>> => {
-    checkInterrupted();
     const raw = await oc(
       ["gateway", "call", method, "--port", String(port), "--token", TOKEN, "--json", "--params", JSON.stringify(params)],
       env,
@@ -426,13 +476,12 @@ async function main(): Promise<void> {
   };
 
   // 4. The plugin loads and the host reports it as a page provider.
-  checkInterrupted();
-  const inspect = JSON.parse(await oc(["plugins", "inspect", "oc-family-pack", "--json"], env)) as {
+  const inspect = JSON.parse(await oc(["plugins", "inspect", "oc-family-pack", "--json"], env, "plugin load")) as {
     plugin?: { status?: string; uiCapabilities?: string[] };
   };
   const plugin = inspect.plugin ?? (inspect as { status?: string; uiCapabilities?: string[] });
   if (plugin.status !== "loaded") fail("plugin load", `plugin status is ${plugin.status}, expected loaded`);
-  note("plugin loaded");
+  note("plugin loaded", "plugin load");
 
   // 5. A real query over the real transport, validated against the contract schema.
   const weekCall = await call(
@@ -453,13 +502,13 @@ async function main(): Promise<void> {
       `payload does not match the contract schema: ${schemaErrors.map((e) => `${e.path ?? "/"} ${e.message}`).join("; ")}`,
     );
   }
-  note("family.week result validates against the contract schema");
+  note("family.week result validates against the contract schema", "contract validation");
 
   const week = weekCall.result as { days: unknown[]; members: unknown[]; mode: string };
   if (week.days.length !== 7) fail("family.week query", `expected 7 days, got ${week.days.length}`);
   if (week.mode !== "demo") fail("family.week query", `expected demo mode against an isolated Gateway, got ${week.mode}`);
   if (week.members.length === 0) fail("family.week query", "family.week returned no members");
-  note(`family.week returned ${week.members.length} members over 7 days in ${week.mode} mode`);
+  note(`family.week returned ${week.members.length} members over 7 days in ${week.mode} mode`, "family.week query");
 
   // 6. The native page: capabilities advertised and the built assets present.
   for (const capability of ["page", "navigation"]) {
@@ -494,7 +543,7 @@ async function main(): Promise<void> {
       fail("page registration", `installed Control UI asset ${asset} is missing from the root the host loaded`);
     }
   }
-  note(`page registered, built assets present in the installed root`);
+  note(`page registered, built assets present in the installed root`, "page registration");
 
   // 7. The scheduler surface the briefs will register jobs on. This is a host
   // liveness probe, not a plugin integration point: the plugin registers no
@@ -502,7 +551,7 @@ async function main(): Promise<void> {
   // nothing more. The real check lands with the briefs epic.
   const jobs = await call("cron.list", {}, "service scheduler");
   if (!Array.isArray(jobs.jobs)) fail("service scheduler", "cron.list did not return a jobs array");
-  note(`host scheduler surface answers (${jobs.jobs.length} host jobs); plugin registers none until the briefs epic`);
+  note(`host scheduler surface answers (${jobs.jobs.length} host jobs); plugin registers none until the briefs epic`, "service scheduler");
 
   // 8. The plugin-owned store. The plugin writes no state yet (s5k.19), so this
   // asserts the contract that will hold when it does: the store lives under the
@@ -543,6 +592,7 @@ async function main(): Promise<void> {
     sqlite.length
       ? `plugin sqlite store present under the plugin state dir: ${sqlite.join(", ")}`
       : "plugin state dir is writable, nothing leaked outside it, and it is empty until writes land (s5k.19)",
+    "sqlite store",
   );
 
   // 9. Our host-limit arithmetic must agree with the host's own counter, so a
@@ -568,7 +618,7 @@ async function main(): Promise<void> {
       );
     }
   }
-  note(`host json limits agree with the host on ${boundary.length} payloads (MAX_WEEK_EVENTS ${MAX_WEEK_EVENTS})`);
+  note(`host json limits agree with the host on ${boundary.length} payloads (MAX_WEEK_EVENTS ${MAX_WEEK_EVENTS})`, "host json limits");
 
   // 10. The update path an operator runs after a host upgrade. This install is
   // a local --link, so `plugins update` structurally reports it as skipped; a
@@ -584,7 +634,7 @@ async function main(): Promise<void> {
   if (/error|fail|cannot|unable/i.test(resolved)) {
     fail("update path", `'plugins update --dry-run' reported a problem: ${resolved.slice(0, 300)}`);
   }
-  note(`plugins update resolves this install: ${resolved.split("\n")[0]}`);
+  note(`plugins update resolves this install: ${resolved.split("\n")[0]}`, "update path");
 
   // A real household installs from git, where `openclaw update` does refresh the
   // plugin. A --link install cannot exercise that, so this only proves the host
@@ -595,23 +645,21 @@ async function main(): Promise<void> {
   };
   const record = inspectRecord.plugin ?? (inspectRecord as { source?: string });
   if (!record.source) fail("update path", "the installed plugin has no recorded source, so updates cannot be resolved");
-  note(`install source recorded as ${record.source}`);
+  note(`install source recorded as ${record.source}`, "update path");
 }
 
 try {
   await main();
-  // A cancelled run must never report success. Checking here, after every step
-  // has run, is what stops a Ctrl-C partway through from printing a false pass:
-  // the interrupt stops the Gateway, so later steps would otherwise fail for
-  // the wrong reason or, if they had already finished, be reported as a clean run.
-  if (interrupted) throw new Error(`smoke: plugin load failed: interrupted by ${interrupted}`);
+  // A cancelled run must never report success. Every step boundary already
+  // refuses to continue, so reaching here with a pending interrupt means the
+  // signal landed in the last step; still fail, naming what was interrupted.
+  if (interrupted) throw new Error(`smoke: update path failed: interrupted by ${interrupted} after the last step`);
   process.stdout.write("smoke: all steps passed\n");
 } catch (error) {
   process.stderr.write(`${(error as Error).message}\n`);
   process.exitCode = 1;
 } finally {
   await stopGateway();
-  for (const timer of killTimers) clearTimeout(timer);
   if (workDir && !keepWorkDir) {
     // The isolated Gateway can still be flushing logs after SIGTERM, so retry
     // briefly rather than leave temp state behind.
