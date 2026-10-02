@@ -43,6 +43,12 @@ if (fault === "journal") journalMode = "delete";
 if (journalMode !== "wal") {
   throw new Error(`oc-family-pack: SQLite journal_mode is ${journalMode || "unknown"}, expected wal`);
 }
+// WAL creates -wal and -shm after the database file is chmod'd. Tighten them too;
+// SQLite otherwise follows the process umask.
+for (const suffix of ["-wal", "-shm"]) {
+  const sidecar = dbPath + suffix;
+  if (existsSync(sidecar)) chmodSync(sidecar, FILE_MODE);
+}
 db.exec("PRAGMA synchronous = NORMAL");
 db.exec("PRAGMA foreign_keys = ON");
 
