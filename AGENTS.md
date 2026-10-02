@@ -110,19 +110,28 @@ synthetic fixtures in `src/fixtures/`.
 
 Plugin APIs are experimental, so the plugin pins a tested host range rather
 than claiming to work everywhere. After every `openclaw update` on a host,
-run `npm run smoke` (bead `s5k.31.1`). It boots an isolated Gateway on the
-host you actually run — not the pinned devDependency, which `npm run` would
-otherwise put first on `PATH` — and fails with the name of the broken step. It
-never touches the live Gateway or the real state dir.
+run `npm run smoke` (bead `s5k.31.1`). It boots an isolated Gateway using the
+host you actually run — the CLI calls, the Gateway process, and the host's own
+JSON limits all resolve to it, not to the pinned devDependency that `npm run`
+would otherwise put first on `PATH`. It fails with the name of the broken
+step, and never touches the live Gateway or the real state dir.
 
 What it proves: the plugin loads, the manifest validates, a real `family.week`
 query matches the contract schema, the page registers with its built assets
-present in the installed copy, the plugin's host-payload limits still agree
-with the host's own counter, and the update path resolves the install. What it
-does not yet prove: the scheduler step is a host liveness probe, and the store
-step only checks the plugin state dir is writable and nothing leaked outside
-it, because no plugin code writes state or registers jobs until s5k.19 and
-the briefs epic.
+present in the root the host loaded, the plugin's host-payload limits still
+agree with the counter in the host under test, and the update path resolves the
+install. What it does not yet prove: the scheduler step is a host liveness
+probe, the store step only checks the plugin state dir is writable and that no
+file naming this plugin appeared outside it, and the update step cannot
+exercise a git refresh because the smoke installs from a local copy. No plugin
+code writes state or registers jobs until s5k.19 and the briefs epic.
+
+Two builds of the same OpenClaw version can disagree on the Control UI bundle
+hash, because the difference is only in minifier identifier names. So `dist/`
+satisfies `openclaw plugins build --check` for exactly one of them, and the
+smoke's manifest step fails against the other until `dist/` is rebuilt with it.
+The committed `dist/` is built with the pinned version, per the pin-and-test
+rule above.
 
 The smoke installs from a clean copy of the tree, because a dev `node_modules`
 holding a real `openclaw` directory makes the host count its 64 bundled

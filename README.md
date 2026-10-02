@@ -157,7 +157,7 @@ OpenClaw plugin APIs are experimental, so this plugin tracks host releases rathe
 npm run smoke
 ```
 
-It boots a throwaway Gateway on a temp state dir and a free loopback port, never touching your running one, then checks the plugin loads, the manifest validates, a real `family.week` query matches the contract schema, the page registers, and the plugin's host-payload limits still agree with the host's own. A break fails with the name of the step that broke. It tests the OpenClaw build you actually run, not the pinned devDependency; set `OCFP_SMOKE_HOST_BIN` to point it at a specific binary, or `OCFP_SMOKE_KEEP=1` to keep the throwaway state for inspection.
+It boots a throwaway Gateway on a temp state dir and a free loopback port, never touching your running one, then checks the plugin loads, the manifest validates, a real `family.week` query matches the contract schema, the page registers, and the plugin's host-payload limits still agree with the host's own. A break fails with the name of the step that broke. It tests the OpenClaw build you actually run, not the pinned devDependency; set `OCFP_SMOKE_HOST_BIN` to point it at a specific binary, or `OCFP_SMOKE_KEEP=1` to keep the throwaway state for inspection. If your host is a different build than the one this repo was tested against, the smoke stops at the manifest step and tells you to rebuild `dist/` with that host.
 
 ## Roadmap
 

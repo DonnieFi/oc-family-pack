@@ -13,10 +13,11 @@
  * a temp dir that is deleted on the way out, and the port is never 18789.
  */
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { createRequire } from "node:module";
 import { createServer } from "node:net";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve as pathResolve } from "node:path";
+import { delimiter, dirname, join, resolve as pathResolve } from "node:path";
 import { Value } from "typebox/value";
 import { parseConfig } from "../src/config.ts";
 import { MAX_WEEK_EVENTS, contract } from "../src/contract.ts";
@@ -38,14 +39,25 @@ const LIVE_GATEWAY_PORT = 18789;
  */
 function resolveHostBinary(): string {
   const override = process.env.OCFP_SMOKE_HOST_BIN;
-  if (override?.trim()) return override.trim();
+  if (override?.trim()) {
+    const candidate = override.trim();
+    if (!existsSync(candidate)) {
+      fail("host version", `OCFP_SMOKE_HOST_BIN points at ${candidate}, which does not exist`);
+    }
+    return candidate;
+  }
   const own = join(ROOT, "node_modules", ".bin");
-  for (const dir of (process.env.PATH ?? "").split(":")) {
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     if (!dir || pathResolve(dir) === pathResolve(own)) continue;
     const candidate = join(dir, "openclaw");
     if (existsSync(candidate)) return candidate;
   }
-  return "openclaw";
+  // Falling back to the bare name would resolve back to this repo's pinned
+  // devDependency, which is the exact blindness this step exists to remove.
+  fail(
+    "host version",
+    `no openclaw found on PATH outside this repo's node_modules/.bin. Set OCFP_SMOKE_HOST_BIN to the OpenClaw you want tested.`,
+  );
 }
 
 type Step =
@@ -84,16 +96,54 @@ function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"):
   }
 }
 
-/** The host publishes its own bounded-JSON check under a content-hashed name. */
+/**
+ * The host publishes its own bounded-JSON check under a content-hashed name.
+ * Resolve it from the host under test, not from this repo's pinned
+ * devDependency: the point of the step is to notice when the operator's host
+ * changes those limits, and the pinned copy never moves.
+ */
 async function loadHostJsonCheck(): Promise<(value: unknown) => boolean> {
-  const dist = join(ROOT, "node_modules", "openclaw", "dist");
+  const dist = hostDistDir();
   const match = readdirSync(dist).find((name) => name.startsWith("host-hook-json-") && name.endsWith(".mjs"));
   if (!match) {
-    fail("host json limits", "the host no longer ships a host-hook-json module; re-derive HOST_MAX_NODES in src/payload.ts");
+    fail(
+      "host json limits",
+      `the host at ${hostBinary} no longer ships a host-hook-json module under ${dist}; re-derive HOST_MAX_NODES in src/payload.ts`,
+    );
   }
   const module = (await import(join(dist, match))) as { t: (value: unknown) => boolean };
   if (typeof module.t !== "function") fail("host json limits", `${match} no longer exports its JSON value check as \`t\``);
   return module.t;
+}
+
+/** Finds the `dist` that belongs to the host binary under test. */
+function hostDistDir(): string {
+  const fromBinary = (() => {
+    // node_modules/.bin/openclaw -> the package root two levels up
+    let dir = dirname(realpathSync(hostBinary));
+    for (let up = 0; up < 4; up += 1) {
+      const candidate = join(dir, "dist");
+      if (existsSync(join(candidate, "host-hook-json-CvItNyy3.mjs")) || readdirSync(candidate).some((n) => n.startsWith("host-hook-json-"))) {
+        return candidate;
+      }
+      dir = dirname(dir);
+    }
+    return undefined;
+  })();
+  if (fromBinary) return fromBinary;
+  // A globally linked install may not sit next to its package; fall back to the
+  // resolved module path rather than silently reading the pinned copy.
+  try {
+    const resolved = createRequire(import.meta.url).resolve("openclaw/package.json", { paths: [dirname(realpathSync(hostBinary))] });
+    const candidate = join(dirname(resolved), "dist");
+    if (existsSync(candidate)) return candidate;
+  } catch {
+    // fall through to the explicit failure below
+  }
+  fail(
+    "host json limits",
+    `could not locate the dist directory of the host at ${hostBinary}. Set OCFP_SMOKE_HOST_BIN to the OpenClaw you want tested.`,
+  );
 }
 
 async function freePort(): Promise<number> {
@@ -150,15 +200,24 @@ function stopGateway(): void {
   child.once("exit", () => clearTimeout(killTimer));
 }
 
+/**
+ * On an interrupt, stop the Gateway and let the failure path unwind normally so
+ * the `finally` block still deletes the temp state. Calling process.exit() here
+ * would skip that and leak the directory, and would also tear down the event
+ * loop before stopGateway's SIGKILL escalation could ever run.
+ */
+let interrupted: NodeJS.Signals | undefined;
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
+    if (interrupted) return;
+    interrupted = signal;
     stopGateway();
-    process.exit(130);
   });
 }
 
 async function waitForReady(logPath: string): Promise<void> {
   for (let attempt = 0; attempt < 120; attempt += 1) {
+    if (interrupted) fail("plugin load", `interrupted by ${interrupted} while waiting for the isolated Gateway`);
     const log = readFileSync(logPath, "utf8");
     const trouble = log.split("\n").filter((line) => /failed during register|refusing|failed to load plugin/i.test(line));
     if (trouble.length) fail("plugin load", trouble.slice(0, 3).join(" | ").slice(0, 500));
@@ -272,7 +331,7 @@ async function main(): Promise<void> {
   note("manifest validates");
 
   const out = openSync(logPath, "w");
-  gateway = spawn("openclaw", ["gateway", "run", "--port", String(port), "--bind", "loopback"], {
+  gateway = spawn(hostBinary, ["gateway", "run", "--port", String(port), "--bind", "loopback"], {
     env,
     stdio: ["ignore", out, out],
   });
@@ -382,14 +441,30 @@ async function main(): Promise<void> {
     fail("sqlite store", `the plugin state directory is not writable: ${(error as Error).message}`);
   }
   const sqlite = pluginSqliteFiles(pluginStateDir);
-  const outside = readdirSync(stateDir).filter((name) => name.endsWith(".sqlite") && name !== "openclaw.sqlite");
-  if (outside.length) {
-    fail("sqlite store", `plugin-owned state files appeared outside the plugin directory: ${outside.join(", ")}`);
+  // Recurse for stray plugin-owned databases. The host writes its own (at
+  // state/state/openclaw.sqlite, plus per-feature databases under
+  // state/tmp), so only a file that names this plugin counts as ours; flagging
+  // every .sqlite in the state dir would fail on the host's own bookkeeping.
+  const hostDb = join(stateDir, "state", "openclaw.sqlite");
+  const strays = readdirSync(stateDir, { recursive: true })
+    .map((entry) => join(stateDir, entry.toString()))
+    .filter(
+      (full) =>
+        (full.endsWith(".sqlite") || full.endsWith(".db")) &&
+        !full.startsWith(pluginStateDir) &&
+        full !== hostDb &&
+        full.toLowerCase().includes(PLUGIN_ID),
+    );
+  if (strays.length) {
+    fail(
+      "sqlite store",
+      `plugin-owned state appeared outside ${pluginStateDir}, which the architecture rules forbid: ${strays.map((s) => s.slice(stateDir.length + 1)).join(", ")}`,
+    );
   }
   note(
     sqlite.length
       ? `plugin sqlite store present under the plugin state dir: ${sqlite.join(", ")}`
-      : "plugin state dir is writable and empty, as expected until writes land (s5k.19)",
+      : "plugin state dir is writable, nothing leaked outside it, and it is empty until writes land (s5k.19)",
   );
 
   // 9. Our host-limit arithmetic must agree with the host's own counter, so a
@@ -434,9 +509,9 @@ async function main(): Promise<void> {
   note(`plugins update resolves this install: ${resolved.split("\n")[0]}`);
 
   // A real household installs from git, where `openclaw update` does refresh the
-  // plugin. Prove the host still treats git installs as updatable by checking
-  // the shipped source records its git spec, rather than asserting it here from
-  // a linked install that cannot exercise it.
+  // plugin. A --link install cannot exercise that, so this only proves the host
+  // records a source it could resolve later; the git refresh itself is covered
+  // by the operator's own git install, not here.
   const inspectRecord = JSON.parse(oc(["plugins", "inspect", "oc-family-pack", "--json"], env, "update path")) as {
     plugin?: { source?: string; installPath?: string | null };
   };
