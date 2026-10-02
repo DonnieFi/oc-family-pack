@@ -121,9 +121,9 @@ query matches the contract schema, the page registers with its built assets
 present in the root the host loaded, the plugin's host-payload limits still
 agree with the counter in the host under test, and the update path resolves the
 install. A cancelled run never reports success: every step boundary checks for
-an interrupt, each host call is async with stdin closed, bounded by a timeout,
-and killed on a signal, so a Ctrl-C is neither stuck behind a synchronous child
-nor left waiting on a host that prompts. What it does not yet prove: the
+an interrupt, and every child process the smoke starts — host calls and the
+staged `npm install` — is async, gets a closed stdin, and is bounded by a
+timeout that signals its whole process group. What it does not yet prove: the
 scheduler step is a host liveness probe, the store step only checks the plugin
 state dir is writable and that no file naming this plugin appeared outside it,
 and the update step cannot exercise a git refresh because the smoke installs
