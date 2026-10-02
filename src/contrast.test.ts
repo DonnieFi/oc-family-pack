@@ -9,9 +9,10 @@ const MEMBERS = {
   green: "oklch(0.75 0.15 150)",
 } as const;
 
-test("muted text and the neutral stripe clear their floors on the card", () => {
-  assert.equal(contrastRatio("#8b8b94", "#161920"), 5.208);
-  assert.equal(contrastRatio("#6e6960", "#ffffff"), 5.451);
+test("host Tide muted pairs clear the dimmed-text floor", () => {
+  // Dimmed event text paints var(--muted). These are the host Tide pairs that token resolves to.
+  assert.equal(contrastRatio("#5f6b76", "#ffffff"), 5.453);
+  assert.equal(contrastRatio("#9dabb9", "#161d25"), 7.245);
   assert.equal(contrastRatio("oklch(0.8 0.03 80)", "#161920"), 9.4);
   assert.equal(contrastRatio("oklch(0.55 0.03 70)", "#ffffff"), 4.875);
 });
@@ -65,5 +66,25 @@ test("light mode mixes each member colour toward ink until it clears 3.1:1", () 
     inkPercent: 0,
     ratio: 7.168,
     color: MEMBERS.blue,
+  });
+});
+
+test("schema colours that are not unitless oklch still mix, and an unreadable one becomes ink", () => {
+  const ink = "#211e1a";
+  const card = "#ffffff";
+  assert.equal(mixTowardInk("blue", ink, card).color, "blue");
+  assert.equal(mixTowardInk("blue", ink, card).inkPercent, 0);
+  assert.equal(mixTowardInk("rgb(0, 0, 255)", ink, card).inkPercent, 0);
+  assert.equal(mixTowardInk("#00f", ink, card).inkPercent, 0);
+  assert.equal(mixTowardInk("#0000ff80", ink, card).inkPercent, 0);
+  const percent = mixTowardInk("oklch(72% 35% 245)", ink, card);
+  assert.equal(percent.color, mixTowardInk(MEMBERS.blue, ink, card).color);
+  assert.equal(percent.ratio >= 3.1, true);
+  const hsl = mixTowardInk("hsl(220 80% 40%)", ink, card);
+  assert.equal(hsl.ratio >= 3.1, true);
+  assert.deepEqual(mixTowardInk("not-a-color", ink, card), {
+    inkPercent: 100,
+    ratio: contrastRatio(ink, card),
+    color: ink,
   });
 });

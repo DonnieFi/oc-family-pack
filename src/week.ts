@@ -141,6 +141,22 @@ function mondayOf(date: string): string {
   return addDays(date, -((weekday + 6) % 7));
 }
 
+/** The Monday `days` from `start`, or undefined when that week is outside the page window or is this week. */
+export function pageWeekStart(start: string, days: number, today: string): string | undefined {
+  let shifted: string;
+  try {
+    shifted = addDays(start, days);
+  } catch (error) {
+    if (error instanceof RangeError) return undefined;
+    throw error;
+  }
+  const clamped = boundWeekStart(shifted, today);
+  if (clamped === undefined) return undefined;
+  const from = mondayOf(start);
+  const to = mondayOf(clamped);
+  return to === from ? undefined : to;
+}
+
 export type Week = { range: WeekRange; today: string; dates: string[] };
 
 export function resolveWeek(requestedStart: string | undefined, now: number, timezone: string): Week {

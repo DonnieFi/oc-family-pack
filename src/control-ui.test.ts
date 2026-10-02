@@ -5,6 +5,7 @@ import { parseHTML } from "linkedom";
 import type { ControlUiHost, ControlUiSessionListSnapshot, ControlUiViewContext } from "openclaw/plugin-sdk/control-ui";
 import { mountFamilyPage } from "./control-ui.ts";
 import type { WeekPayload } from "./types.ts";
+import { boundWeekStart } from "./week.ts";
 
 const DATES = ["2026-09-28", "2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"];
 
@@ -56,10 +57,11 @@ type Listen = (snapshot: ControlUiSessionListSnapshot) => void;
 
 function installDom(mode: "light" | "dark") {
   const window = parseHTML("<!doctype html><html><body></body></html>");
-  const { document, HTMLButtonElement, Event } = window;
+  const { document, HTMLButtonElement, HTMLElement, Event } = window;
   document.documentElement.setAttribute("data-theme-mode", mode);
   globalThis.document = document;
   globalThis.HTMLButtonElement = HTMLButtonElement;
+  globalThis.HTMLElement = HTMLElement;
   const tokens =
     mode === "light"
       ? { "--text-strong": "#211e1a", "--card": "#fff" }
@@ -79,6 +81,7 @@ async function flush() {
 function mountPage(options: {
   mode?: "light" | "dark";
   canRead?: boolean;
+  props?: Record<string, unknown>;
   result?: { ok: true; result: WeekPayload } | { ok: false; error: string };
   request?: () => Promise<unknown>;
   observe?: (listener: Listen) => void;
@@ -92,6 +95,8 @@ function mountPage(options: {
   let creates = 0;
   let opens: string[] = [];
   let sessionDisposes = 0;
+  const calls: unknown[][] = [];
+  const dialogs: { content: HTMLElement }[] = [];
   const host = {
     apiVersion: 1,
     pluginId: "oc-family-pack",
@@ -109,10 +114,14 @@ function mountPage(options: {
     },
     components: {
       mountAgentAvatar: () => ({ dispose() {}, update() {} }),
-      mountDialog: () => ({ dispose() {}, update() {} }),
+      mountDialog: (_holder: unknown, props: { content: HTMLElement }) => {
+        dialogs.push(props);
+        return { dispose() {}, update() {} };
+      },
     },
-    request: () => {
+    request: (...args: unknown[]) => {
       requests += 1;
+      calls.push(args);
       if (options.request) return options.request();
       return Promise.resolve(options.result ?? { ok: true, result: week() });
     },
@@ -159,7 +168,7 @@ function mountPage(options: {
   const view = mountFamilyPage(container, {
     host: host as unknown as ControlUiHost,
     signal: signal.signal,
-    props: {},
+    props: options.props ?? {},
     presented: true,
     mountDefault: () => () => {},
   } as ControlUiViewContext);
@@ -170,6 +179,8 @@ function mountPage(options: {
     signal,
     view,
     counts: () => ({ requests, creates, opens, sessionDisposes }),
+    calls,
+    dialogs,
   };
 }
 
@@ -323,6 +334,8 @@ describe("family page", { concurrency: 1 }, () => {
     assert.ok(button);
     button.click();
     assert.equal(button.disabled, true);
+    assert.equal(button.getAttribute("aria-busy"), "true");
+    assert.equal(page.container.querySelector(".ocfp-chat-status")?.textContent, "Opening chat…");
     mock.timers.tick(9_999);
     await flush();
     assert.equal(button.disabled, true);
@@ -330,6 +343,8 @@ describe("family page", { concurrency: 1 }, () => {
     mock.timers.tick(1);
     await flush();
     assert.equal(button.disabled, false);
+    assert.equal(button.hasAttribute("aria-busy"), false);
+    assert.equal(page.container.querySelector(".ocfp-chat-status"), null);
     assert.equal(page.container.querySelector(".ocfp-chat-error-title")?.textContent, "Couldn't open the chat.");
     assert.equal(page.container.querySelector(".ocfp-muted-reason")?.textContent, "timed out");
     assert.deepEqual(page.counts().opens, []);
@@ -417,5 +432,94 @@ describe("family page", { concurrency: 1 }, () => {
     const start = phone.indexOf(".ocfp-day-events {");
     const block = phone.slice(start, phone.indexOf("}", start));
     assert.equal(block.includes("gap"), false);
+    assert.equal(phone.includes("nth-child(n + 3)"), false);
+    assert.equal(phone.includes("mask-image"), true);
+    const disabled = css.slice(css.indexOf(".ocfp-agent:disabled"));
+    const disabledBody = disabled.slice(0, disabled.indexOf("}"));
+    assert.equal(disabledBody.includes("opacity"), false);
+    assert.equal(disabledBody.includes("var(--muted)"), true);
+  });
+
+  test("person chips keep focus, dim instead of hiding, and name the owner", async () => {
+    const page = mountPage({ mode: "light" });
+    await flush();
+    assert.equal(page.container.querySelector(".ocfp-filters")?.getAttribute("aria-label"), "Dim events by person");
+    const chips = () => [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-chip")];
+    const everyone = chips().find((chip) => chip.textContent?.startsWith("Everyone"));
+    const sam = chips().find((chip) => chip.textContent?.startsWith("Sam"));
+    const alexChip = chips().find((chip) => chip.textContent?.startsWith("Alex"));
+    assert.equal(everyone?.getAttribute("aria-pressed"), "true");
+    assert.equal(sam?.getAttribute("aria-pressed"), "false");
+    assert.equal(alexChip?.style.getPropertyValue("--ocfp-chip"), "oklch(0.6509 0.1212 220.72)");
+    sam?.click();
+    assert.equal(chips().find((chip) => chip.textContent?.startsWith("Sam")), sam);
+    assert.equal(sam?.isConnected, true);
+    assert.equal(sam?.getAttribute("aria-pressed"), "true");
+    assert.equal(everyone?.getAttribute("aria-pressed"), "false");
+    const alex = page.container.querySelector<HTMLElement>("[data-event-id='e-alex']");
+    const family = page.container.querySelector("[data-event-id='e-family']");
+    assert.equal(alex?.querySelector(".ocfp-owner-name")?.textContent, "Alex");
+    assert.match(alex?.getAttribute("aria-label") ?? "", /^Dentist, .+, Alex$/);
+    assert.equal(family?.querySelector(".ocfp-chip-role")?.textContent, "Family");
+    assert.match(family?.getAttribute("aria-label") ?? "", /Family$/);
+    alex?.click();
+    const dot = page.dialogs[0]?.content.querySelector<HTMLElement>(".ocfp-owner-dot");
+    assert.equal(dot?.style.getPropertyValue("--ocfp-dot"), "oklch(0.6509 0.1212 220.72)");
+  });
+
+  test("a named colour still paints the week in light mode", async () => {
+    const payload = week();
+    const alexMember = payload.members[0];
+    assert.ok(alexMember);
+    alexMember.color = "blue";
+    const page = mountPage({ mode: "light", result: { ok: true, result: payload } });
+    await flush();
+    assert.equal(page.container.querySelector(".ocfp-title")?.textContent, "Sep 28 – Oct 4");
+    const alex = page.container.querySelector<HTMLElement>("[data-event-id='e-alex']");
+    assert.equal(alex?.style.getPropertyValue("--ocfp-event"), "blue");
+    alexMember.color = "not-a-color";
+    const fallback = mountPage({ mode: "light", result: { ok: true, result: payload } });
+    await flush();
+    assert.equal(fallback.container.querySelector(".ocfp-title")?.textContent, "Sep 28 – Oct 4");
+    assert.equal(fallback.container.querySelector<HTMLElement>("[data-event-id='e-alex']")?.style.getPropertyValue("--ocfp-event"), "#211e1a");
+  });
+
+  test("previous and next are disabled when the week cannot move", async () => {
+    const early = week();
+    early.range = { start: "2026-08-03", end: "2026-08-09", timezone: "UTC" };
+    const earlyPage = mountPage({ result: { ok: true, result: early } });
+    await flush();
+    const earlyPrev = earlyPage.container.querySelector<HTMLButtonElement>("[aria-label='Previous week']");
+    const earlyNext = earlyPage.container.querySelector("[aria-label='Next week']");
+    assert.equal(earlyPrev?.tagName, "BUTTON");
+    assert.equal(earlyPrev?.disabled, true);
+    assert.equal(earlyNext?.tagName, "A");
+    const late = week();
+    late.range = { start: "2027-09-27", end: "2027-10-03", timezone: "UTC" };
+    const latePage = mountPage({ result: { ok: true, result: late } });
+    await flush();
+    const latePrev = latePage.container.querySelector("[aria-label='Previous week']");
+    const lateNext = latePage.container.querySelector<HTMLButtonElement>("[aria-label='Next week']");
+    assert.equal(latePrev?.tagName, "A");
+    assert.equal(lateNext?.tagName, "BUTTON");
+    assert.equal(lateNext?.disabled, true);
+  });
+
+  test("a start clamped to the browser date is reclamped once to the family today", async () => {
+    const browser = browserToday();
+    const first = boundWeekStart("2020-01-01", browser);
+    const second = boundWeekStart("2020-01-01", "2026-09-30");
+    const page = mountPage({ props: { start: "2020-01-01" } });
+    await flush();
+    const starts = page.calls.map((call) => {
+      const body = call[1] as { payload?: { start?: string } } | undefined;
+      return body?.payload?.start;
+    });
+    assert.deepEqual(starts, first === second ? [first] : [first, second]);
+    assert.equal(page.container.querySelector(".ocfp-title")?.textContent, "Sep 28 – Oct 4");
   });
 });
+
+function browserToday(now = new Date()) {
+  return `${String(now.getFullYear()).padStart(4, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}

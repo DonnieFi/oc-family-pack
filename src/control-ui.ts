@@ -11,7 +11,7 @@ import { createFeatureClient } from "openclaw/plugin-sdk/feature-contract";
 import { contract } from "./contract.ts";
 import { mixTowardInk } from "./contrast.ts";
 import type { CalendarRef, FamilyEvent, Member, WeekPayload } from "./types.ts";
-import { addDays, boundWeekStart, localDate } from "./week.ts";
+import { addDays, boundWeekStart, localDate, pageWeekStart } from "./week.ts";
 import "./control-ui.css";
 
 const PAGE_ID = "family";
@@ -87,16 +87,6 @@ function formats(timezone: string, locale: string) {
 
 const noon = (date: string) => new Date(`${date}T12:00:00Z`);
 
-function shiftWeek(start: string, days: number, today: string): string | undefined {
-  try {
-    return boundWeekStart(addDays(start, days), today);
-  } catch (error) {
-    if (error instanceof RangeError) {
-      return undefined;
-    }
-    throw error;
-  }
-}
 const isWeekend = (date: string) => [0, 6].includes(noon(date).getUTCDay());
 
 export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) {
@@ -110,9 +100,27 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
 
   const browserToday = (now = new Date()) =>
     `${String(now.getFullYear()).padStart(4, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  /** `?start=` is clamped to 8 weeks back through 52 weeks ahead. family.week can still be called outside that window. */
-  const requestedStart = (props: ControlUiViewContext["props"], today: string) => boundWeekStart(props.start, today);
-  let start = requestedStart(initial.props, browserToday());
+  /** `?start=` is clamped to 8 weeks back through 52 weeks ahead of the family's today, not the browser's. */
+  let rawStart = typeof initial.props.start === "string" ? initial.props.start : undefined;
+  let todayAnchor = browserToday();
+  let start = boundWeekStart(rawStart, todayAnchor);
+  const syncAnchor = (serverToday: string) => {
+    if (serverToday === todayAnchor) return false;
+    todayAnchor = serverToday;
+    const next = boundWeekStart(rawStart, todayAnchor);
+    if (next === start) return false;
+    start = next;
+    return true;
+  };
+  /** Light mode mixes a member colour toward ink. An unreadable colour becomes ink instead of throwing. */
+  const accentOnCard = (color: string) => {
+    const theme = getComputedStyle(document.documentElement);
+    const ink = theme.getPropertyValue("--text-strong").trim() || "#211e1a";
+    const card = theme.getPropertyValue("--card").trim() || "#ffffff";
+    const light = document.documentElement.getAttribute("data-theme-mode") === "light";
+    if (!light || color.startsWith("var(")) return color;
+    return mixTowardInk(color, ink, card).color;
+  };
   let person: string | null = null;
   let selectedDay = "";
   let dialog: ControlUiComponentHandle<ControlUiDialogProps> | undefined;
@@ -192,6 +200,11 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   }
 
   function renderWeek(week: WeekPayload) {
+    if (syncAnchor(week.today)) {
+      closeDialog();
+      watchWeek();
+      return;
+    }
     const fmt = formats(week.range.timezone, host.locale);
     const members = new Map<string, Member>(week.members.map((member) => [member.profileId, member]));
     const events = new Map<string, FamilyEvent>(week.calendar.status === "ok" ? week.calendar.data.map((event) => [event.id, event]) : []);
@@ -204,13 +217,8 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     const calendarOf = (event: FamilyEvent) => calendars.get(event.calendarKey);
     const isShared = (event: FamilyEvent) => calendarOf(event)?.kind === "shared";
     const ownerIds = (event: FamilyEvent) => calendarOf(event)?.ownerIds ?? [];
-    const theme = getComputedStyle(document.documentElement);
-    const ink = theme.getPropertyValue("--text-strong").trim() || "#211e1a";
-    const card = theme.getPropertyValue("--card").trim() || "#ffffff";
-    const light = document.documentElement.getAttribute("data-theme-mode") === "light";
-    const onCard = (color: string) => (light && !color.startsWith("var(") ? mixTowardInk(color, ink, card).color : color);
     const eventColor = (event: FamilyEvent) =>
-      isShared(event) ? "var(--family-neutral)" : onCard(members.get(ownerIds(event)[0] ?? "")?.color ?? "var(--family-neutral)");
+      isShared(event) ? "var(--family-neutral)" : accentOnCard(members.get(ownerIds(event)[0] ?? "")?.color ?? "var(--family-neutral)");
     const matches = (event: FamilyEvent) => !person || isShared(event) || ownerIds(event).includes(person);
 
     const start = noon(week.range.start);
@@ -220,6 +228,13 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
         ? `${fmt.month.format(start)} ${fmt.day.format(start)} – ${fmt.day.format(end)}`
         : `${fmt.monthDay.format(start)} – ${fmt.monthDay.format(end)}`;
     const count = new Set(week.days.flatMap((day) => day.eventIds)).size;
+    const weekStep = (days: number, label: string, name: "prev" | "next") => {
+      const target = pageWeekStart(week.range.start, days, week.today);
+      if (!target) {
+        return h("button", { type: "button", class: "ocfp-btn ocfp-btn-icon", disabled: true, "aria-label": label }, icon(name));
+      }
+      return weekLink(target, { class: "ocfp-btn ocfp-btn-icon", "aria-label": label }, icon(name));
+    };
     const masthead = h(
       "header",
       { class: "ocfp-masthead" },
@@ -238,32 +253,41 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       h(
         "nav",
         { class: "ocfp-week-nav", "aria-label": "Change week" },
-        weekLink(shiftWeek(week.range.start, -7, week.today), { class: "ocfp-btn ocfp-btn-icon", "aria-label": "Previous week" }, icon("prev")),
+        weekStep(-7, "Previous week", "prev"),
         weekLink(undefined, { class: "ocfp-btn ocfp-btn-today", "aria-current": inWeek ? "true" : "false" }, "Today"),
-        weekLink(shiftWeek(week.range.start, 7, week.today), { class: "ocfp-btn ocfp-btn-icon", "aria-label": "Next week" }, icon("next")),
+        weekStep(7, "Next week", "next"),
       ),
     );
 
-    const filters = h("div", { class: "ocfp-filters", role: "group", "aria-label": "Show events for" });
-    const renderFilters = () => {
-      const chip = (id: string | null, label: string, color: string | undefined, role: string | undefined) => {
-        const button = on(
-          h("button", { type: "button", class: "ocfp-chip", "aria-pressed": String(person === id) }, h("span", { class: "ocfp-chip-dot", "aria-hidden": "true" }), label, role ? h("span", { class: "ocfp-chip-role" }, role) : null),
-          "click",
-          () => {
-            person = person === id || id === null ? null : id;
-            renderFilters();
-            applyFilter();
-          },
-        );
-        return color ? paint(button, { "--ocfp-chip": color }) : button;
-      };
-      filters.replaceChildren(
-        chip(null, "Everyone", undefined, undefined),
-        ...week.members.map((member) => chip(member.profileId, member.displayName, member.color, member.role === "guest" ? "guest" : undefined)),
-      );
+    const filters = h("div", { class: "ocfp-filters", role: "group", "aria-label": "Dim events by person" });
+    const syncFilters = () => {
+      for (const button of filters.querySelectorAll<HTMLButtonElement>(".ocfp-chip")) {
+        const id = button.dataset.member ?? "";
+        button.setAttribute("aria-pressed", String(id === "" ? person === null : person === id));
+      }
     };
-    renderFilters();
+    const chip = (id: string | null, label: string, color: string | undefined, role: string | undefined) => {
+      const button = on(
+        h(
+          "button",
+          { type: "button", class: "ocfp-chip", "data-member": id ?? "", "aria-pressed": "false" },
+          h("span", { class: "ocfp-chip-dot", "aria-hidden": "true" }),
+          label,
+          role ? h("span", { class: "ocfp-chip-role" }, role) : null,
+        ),
+        "click",
+        () => {
+          person = person === id || id === null ? null : id;
+          syncFilters();
+          applyFilter();
+        },
+      );
+      return color ? paint(button, { "--ocfp-chip": accentOnCard(color) }) : button;
+    };
+    filters.append(
+      chip(null, "Everyone", undefined, undefined),
+      ...week.members.map((member) => chip(member.profileId, member.displayName, member.color, member.role === "guest" ? "guest" : undefined)),
+    );
     filters.hidden = week.members.length === 0;
 
     const weather = h("aside", { class: "ocfp-weather ocfp-panel", "aria-label": "Weather" }, ...weatherContent(week, fmt));
@@ -286,23 +310,42 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       const startsToday = localDate(Date.parse(event.start), week.range.timezone) === date;
       return startsToday ? fmt.time.format(new Date(event.start)) : `until ${fmt.time.format(new Date(event.end))}`;
     };
-    const ownerDots = (event: FamilyEvent) =>
+    const ownerLabel = (event: FamilyEvent) =>
       isShared(event)
-        ? h("span", { class: "ocfp-chip-role" }, "Family")
-        : h(
-            "span",
-            { class: "ocfp-owner-dots", "aria-hidden": "true" },
-            ...ownerIds(event).flatMap((id) => {
+        ? "Family"
+        : ownerIds(event)
+            .flatMap((id) => {
               const member = members.get(id);
-              return member ? [paint(h("span", { class: "ocfp-owner-dot" }), { "--ocfp-dot": onCard(member.color) })] : [];
-            }),
-          );
+              return member ? [member.displayName] : [];
+            })
+            .join(", ");
+    const ownerDots = (event: FamilyEvent) => {
+      const label = ownerLabel(event);
+      if (isShared(event)) return h("span", { class: "ocfp-chip-role" }, label);
+      return h(
+        "span",
+        { class: "ocfp-owner-dots" },
+        ...ownerIds(event).flatMap((id) => {
+          const member = members.get(id);
+          return member
+            ? [paint(h("span", { class: "ocfp-owner-dot", "aria-hidden": "true" }), { "--ocfp-dot": accentOnCard(member.color) })]
+            : [];
+        }),
+        label ? h("span", { class: "ocfp-owner-name" }, label) : null,
+      );
+    };
     const eventCard = (event: FamilyEvent, date: string) =>
       paint(
         on(
           h(
             "button",
-            { type: "button", class: `ocfp-event${event.allDay ? " is-all-day" : ""}`, "data-event-id": event.id, "aria-haspopup": "dialog" },
+            {
+              type: "button",
+              class: `ocfp-event${event.allDay ? " is-all-day" : ""}`,
+              "data-event-id": event.id,
+              "aria-haspopup": "dialog",
+              "aria-label": `${event.title}, ${timeLabel(event, date)}, ${ownerLabel(event) || "unassigned"}`,
+            },
             h("span", { class: "ocfp-event-meta" }, h("span", {}, timeLabel(event, date)), ownerDots(event)),
             h("span", { class: "ocfp-event-title" }, event.title),
             event.location ? h("span", { class: "ocfp-event-location" }, event.location) : null,
@@ -387,6 +430,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
         node.classList.toggle("is-dimmed", event !== undefined && !matches(event));
       }
     };
+    syncFilters();
     applyFilter();
 
     content.replaceChildren(
@@ -464,7 +508,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
             ...(calendar?.ownerIds ?? []).flatMap((id) => {
               const member = members.get(id);
               return member
-                ? [h("span", { class: "ocfp-who" }, paint(h("span", { class: "ocfp-owner-dot" }), { "--ocfp-dot": member.color }), member.displayName)]
+                ? [h("span", { class: "ocfp-who" }, paint(h("span", { class: "ocfp-owner-dot" }), { "--ocfp-dot": accentOnCard(member.color) }), member.displayName)]
                 : [];
             }),
           );
@@ -574,7 +618,11 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   async function openAgentChat(agentId: string, button: HTMLButtonElement) {
     if (!alive()) return;
     button.disabled = true;
+    button.setAttribute("aria-busy", "true");
     chatStrip.querySelector(".ocfp-chat-error")?.remove();
+    chatStrip.querySelector(".ocfp-chat-status")?.remove();
+    const status = h("p", { class: "ocfp-chat-status", role: "status" }, "Opening chat…");
+    chatStrip.append(status);
     try {
       const found = await findMainSession(agentId);
       if (!alive()) return;
@@ -594,6 +642,8 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
         ),
       );
     } finally {
+      status.remove();
+      button.removeAttribute("aria-busy");
       if (alive()) button.disabled = false;
     }
   }
@@ -605,7 +655,8 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   return {
     update(next: ControlUiViewContext) {
       if (!alive()) return;
-      const nextStart = requestedStart(next.props, browserToday());
+      rawStart = typeof next.props.start === "string" ? next.props.start : undefined;
+      const nextStart = boundWeekStart(rawStart, todayAnchor);
       if (nextStart !== start) {
         start = nextStart;
         closeDialog();

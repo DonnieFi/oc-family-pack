@@ -143,6 +143,14 @@
   color: var(--text-strong);
 }
 
+.ocfp-btn:disabled,
+.ocfp-btn:disabled:hover {
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+}
+
 .ocfp-btn-icon {
   width: 40px;
   padding: 0;
@@ -569,8 +577,18 @@
 .ocfp-owner-dot {
   width: 7px;
   height: 7px;
+  flex: 0 0 auto;
   border-radius: 50%;
   background: var(--ocfp-dot);
+}
+
+.ocfp-owner-name {
+  min-width: 0;
+  max-width: 9ch;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
 }
 
 .ocfp-chat-strip {
@@ -612,6 +630,24 @@
 .ocfp-agent:hover {
   border-color: color-mix(in oklab, var(--accent) 55%, var(--border-strong));
   background: color-mix(in oklab, var(--accent) 10%, var(--bg-elevated));
+}
+
+.ocfp-agent:disabled,
+.ocfp-agent:disabled:hover {
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+}
+
+.ocfp-agent[aria-busy="true"] {
+  cursor: progress;
+}
+
+.ocfp-chat-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .ocfp-agent-avatar {
@@ -783,13 +819,13 @@
     font-size: 2.5rem;
   }
 
-  .ocfp-weather .ocfp-forecast {
-    grid-template-columns: 1fr 1fr;
-    gap: 0 16px;
+  .ocfp-filters {
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 2rem), transparent);
   }
 
-  .ocfp-weather .ocfp-forecast li:nth-child(n + 3) {
-    display: none;
+  .ocfp-weather .ocfp-forecast {
+    grid-template-columns: 1fr;
+    gap: 0;
   }
 
   .ocfp-day-tabs {
