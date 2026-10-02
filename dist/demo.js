@@ -1,9 +1,9 @@
 import { addDays, localTime } from "./week.js";
 export const DEMO_MEMBERS = [
-    { profileId: "alex", displayName: "Alex", role: "parent" },
-    { profileId: "sam", displayName: "Sam", role: "parent" },
-    { profileId: "riley", displayName: "Riley", role: "kid" },
-    { profileId: "jordan", displayName: "Jordan", role: "kid" },
+    { profileId: "alex", displayName: "Alex", role: "parent", devices: [] },
+    { profileId: "sam", displayName: "Sam", role: "parent", devices: [] },
+    { profileId: "riley", displayName: "Riley", role: "kid", devices: [] },
+    { profileId: "jordan", displayName: "Jordan", role: "kid", devices: [] },
 ];
 const CALENDARS = {
     alex: { key: "c0", id: "demo-alex", label: "Alex", kind: "personal", owners: ["alex"] },

@@ -8,6 +8,37 @@ import type { FamilyEvent, WeekPayload } from "./types.ts";
 
 const noWeather = async () => ({ status: "unconfigured" as const, hint: "no weather" });
 
+test("discord ids and device MACs stay off the week payload", async () => {
+  const config = parseConfig({
+    timezone: "UTC",
+    gogPath: "/bin/true",
+    members: [
+      {
+        profileId: "Riley",
+        displayName: "Riley",
+        role: "kid",
+        discordId: "100000000000000001",
+        devices: [{ label: "Phone", primaryMac: "AA-BB-CC-DD-EE-01", aliasMacs: ["AA:BB:CC:DD:EE:02"], source: "dhcp" }],
+      },
+      { profileId: "Alex", displayName: "Alex", role: "parent" },
+    ],
+    calendars: [{ id: "school-feed@group.calendar.google.com", label: "School", kind: "school", owners: ["Riley"] }],
+  });
+  const payload = await buildWeekPayload(config, "2026-10-01", Date.parse("2026-09-30T16:00:00Z"), noWeather);
+  assert.deepEqual(payload.members, [
+    { profileId: "riley", displayName: "Riley", role: "kid", color: "oklch(0.72 0.14 245)" },
+    { profileId: "alex", displayName: "Alex", role: "parent", color: "oklch(0.72 0.16 55)" },
+  ]);
+  assert.deepEqual(payload.calendars, [{ key: "c0", label: "School", kind: "school", ownerIds: ["riley"] }]);
+  const wire = JSON.stringify(payload);
+  assert.equal(wire.includes("discordId"), false);
+  assert.equal(wire.includes("100000000000000001"), false);
+  assert.equal(wire.includes("devices"), false);
+  assert.equal(wire.includes("primaryMac"), false);
+  assert.equal(wire.includes("aa:bb:cc:dd:ee:01"), false);
+  assert.equal(wire.includes("aa:bb:cc:dd:ee:02"), false);
+});
+
 test("demo mode renders a synthetic week with a roster, calendars, colors, and day buckets", async () => {
   const config = parseConfig({ demo: true, timezone: "America/Toronto" });
   const payload = await buildWeekPayload(config, "2026-10-01", Date.parse("2026-09-30T16:00:00Z"), noWeather);

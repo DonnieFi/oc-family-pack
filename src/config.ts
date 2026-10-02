@@ -1,16 +1,23 @@
 import { Type } from "typebox";
 import { MAX_CALENDARS, MAX_MEMBERS } from "./contract.ts";
-import type { CalendarConfig, CalendarKind, Config, Location, MemberConfig, MemberRole } from "./types.ts";
+import type { CalendarConfig, CalendarKind, Config, Location, MemberConfig, MemberDevice, MemberRole } from "./types.ts";
 
 const ROLES: readonly MemberRole[] = ["parent", "kid", "guest"];
 const KINDS: readonly CalendarKind[] = ["personal", "shared", "school"];
 // Colors land in CSS custom properties, so only accept plain color syntax.
 const CSS_COLOR = /^(?:#[0-9a-fA-F]{3,8}|(?:rgb|rgba|hsl|hsla|oklch|oklab)\([0-9.,%\s/-]+\)|[a-zA-Z]+)$/;
+/** Discord user ids are snowflakes. A mention like `<@…>` is not an id. */
+const DISCORD_ID = /^\d{17,20}$/;
+const MAX_DEVICES = 32;
+const MAX_ALIAS_MACS = 32;
 
 const Name = Type.String({ minLength: 1, maxLength: 200 });
+const MacInput = Type.String({ minLength: 1, maxLength: 64 });
 
 // Structural rules the host checks before the plugin loads. parseConfig adds the
-// cross-field rules (zone validity, owner references, uniqueness) and defaults.
+// cross-field rules (zone validity, owner references, uniqueness), lowercases
+// roster ids, normalizes MACs, and fills defaults. phone, aliases, and reminders
+// are left to the beads that read them.
 export const ConfigSchema = Type.Object(
   {
     demo: Type.Optional(Type.Boolean({ default: false })),
@@ -34,6 +41,21 @@ export const ConfigSchema = Type.Object(
             displayName: Name,
             role: Type.Union(ROLES.map((role) => Type.Literal(role))),
             color: Type.Optional(Type.String({ maxLength: 100, pattern: CSS_COLOR.source })),
+            discordId: Type.Optional(Type.String({ minLength: 17, maxLength: 20, pattern: DISCORD_ID.source })),
+            devices: Type.Optional(
+              Type.Array(
+                Type.Object(
+                  {
+                    label: Name,
+                    primaryMac: MacInput,
+                    aliasMacs: Type.Optional(Type.Array(MacInput, { maxItems: MAX_ALIAS_MACS })),
+                    source: Name,
+                  },
+                  { additionalProperties: false },
+                ),
+                { maxItems: MAX_DEVICES },
+              ),
+            ),
           },
           { additionalProperties: false },
         ),
@@ -129,15 +151,67 @@ function location(value: unknown): Location | undefined {
   return parsed;
 }
 
+/** Roster ids are stored lowercased. The trusted-proxy username is compared that way. */
+function profileId(value: unknown, field: string): string {
+  return text(value, field).toLowerCase();
+}
+
+/**
+ * One place that turns a MAC into lowercase colon-separated form.
+ * Callers downstream compare the stored string; they do not normalize again.
+ * Accepts colon, hyphen, dot, or space separators, Cisco groups of four, or 12 bare hex digits.
+ */
+function normalizeMac(value: string): string | undefined {
+  const compact = value.trim().toLowerCase().replaceAll(/[:.\-\s]/g, "");
+  if (!/^[0-9a-f]{12}$/.test(compact)) {
+    return undefined;
+  }
+  return compact.match(/.{2}/g)?.join(":");
+}
+
+function macAddress(value: unknown, field: string, memberName: string): string {
+  const normalized = typeof value === "string" ? normalizeMac(value) : undefined;
+  if (normalized === undefined) {
+    throw new ConfigError(field, `must be a MAC address for ${memberName}`);
+  }
+  return normalized;
+}
+
+function atMost(items: unknown[], field: string, max: number): unknown[] {
+  if (items.length > max) {
+    throw new ConfigError(field, `must contain at most ${max} entries`);
+  }
+  return items;
+}
+
+function device(value: unknown, field: string, memberName: string): MemberDevice {
+  if (!isRecord(value)) {
+    throw new ConfigError(field, "must be an object");
+  }
+  const aliasMacs = atMost(list(value.aliasMacs, `${field}.aliasMacs`), `${field}.aliasMacs`, MAX_ALIAS_MACS).map((mac, index) =>
+    macAddress(mac, `${field}.aliasMacs[${index}]`, memberName),
+  );
+  return {
+    label: text(value.label, `${field}.label`),
+    primaryMac: macAddress(value.primaryMac, `${field}.primaryMac`, memberName),
+    aliasMacs,
+    source: text(value.source, `${field}.source`),
+  };
+}
+
 function member(value: unknown, index: number): MemberConfig {
   const field = `members[${index}]`;
   if (!isRecord(value)) {
     throw new ConfigError(field, "must be an object");
   }
+  const displayName = text(value.displayName, `${field}.displayName`);
   const parsed: MemberConfig = {
-    profileId: text(value.profileId, `${field}.profileId`),
-    displayName: text(value.displayName, `${field}.displayName`),
+    profileId: profileId(value.profileId, `${field}.profileId`),
+    displayName,
     role: oneOf(value.role, `${field}.role`, ROLES),
+    devices: atMost(list(value.devices, `${field}.devices`), `${field}.devices`, MAX_DEVICES).map((entry, deviceIndex) =>
+      device(entry, `${field}.devices[${deviceIndex}]`, displayName),
+    ),
   };
   if (value.color !== undefined) {
     const color = text(value.color, `${field}.color`);
@@ -145,6 +219,9 @@ function member(value: unknown, index: number): MemberConfig {
       throw new ConfigError(`${field}.color`, "must be a CSS color such as #3b82f6 or oklch(0.72 0.14 245)");
     }
     parsed.color = color;
+  }
+  if (value.discordId !== undefined) {
+    parsed.discordId = discordId(value.discordId, `${field}.discordId`);
   }
   return parsed;
 }
@@ -154,8 +231,9 @@ function calendar(value: unknown, index: number, profileIds: ReadonlySet<string>
   if (!isRecord(value)) {
     throw new ConfigError(field, "must be an object");
   }
+  // School calendars included: attribution is this list and nothing else. An omitted list stays empty.
   const owners = list(value.owners, `${field}.owners`).map((owner, i) => {
-    const id = text(owner, `${field}.owners[${i}]`);
+    const id = profileId(owner, `${field}.owners[${i}]`);
     if (!profileIds.has(id)) {
       throw new ConfigError(`${field}.owners[${i}]`, `"${id}" does not match any members[].profileId`);
     }
@@ -168,6 +246,14 @@ function calendar(value: unknown, index: number, profileIds: ReadonlySet<string>
     kind: oneOf(value.kind, `${field}.kind`, KINDS),
     owners,
   };
+}
+
+function discordId(value: unknown, field: string): string {
+  const id = text(value, field);
+  if (!DISCORD_ID.test(id)) {
+    throw new ConfigError(field, "must be a numeric Discord user id");
+  }
+  return id;
 }
 
 function unique(values: string[], field: string): void {
@@ -190,9 +276,15 @@ export function parseConfig(raw: unknown): Config {
   }
   const demo = value.demo === true;
   const members = list(value.members, "members").map(member);
+  // Profile ids are already lowercased, so "Riley" and "riley" collide here.
   unique(
     members.map((entry) => entry.profileId),
     "members[].profileId",
+  );
+  // Discord identity is this id matched to the sender, so two members cannot share one.
+  unique(
+    members.flatMap((entry) => (entry.discordId === undefined ? [] : [entry.discordId])),
+    "members[].discordId",
   );
   const profileIds = new Set(members.map((entry) => entry.profileId));
   const calendars = list(value.calendars, "calendars").map((entry, index) => calendar(entry, index, profileIds));

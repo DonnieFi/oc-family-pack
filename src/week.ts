@@ -144,6 +144,7 @@ export function groupByDay(dates: string[], today: string, events: FamilyEvent[]
   }));
 }
 
+/** Page roster only. discordId and devices stay in config and are not copied here. */
 export function resolveMembers(members: MemberConfig[]): Member[] {
   return members.map((member, index) => ({
     profileId: member.profileId,

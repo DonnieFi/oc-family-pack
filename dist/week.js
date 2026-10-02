@@ -124,6 +124,7 @@ export function groupByDay(dates, today, events, timezone) {
         eventIds: spans.filter(({ span }) => span[0] <= date && date <= span[1]).map(({ event }) => event.id),
     }));
 }
+/** Page roster only. discordId and devices stay in config and are not copied here. */
 export function resolveMembers(members) {
     return members.map((member, index) => ({
         profileId: member.profileId,
