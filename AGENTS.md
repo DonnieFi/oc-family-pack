@@ -123,12 +123,14 @@ agree with the counter in the host under test, and the update path resolves the
 install. A cancelled run never reports success: every step boundary checks for
 an interrupt, and every child process the smoke starts — host calls and the
 staged `npm install` — is async, gets a closed stdin, and is bounded by a
-timeout that signals its whole process group. What it does not yet prove: the
-scheduler step is a host liveness probe, the store step only checks the plugin
-state dir is writable and that no file naming this plugin appeared outside it,
-and the update step cannot exercise a git refresh because the smoke installs
-from a local copy. No plugin code writes state or registers jobs until s5k.19
-and the briefs epic.
+timeout. Children run in their own process group and the smoke takes the whole
+group down, escalating until it is gone, so a host that ignores SIGTERM or
+leaves a background child behind cannot outlive the run. What it does not yet
+prove: the scheduler step is a host liveness probe, the store step only checks
+the plugin state dir is writable and that no file naming this plugin appeared
+outside it, and the update step cannot exercise a git refresh because the smoke
+installs from a local copy. No plugin code writes state or registers jobs until
+s5k.19 and the briefs epic.
 
 Two builds of the same OpenClaw version can disagree on the Control UI bundle
 hash, because the difference is only in minifier identifier names. So `dist/`

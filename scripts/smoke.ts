@@ -101,9 +101,21 @@ function note(message: string, step: Step = "plugin load"): void {
 /** A host call must not hang the smoke: an interactive prompt would wait forever. */
 const HOST_CALL_TIMEOUT_MS = 120_000;
 /** Grace period before a child that ignored SIGTERM is killed outright. */
-const HOST_KILL_ESCALATION_MS = 8000;
+const HOST_KILL_ESCALATION_MS = 2000;
 /** Cap per stream, so a chatty host cannot grow a string until the process dies. */
 const MAX_HOST_OUTPUT = 8 * 1024 * 1024;
+/** Time allowed for output to drain after a child exits, before settling. */
+const OUTPUT_DRAIN_GRACE_MS = 250;
+/**
+ * Last-resort exit, so a leaked child holding our pipes cannot hang the shell.
+ * Must exceed the kill escalation and the Gateway stop deadline, so the kills
+ * have landed before the process goes away.
+ */
+const FORCED_EXIT_MS = 30000;
+/** Backstop on waiting for the isolated Gateway to actually die. */
+const GATEWAY_STOP_DEADLINE_MS = 10000;
+/** Backstop on waiting for an aborted host call's process group to die. */
+const KILL_WAIT_DEADLINE_MS = 10000;
 
 /**
  * Runs the resolved host CLI against the isolated state, returning stdout.
@@ -115,30 +127,86 @@ const MAX_HOST_OUTPUT = 8 * 1024 * 1024;
  *   letting the cancelled run finish and report success;
  * - stdin is /dev/null, so a host that prompts for input gets EOF instead of
  *   hanging the smoke unkillably;
- * - the call is raced against an interrupt and a timeout, and the child is
- *   killed on either, escalating to SIGKILL, so a host that ignores SIGTERM
- *   cannot outlive the run or be orphaned;
+ * - the call is raced against an interrupt and a timeout, and killGroup takes
+ *   the child's whole process group down on either, keeping signalling until
+ *   the group is gone, so a host that ignores SIGTERM or leaves a background
+ *   child behind cannot outlive the run;
  * - output is capped, so a chatty host cannot grow a string until the process
  *   dies instead of reporting the step that broke.
  *
  * Every failure path names its step. A bare rejection here would lose that,
  * and naming the step is the whole contract of this script.
  */
+/**
+ * Signals a child's whole process group, escalating to SIGKILL, and keeps going
+ * until the group is really gone.
+ *
+ * Two things this has to get right, both of which were wrong before it existed:
+ * the escalation must outlive the settle of the caller's promise, or a host
+ * that ignores SIGTERM survives its own timeout; and it must keep signalling
+ * after the direct child has exited, or a host that left a background child
+ * behind orphans it. `alive` is therefore about the *group*, not the child.
+ */
+function killGroup(child: ChildProcess, onGone?: () => void): void {
+  const pid = child.pid;
+  if (pid === undefined) {
+    onGone?.();
+    return;
+  }
+  const groupAlive = () => {
+    try {
+      process.kill(-pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const signal = (sig: NodeJS.Signals) => {
+    try {
+      process.kill(-pid, sig);
+    } catch {
+      try {
+        child.kill(sig);
+      } catch {
+        // already gone
+      }
+    }
+  };
+  if (!groupAlive()) {
+    onGone?.();
+    return;
+  }
+  signal("SIGTERM");
+  // Poll rather than fire once: the direct child can exit while its own
+  // children are still alive, and only the group knows they are there. The
+  // interval is not unref'd when a caller is waiting on onGone, because that
+  // poll is the only thing that will resolve them.
+  const escalate = setInterval(() => {
+    if (!groupAlive()) {
+      clearInterval(escalate);
+      onGone?.();
+      return;
+    }
+    signal("SIGKILL");
+  }, HOST_KILL_ESCALATION_MS);
+  if (onGone === undefined) escalate.unref();
+}
+
 function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"): Promise<string> {
   return new Promise((resolve, reject) => {
     // Own process group, so a timeout or Ctrl-C can signal the host and
     // anything it spawned rather than orphaning them.
     const child = spawn(hostBinary, args, { env, stdio: ["ignore", "pipe", "pipe"], detached: true });
-    const label = `${step}: ${hostBinary} ${args.join(" ")}`;
+    const label = `${hostBinary} ${args.join(" ")}`;
     let stdout = "";
     let stderr = "";
     let settled = false;
     const collect = (into: "out" | "err") => (chunk: Buffer) => {
       const text = chunk.toString("utf8");
       if (into === "out") {
-        if (stdout.length < MAX_HOST_OUTPUT) stdout += text;
+        if (stdout.length < MAX_HOST_OUTPUT) stdout += text.slice(0, MAX_HOST_OUTPUT - stdout.length);
       } else if (stderr.length < MAX_HOST_OUTPUT) {
-        stderr += text;
+        stderr += text.slice(0, MAX_HOST_OUTPUT - stderr.length);
       }
     };
     // An EPIPE on a closed pipe must not throw out of a stream callback.
@@ -147,43 +215,24 @@ function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"):
     child.stdout.on("data", collect("out"));
     child.stderr.on("data", collect("err"));
 
-    const alive = () => child.exitCode === null && child.signalCode === null;
-    let escalate: NodeJS.Timeout | undefined;
-    const kill = () => {
-      if (!alive()) return;
-      // Signal the whole group, not just the direct child: a host that shells
-      // out would otherwise leave its own children running after the smoke died.
-      try {
-        process.kill(-child.pid!, "SIGTERM");
-      } catch {
-        child.kill("SIGTERM");
-      }
-      if (escalate === undefined) {
-        escalate = setTimeout(() => {
-          if (!alive()) return;
-          try {
-            process.kill(-child.pid!, "SIGKILL");
-          } catch {
-            child.kill("SIGKILL");
-          }
-        }, HOST_KILL_ESCALATION_MS);
-        escalate.unref();
-      }
-    };
+    // Settling the promise must not cancel the kill: that was how a host which
+    // ignored SIGTERM outlived its own timeout.
     const settle = (fn: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (escalate !== undefined) clearTimeout(escalate);
       process.off("SIGINT", onSignal);
       process.off("SIGTERM", onSignal);
       fn();
     };
     const abort = (detail: string) => {
-      kill();
-      settle(() => reject(new Error(`smoke: ${detail}`)));
+      // Wait for the group to actually be gone before reporting, so the smoke
+      // cannot exit while a SIGTERM-deaf host or an orphaned grandchild is
+      // still running.
+      killGroup(child, () => settle(() => reject(new Error(`smoke: ${detail}`))));
+      setTimeout(() => settle(() => reject(new Error(`smoke: ${detail}`))), KILL_WAIT_DEADLINE_MS);
     };
-    const onSignal = () => abort(`${step} failed: interrupted by ${interrupted ?? "signal"}`);
+    const onSignal = () => abort(`${step} failed: interrupted by ${interrupted ?? "signal"} during ${label}`);
     const timer = setTimeout(
       () => abort(`${step} failed: timed out after ${HOST_CALL_TIMEOUT_MS}ms running ${label}`),
       HOST_CALL_TIMEOUT_MS,
@@ -192,21 +241,35 @@ function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"):
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
 
-    child.on("error", (error) => settle(() => reject(new Error(`smoke: ${step} failed: could not run ${label}: ${error.message}`))));
-    child.on("close", (code) =>
-      settle(() => {
-        if (code === 0) {
-          resolve(stdout);
-          return;
-        }
-        const how = code === null ? `by ${child.signalCode ?? "signal"}` : `with exit code ${code}`;
-        reject(
-          new Error(
-            `smoke: ${step} failed: ${label} exited ${how}${stderr.trim() ? `: ${stderr.trim().slice(0, 500)}` : ""}`,
-          ),
-        );
-      }),
+    child.on("error", (error) =>
+      settle(() => reject(new Error(`smoke: ${step} failed: could not run ${label}: ${error.message}`))),
     );
+    // `exit` rather than `close`: close waits for the pipes to reach EOF, which
+    // a surviving grandchild can hold open forever, turning a successful call
+    // into a spurious timeout. Take a moment to drain, then settle. This timer
+    // is deliberately not unref'd: it is what settles the promise, so if the
+    // loop has nothing else pending it must be the thing keeping it alive.
+    child.on("exit", (code) => {
+      // Sweep the group even on success: a host that exits 0 while leaving a
+      // background child would otherwise orphan it, since nothing else in the
+      // run would ever signal that group again. It is our own group, so this
+      // cannot touch anything else. Unref'd, so it never delays a clean exit.
+      killGroup(child);
+      setTimeout(() => {
+        settle(() => {
+          if (code === 0) {
+            resolve(stdout);
+            return;
+          }
+          const how = code === null ? `by ${child.signalCode ?? "signal"}` : `with exit code ${code}`;
+          reject(
+            new Error(
+              `smoke: ${step} failed: ${label} exited ${how}${stderr.trim() ? `: ${stderr.trim().slice(0, 500)}` : ""}`,
+            ),
+          );
+        });
+      }, OUTPUT_DRAIN_GRACE_MS);
+    });
   });
 }
 
@@ -286,12 +349,14 @@ function hostDistDir(): string {
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
-    server.once("error", reject);
+    server.once("error", (error) => reject(new Error(`smoke: plugin load failed: could not reserve a local port: ${error.message}`)));
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       const port = typeof address === "object" && address ? address.port : 0;
       server.close(() =>
-        port === LIVE_GATEWAY_PORT ? reject(new Error("refusing to use the live Gateway port")) : resolve(port),
+        port === LIVE_GATEWAY_PORT
+          ? reject(new Error(`smoke: plugin load failed: refused to use the live Gateway port ${LIVE_GATEWAY_PORT}`))
+          : resolve(port),
       );
     });
   });
@@ -326,67 +391,51 @@ async function stagePlugin(target: string): Promise<void> {
       detached: true,
     });
     let stderr = "";
+    // Drain stdout as well: an undrained pipe fills at 64 KiB and blocks npm,
+    // which showed up as a spurious install timeout.
+    child.stdout.on("data", () => {});
     child.stderr.on("data", (chunk: Buffer) => {
-      if (stderr.length < MAX_HOST_OUTPUT) stderr += chunk.toString("utf8");
+      if (stderr.length < MAX_HOST_OUTPUT) stderr += chunk.toString("utf8").slice(0, MAX_HOST_OUTPUT - stderr.length);
     });
     child.stdout.on("error", () => {});
     child.stderr.on("error", () => {});
-    const alive = () => child.exitCode === null && child.signalCode === null;
-    let escalate: NodeJS.Timeout | undefined;
     let settled = false;
-    const kill = () => {
-      if (!alive()) return;
-      try {
-        process.kill(-child.pid!, "SIGTERM");
-      } catch {
-        child.kill("SIGTERM");
-      }
-      if (escalate === undefined) {
-        escalate = setTimeout(() => {
-          if (!alive()) return;
-          try {
-            process.kill(-child.pid!, "SIGKILL");
-          } catch {
-            child.kill("SIGKILL");
-          }
-        }, HOST_KILL_ESCALATION_MS);
-        escalate.unref();
-      }
-    };
     const settle = (fn: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (escalate !== undefined) clearTimeout(escalate);
       process.off("SIGINT", onSignal);
       process.off("SIGTERM", onSignal);
       fn();
     };
-    const onSignal = () => {
-      kill();
-      settle(() => reject(new Error(`smoke: plugin load failed: interrupted by ${interrupted ?? "signal"} during npm install`)));
+    const abort = (detail: string) => {
+      killGroup(child, () => settle(() => reject(new Error(`smoke: plugin load failed: ${detail}`))));
+      setTimeout(() => settle(() => reject(new Error(`smoke: plugin load failed: ${detail}`))), KILL_WAIT_DEADLINE_MS);
     };
-    const timer = setTimeout(() => {
-      kill();
-      settle(() => reject(new Error(`smoke: plugin load failed: npm install timed out after ${HOST_CALL_TIMEOUT_MS}ms`)));
-    }, HOST_CALL_TIMEOUT_MS);
+    const onSignal = () => abort(`interrupted by ${interrupted ?? "signal"} during npm install`);
+    const timer = setTimeout(
+      () => abort(`npm install timed out after ${HOST_CALL_TIMEOUT_MS}ms`),
+      HOST_CALL_TIMEOUT_MS,
+    );
     timer.unref();
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
     child.on("error", (error) => settle(() => reject(new Error(`smoke: plugin load failed: could not run npm install: ${error.message}`))));
-    child.on("close", (code) =>
-      settle(() => {
-        if (code === 0) resolve();
-        else
-          reject(
-            new Error(
-              `smoke: plugin load failed: npm install exited ${code ?? `by ${child.signalCode ?? "signal"}`}${
-                stderr.trim() ? `: ${stderr.trim().slice(0, 500)}` : ""
-              }`,
-            ),
-          );
-      }),
-    );
+    child.on("exit", (code) => {
+      setTimeout(() => {
+        settle(() => {
+          if (code === 0) resolve();
+          else
+            reject(
+              new Error(
+                `npm install exited ${code === null ? `by ${child.signalCode ?? "signal"}` : `with exit code ${code}`}${
+                  stderr.trim() ? `: ${stderr.trim().slice(0, 500)}` : ""
+                }`,
+              ),
+            );
+        });
+      }, OUTPUT_DRAIN_GRACE_MS);
+    });
   });
   if (existsSync(join(target, "node_modules", "openclaw"))) {
     fail("plugin load", "staged copy still has a nested openclaw in node_modules");
@@ -409,30 +458,21 @@ function stopGateway(): Promise<void> {
     return Promise.all([...gatewayStops]).then(() => undefined);
   }
   const stopped = new Promise<void>((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      resolve();
-      return;
-    }
-    const alive = () => child.exitCode === null && child.signalCode === null;
-    // Signal the group so the host's own children go with it.
-    const signal = (sig: NodeJS.Signals) => {
-      try {
-        process.kill(-child.pid!, sig);
-      } catch {
-        child.kill(sig);
+    // killGroup keeps signalling until the whole group is gone, then reports
+    // back, so cleanup waits for the Gateway *and* anything it spawned. The
+    // deadline is a backstop: a group that somehow survives SIGKILL must not
+    // leave the operator's shell hanging with no exit code.
+    let reported = false;
+    const report = () => {
+      if (reported) return;
+      reported = true;
+      if (child.exitCode === null && child.signalCode === null) {
+        process.stderr.write("smoke: the isolated Gateway is still running after SIGKILL; giving up on it\n");
       }
-    };
-    const escalate = setTimeout(() => {
-      if (alive()) signal("SIGKILL");
-    }, HOST_KILL_ESCALATION_MS);
-    // Do not let the escalation timer hold the process open once the main flow
-    // has finished; the child's own exit still clears it.
-    escalate.unref();
-    child.once("exit", () => {
-      clearTimeout(escalate);
       resolve();
-    });
-    signal("SIGTERM");
+    };
+    killGroup(child, report);
+    setTimeout(report, GATEWAY_STOP_DEADLINE_MS);
   });
   gatewayStops.add(stopped);
   void stopped.then(() => gatewayStops.delete(stopped));
@@ -493,6 +533,25 @@ function stateFiles(root: string, depth = 0): string[] {
     else if (entry.isFile()) found.push(full);
   }
   return found;
+}
+
+/**
+ * Parses host JSON, naming the step if the output is not JSON. A raw
+ * SyntaxError from a banner, a warning, or output clipped at the cap would
+ * otherwise reach the user with no indication of which step produced it.
+ */
+function parseHostJson(raw: string, step: Step, what: string): unknown {
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch (error) {
+    const head = raw.trim().slice(0, 200);
+    fail(
+      step,
+      `${what} did not return JSON${raw.length >= MAX_HOST_OUTPUT ? " (output was clipped, so it may have been truncated)" : ""}: ${
+        (error as Error).message
+      }${head ? `; output began: ${head}` : "; output was empty"}`,
+    );
+  }
 }
 
 /** Removes ANSI colour so log lines can be matched literally. */
@@ -579,7 +638,10 @@ async function main(): Promise<void> {
   // satisfy one of them. Say so explicitly instead of implying the plugin broke.
   let validated: { valid?: boolean; errors?: unknown[] };
   try {
-    validated = JSON.parse(await oc(["plugins", "validate", "--json"], env, "manifest")) as { valid?: boolean; errors?: unknown[] };
+    validated = parseHostJson(await oc(["plugins", "validate", "--json"], env, "manifest"), "manifest", "plugins validate") as {
+      valid?: boolean;
+      errors?: unknown[];
+    };
   } catch (error) {
     const detail = (error as Error).message;
     if (/Control UI build is missing or stale/i.test(detail)) {
@@ -601,6 +663,9 @@ async function main(): Promise<void> {
     // Own process group, so cleanup can take the host and its children together.
     detached: true,
   });
+  // Without this, a spawn failure is an uncaught exception: a stack trace, and
+  // the cleanup below never runs.
+  gateway.on("error", (error) => fail("plugin load", `could not start the isolated Gateway: ${error.message}`));
   await waitForReady(logPath);
   note("isolated Gateway ready", "plugin load");
 
@@ -610,11 +675,11 @@ async function main(): Promise<void> {
       env,
       step,
     );
-    return JSON.parse(raw) as Record<string, unknown>;
+    return parseHostJson(raw, step, `the ${method} gateway call`) as Record<string, unknown>;
   };
 
   // 4. The plugin loads and the host reports it as a page provider.
-  const inspect = JSON.parse(await oc(["plugins", "inspect", "oc-family-pack", "--json"], env, "plugin load")) as {
+  const inspect = parseHostJson(await oc(["plugins", "inspect", "oc-family-pack", "--json"], env, "plugin load"), "plugin load", "plugins inspect") as {
     plugin?: { status?: string; uiCapabilities?: string[] };
   };
   const plugin = inspect.plugin ?? (inspect as { status?: string; uiCapabilities?: string[] });
@@ -659,7 +724,11 @@ async function main(): Promise<void> {
   // look fine. `plugins inspect` is the authority on where that root is; a
   // --link install records the path in plugins.load.paths rather than copying
   // into the state dir, so do not assume a layout.
-  const inspectRecord2 = JSON.parse(await oc(["plugins", "inspect", "oc-family-pack", "--json"], env, "page registration")) as {
+  const inspectRecord2 = parseHostJson(
+    await oc(["plugins", "inspect", "oc-family-pack", "--json"], env, "page registration"),
+    "page registration",
+    "plugins inspect",
+  ) as {
     plugin?: { rootDir?: string };
   };
   const installedRoot = (inspectRecord2.plugin ?? (inspectRecord2 as { rootDir?: string })).rootDir;
@@ -778,7 +847,11 @@ async function main(): Promise<void> {
   // plugin. A --link install cannot exercise that, so this only proves the host
   // records a source it could resolve later; the git refresh itself is covered
   // by the operator's own git install, not here.
-  const inspectRecord = JSON.parse(await oc(["plugins", "inspect", "oc-family-pack", "--json"], env, "update path")) as {
+  const inspectRecord = parseHostJson(
+    await oc(["plugins", "inspect", "oc-family-pack", "--json"], env, "update path"),
+    "update path",
+    "plugins inspect",
+  ) as {
     plugin?: { source?: string; installPath?: string | null };
   };
   const record = inspectRecord.plugin ?? (inspectRecord as { source?: string });
@@ -813,4 +886,8 @@ try {
   } else if (workDir) {
     process.stderr.write(`smoke: kept ${workDir}\n`);
   }
+  // A killed child's stdio sockets can linger in the handle list and keep the
+  // loop alive, which would leave the operator staring at a finished run. Exit
+  // explicitly once everything above has run; the exit code is already set.
+  setTimeout(() => process.exit(process.exitCode ?? 0), FORCED_EXIT_MS).unref();
 }
