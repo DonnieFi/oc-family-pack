@@ -237,11 +237,11 @@ function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"):
     const abort = (detail: string) => {
       if (settled || abortReason !== undefined) return;
       abortReason = detail;
-      // Wait for the group to actually be gone before reporting, so the smoke
-      // cannot exit while a SIGTERM-deaf host or an orphaned grandchild is
-      // still running.
-      killGroup(child, () => settle(() => reject(new Error(`smoke: ${detail}`))));
+      // Arm the backstop before killing: killGroup can settle synchronously if
+      // the group is already gone, and arming afterwards left a ref'd timer that
+      // nothing cleared.
       backstop = setTimeout(() => settle(() => reject(new Error(`smoke: ${detail}`))), KILL_WAIT_DEADLINE_MS);
+      killGroup(child, () => settle(() => reject(new Error(`smoke: ${detail}`))));
     };
     const onSignal = () => abort(`${step} failed: interrupted by ${interrupted ?? "signal"} during ${label}`);
     const timer = setTimeout(
@@ -433,11 +433,11 @@ async function stagePlugin(target: string): Promise<void> {
     const abort = (detail: string) => {
       if (settled || abortReason !== undefined) return;
       abortReason = detail;
-      killGroup(child, () => settle(() => reject(new Error(`smoke: plugin load failed: ${detail}`))));
       backstop = setTimeout(
         () => settle(() => reject(new Error(`smoke: plugin load failed: ${detail}`))),
         KILL_WAIT_DEADLINE_MS,
       );
+      killGroup(child, () => settle(() => reject(new Error(`smoke: plugin load failed: ${detail}`))));
     };
     const onSignal = () => abort(`interrupted by ${interrupted ?? "signal"} during npm install`);
     const timer = setTimeout(
@@ -462,9 +462,9 @@ async function stagePlugin(target: string): Promise<void> {
           else
             reject(
               new Error(
-                `npm install exited ${code === null ? `by ${child.signalCode ?? "signal"}` : `with exit code ${code}`}${
-                  stderr.trim() ? `: ${stderr.trim().slice(0, 500)}` : ""
-                }`,
+                `smoke: plugin load failed: npm install exited ${
+                  code === null ? `by ${child.signalCode ?? "signal"}` : `with exit code ${code}`
+                }${stderr.trim() ? `: ${stderr.trim().slice(0, 500)}` : ""}`,
               ),
             );
         });
@@ -507,8 +507,11 @@ function stopGateway(): Promise<void> {
       }
       resolve();
     };
-    killGroup(child, () => report(false));
+    // Arm the backstop before killing. killGroup can report synchronously when
+    // the group is already gone, and arming afterwards left a ref'd timer that
+    // nothing cleared, so those runs sat for the full deadline before exiting.
     deadline = setTimeout(() => report(true), GATEWAY_STOP_DEADLINE_MS);
+    killGroup(child, () => report(false));
   });
   gatewayStops.add(stopped);
   void stopped.then(() => gatewayStops.delete(stopped));
@@ -530,7 +533,11 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
-async function waitForReady(logPath: string, spawnFailure: () => string | undefined): Promise<void> {
+async function waitForReady(
+  logPath: string,
+  spawnFailure: () => string | undefined,
+  exited: () => number | null,
+): Promise<void> {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     if (interrupted) fail("plugin load", `interrupted by ${interrupted} while waiting for the isolated Gateway`);
     const spawnError = spawnFailure();
@@ -538,6 +545,12 @@ async function waitForReady(logPath: string, spawnFailure: () => string | undefi
     const log = readFileSync(logPath, "utf8");
     const trouble = log.split("\n").filter((line) => /failed during register|refusing|failed to load plugin/i.test(line));
     if (trouble.length) fail("plugin load", trouble.slice(0, 3).join(" | ").slice(0, 500));
+    // A Gateway that exits before it is ready will never become ready, so say
+    // so now instead of after the full 120s.
+    const code = exited();
+    if (code !== null) {
+      fail("plugin load", `the isolated Gateway exited with code ${code} before it was ready; log at ${logPath}`);
+    }
     // Match the host's own final readiness line only. A bare "ready" substring
     // also matches "spawn broker ready" (which fires before the server listens)
     // and "already listening", so anchor on the gateway's ready line.
@@ -710,7 +723,11 @@ async function main(): Promise<void> {
   gateway.on("error", (error) => {
     spawnFailure = `could not start the isolated Gateway: ${error.message}`;
   });
-  await waitForReady(logPath, () => spawnFailure);
+  await waitForReady(
+    logPath,
+    () => spawnFailure,
+    () => gateway?.exitCode ?? null,
+  );
   note("isolated Gateway ready", "plugin load");
 
   const call = async (method: string, params: unknown, step: Step): Promise<Record<string, unknown>> => {
