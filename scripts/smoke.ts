@@ -12,17 +12,19 @@
  * The live Gateway is never touched. State, config, and the port all live under
  * a temp dir that is deleted on the way out, and the port is never 18789.
  */
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { execFile as execFileCallback, execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve as pathResolve } from "node:path";
+import { promisify } from "node:util";
 import { Value } from "typebox/value";
 import { parseConfig } from "../src/config.ts";
 import { MAX_WEEK_EVENTS, contract } from "../src/contract.ts";
 import { buildWeekPayload, fitsHostLimits, jsonNodeCount } from "../src/payload.ts";
 
+const execFile = promisify(execFileCallback);
 const ROOT = dirname(dirname(new URL(import.meta.url).pathname));
 const PLUGIN_ID = "oc-family-pack";
 const TOKEN = "ocfp-smoke-token";
@@ -82,14 +84,34 @@ function fail(step: Step, detail: string): never {
   throw new Error(`smoke: ${step} failed: ${detail}`);
 }
 
+/**
+ * Records a completed step, and refuses to keep going if the run was cancelled.
+ * Every step boundary goes through here, which is what stops a Ctrl-C partway
+ * through from printing a false "all steps passed": a signal arriving during a
+ * synchronous host call is only delivered once that call returns, so without
+ * this the remaining steps would run to completion and the cancelled run would
+ * look clean.
+ */
 function note(message: string): void {
+  if (interrupted) fail("plugin load", `interrupted by ${interrupted} after "${message}"`);
   process.stdout.write(`  ${message}\n`);
 }
 
-/** Runs the resolved host CLI against the isolated state, returning stdout. */
-function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"): string {
+/**
+ * Runs the resolved host CLI against the isolated state, returning stdout.
+ * Deliberately async: a synchronous child process blocks the event loop, so a
+ * Ctrl-C during a multi-second host call would not be delivered until the call
+ * returned, letting the remaining steps finish and the cancelled run report
+ * success. The host calls here take seconds, so that mattered.
+ */
+async function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"): Promise<string> {
   try {
-    return execFileSync(hostBinary, args, { env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    const { stdout } = await execFile(hostBinary, args, {
+      env,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    return stdout;
   } catch (error) {
     const err = error as { stderr?: string; status?: number | null };
     fail(step, `${hostBinary} ${args.join(" ")} exited ${err.status}: ${(err.stderr ?? "").trim().slice(0, 500)}`);
@@ -118,31 +140,42 @@ async function loadHostJsonCheck(): Promise<(value: unknown) => boolean> {
 
 /** Finds the `dist` that belongs to the host binary under test. */
 function hostDistDir(): string {
-  const fromBinary = (() => {
-    // node_modules/.bin/openclaw -> the package root two levels up
-    let dir = dirname(realpathSync(hostBinary));
-    for (let up = 0; up < 4; up += 1) {
-      const candidate = join(dir, "dist");
-      if (existsSync(join(candidate, "host-hook-json-CvItNyy3.mjs")) || readdirSync(candidate).some((n) => n.startsWith("host-hook-json-"))) {
-        return candidate;
-      }
-      dir = dirname(dir);
+  const hasHostJsonCheck = (dir: string): boolean => {
+    // The module name carries a content hash that the host can change, so match
+    // the prefix rather than one literal filename.
+    try {
+      return readdirSync(dir).some((name) => name.startsWith("host-hook-json-") && name.endsWith(".mjs"));
+    } catch {
+      return false;
     }
-    return undefined;
-  })();
-  if (fromBinary) return fromBinary;
-  // A globally linked install may not sit next to its package; fall back to the
-  // resolved module path rather than silently reading the pinned copy.
+  };
+
+  // node_modules/.bin/openclaw sits inside the package, so walk up a few levels
+  // looking for the sibling dist/.
+  let dir = dirname(realpathSync(hostBinary));
+  for (let up = 0; up < 5; up += 1) {
+    const candidate = join(dir, "dist");
+    if (existsSync(candidate) && hasHostJsonCheck(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  // A globally linked install may not sit next to its package, so try resolving
+  // the module from the binary's own directory before giving up. Never fall back
+  // to this repo's pinned copy: that is the blindness the step exists to avoid.
   try {
-    const resolved = createRequire(import.meta.url).resolve("openclaw/package.json", { paths: [dirname(realpathSync(hostBinary))] });
+    const resolved = createRequire(import.meta.url).resolve("openclaw/package.json", {
+      paths: [dirname(realpathSync(hostBinary))],
+    });
     const candidate = join(dirname(resolved), "dist");
-    if (existsSync(candidate)) return candidate;
+    if (existsSync(candidate) && hasHostJsonCheck(candidate)) return candidate;
   } catch {
     // fall through to the explicit failure below
   }
   fail(
     "host json limits",
-    `could not locate the dist directory of the host at ${hostBinary}. Set OCFP_SMOKE_HOST_BIN to the OpenClaw you want tested.`,
+    `could not find a host-hook-json module in the dist of the host at ${hostBinary}. If this host renamed or dropped it, re-derive HOST_MAX_NODES in src/payload.ts; set OCFP_SMOKE_HOST_BIN to choose the host to test.`,
   );
 }
 
@@ -187,32 +220,52 @@ function stagePlugin(target: string): void {
   }
 }
 
-function stopGateway(): void {
-  if (!gateway) return;
+/** SIGKILL timers, so cleanup can await the child instead of racing it. */
+const killTimers = new Set<NodeJS.Timeout>();
+
+function stopGateway(): Promise<void> {
   const child = gateway;
   gateway = undefined;
-  child.kill("SIGTERM");
-  // Escalate if the host ignores SIGTERM, so an interrupted smoke never leaves
-  // an orphan Gateway behind.
-  const killTimer = setTimeout(() => {
-    if (child.exitCode === null) child.kill("SIGKILL");
-  }, 8000);
-  child.once("exit", () => clearTimeout(killTimer));
+  if (!child) return Promise.resolve();
+  return new Promise((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolve();
+      return;
+    }
+    const escalate = setTimeout(() => {
+      if (child.exitCode === null) child.kill("SIGKILL");
+    }, 8000);
+    // Do not let the escalation timer hold the process open once the main flow
+    // has finished; the child's own exit still clears it.
+    escalate.unref();
+    killTimers.add(escalate);
+    child.once("exit", () => {
+      clearTimeout(escalate);
+      killTimers.delete(escalate);
+      resolve();
+    });
+    child.kill("SIGTERM");
+  });
 }
 
 /**
  * On an interrupt, stop the Gateway and let the failure path unwind normally so
  * the `finally` block still deletes the temp state. Calling process.exit() here
- * would skip that and leak the directory, and would also tear down the event
- * loop before stopGateway's SIGKILL escalation could ever run.
+ * would skip that and leak the directory. The interrupt is also checked between
+ * every step, because stopping the Gateway makes the remaining steps fail for
+ * the wrong reason, and a run that was cancelled must never report success.
  */
 let interrupted: NodeJS.Signals | undefined;
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
-    if (interrupted) return;
-    interrupted = signal;
-    stopGateway();
+    interrupted ??= signal;
+    void stopGateway();
   });
+}
+
+/** Called at each step boundary so a cancelled run cannot pass. */
+function checkInterrupted(): void {
+  if (interrupted) fail("plugin load", `interrupted by ${interrupted}`);
 }
 
 async function waitForReady(logPath: string): Promise<void> {
@@ -232,6 +285,30 @@ async function waitForReady(logPath: string): Promise<void> {
   fail("plugin load", `isolated Gateway did not become ready within 120s; log at ${logPath}`);
 }
 
+/**
+ * Lists files under `root` without following symlinks and without throwing on an
+ * unreadable subdirectory. The real state dir contains symlinks into the host's
+ * own node_modules and can hold directories this process cannot read, so a plain
+ * recursive readdirSync risks ELOOP and EACCES and would surface as a raw fs
+ * error instead of a named smoke step.
+ */
+function stateFiles(root: string, depth = 0): string[] {
+  if (depth > 8) return [];
+  let entries: import("node:fs").Dirent[];
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const found: string[] = [];
+  for (const entry of entries) {
+    const full = join(root, entry.name);
+    if (entry.isDirectory()) found.push(...stateFiles(full, depth + 1));
+    else if (entry.isFile()) found.push(full);
+  }
+  return found;
+}
+
 /** Removes ANSI colour so log lines can be matched literally. */
 function stripAnsi(text: string): string {
   // eslint-disable-next-line no-control-regex
@@ -249,7 +326,7 @@ function pluginSqliteFiles(stateDir: string): string[] {
 
 async function main(): Promise<void> {
   // 1. The host must be the build this plugin was pinned and tested against.
-  const hostVersion = oc(["--version"], process.env, "host version").trim();
+  const hostVersion = (await oc(["--version"], process.env, "host version")).trim();
   const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
     openclaw: { build: { openclawVersion: string }; compat: { pluginApi: string } };
   };
@@ -305,7 +382,7 @@ async function main(): Promise<void> {
   // install links `openclaw` instead, and discovery does not follow the link.
   const sourceDir = join(workDir, "source");
   stagePlugin(sourceDir);
-  oc(["plugins", "install", sourceDir, "--force", "--link", "--accept-capabilities"], env);
+  await oc(["plugins", "install", sourceDir, "--force", "--link", "--accept-capabilities"], env);
   note("plugin installed from a clean copy of the working tree");
 
   // 3. Manifest and build artifacts the host validates before it loads code.
@@ -315,7 +392,7 @@ async function main(): Promise<void> {
   // satisfy one of them. Say so explicitly instead of implying the plugin broke.
   let validated: { valid?: boolean; errors?: unknown[] };
   try {
-    validated = JSON.parse(oc(["plugins", "validate", "--json"], env, "manifest")) as { valid?: boolean; errors?: unknown[] };
+    validated = JSON.parse(await oc(["plugins", "validate", "--json"], env, "manifest")) as { valid?: boolean; errors?: unknown[] };
   } catch (error) {
     const detail = (error as Error).message;
     if (/Control UI build is missing or stale/i.test(detail)) {
@@ -338,8 +415,9 @@ async function main(): Promise<void> {
   await waitForReady(logPath);
   note("isolated Gateway ready");
 
-  const call = (method: string, params: unknown, step: Step): Record<string, unknown> => {
-    const raw = oc(
+  const call = async (method: string, params: unknown, step: Step): Promise<Record<string, unknown>> => {
+    checkInterrupted();
+    const raw = await oc(
       ["gateway", "call", method, "--port", String(port), "--token", TOKEN, "--json", "--params", JSON.stringify(params)],
       env,
       step,
@@ -348,7 +426,8 @@ async function main(): Promise<void> {
   };
 
   // 4. The plugin loads and the host reports it as a page provider.
-  const inspect = JSON.parse(oc(["plugins", "inspect", "oc-family-pack", "--json"], env)) as {
+  checkInterrupted();
+  const inspect = JSON.parse(await oc(["plugins", "inspect", "oc-family-pack", "--json"], env)) as {
     plugin?: { status?: string; uiCapabilities?: string[] };
   };
   const plugin = inspect.plugin ?? (inspect as { status?: string; uiCapabilities?: string[] });
@@ -356,7 +435,7 @@ async function main(): Promise<void> {
   note("plugin loaded");
 
   // 5. A real query over the real transport, validated against the contract schema.
-  const weekCall = call(
+  const weekCall = await call(
     "plugins.sessionAction",
     { pluginId: "oc-family-pack", actionId: "family.week", payload: {} },
     "contract validation",
@@ -393,7 +472,7 @@ async function main(): Promise<void> {
   // look fine. `plugins inspect` is the authority on where that root is; a
   // --link install records the path in plugins.load.paths rather than copying
   // into the state dir, so do not assume a layout.
-  const inspectRecord2 = JSON.parse(oc(["plugins", "inspect", "oc-family-pack", "--json"], env, "page registration")) as {
+  const inspectRecord2 = JSON.parse(await oc(["plugins", "inspect", "oc-family-pack", "--json"], env, "page registration")) as {
     plugin?: { rootDir?: string };
   };
   const installedRoot = (inspectRecord2.plugin ?? (inspectRecord2 as { rootDir?: string })).rootDir;
@@ -421,7 +500,7 @@ async function main(): Promise<void> {
   // liveness probe, not a plugin integration point: the plugin registers no
   // service or cron job yet, so a pass here means the host surface answers, and
   // nothing more. The real check lands with the briefs epic.
-  const jobs = call("cron.list", {}, "service scheduler");
+  const jobs = await call("cron.list", {}, "service scheduler");
   if (!Array.isArray(jobs.jobs)) fail("service scheduler", "cron.list did not return a jobs array");
   note(`host scheduler surface answers (${jobs.jobs.length} host jobs); plugin registers none until the briefs epic`);
 
@@ -446,8 +525,7 @@ async function main(): Promise<void> {
   // state/tmp), so only a file that names this plugin counts as ours; flagging
   // every .sqlite in the state dir would fail on the host's own bookkeeping.
   const hostDb = join(stateDir, "state", "openclaw.sqlite");
-  const strays = readdirSync(stateDir, { recursive: true })
-    .map((entry) => join(stateDir, entry.toString()))
+  const strays = stateFiles(stateDir)
     .filter(
       (full) =>
         (full.endsWith(".sqlite") || full.endsWith(".db")) &&
@@ -497,7 +575,7 @@ async function main(): Promise<void> {
   // bare "produced output" assertion would pass no matter what. Assert the real
   // outcome instead: the host must recognise the plugin and explain the skip,
   // and it must be skipping for the link reason rather than failing to resolve.
-  const dryRun = oc(["plugins", "update", "oc-family-pack", "--dry-run"], env, "update path");
+  const dryRun = await oc(["plugins", "update", "oc-family-pack", "--dry-run"], env, "update path");
   const resolved = dryRun.trim();
   if (!resolved) fail("update path", "'plugins update --dry-run' produced no output for a linked install");
   if (!/skip|up to date|path|link|no changes|nothing to update/i.test(resolved)) {
@@ -512,7 +590,7 @@ async function main(): Promise<void> {
   // plugin. A --link install cannot exercise that, so this only proves the host
   // records a source it could resolve later; the git refresh itself is covered
   // by the operator's own git install, not here.
-  const inspectRecord = JSON.parse(oc(["plugins", "inspect", "oc-family-pack", "--json"], env, "update path")) as {
+  const inspectRecord = JSON.parse(await oc(["plugins", "inspect", "oc-family-pack", "--json"], env, "update path")) as {
     plugin?: { source?: string; installPath?: string | null };
   };
   const record = inspectRecord.plugin ?? (inspectRecord as { source?: string });
@@ -522,12 +600,18 @@ async function main(): Promise<void> {
 
 try {
   await main();
+  // A cancelled run must never report success. Checking here, after every step
+  // has run, is what stops a Ctrl-C partway through from printing a false pass:
+  // the interrupt stops the Gateway, so later steps would otherwise fail for
+  // the wrong reason or, if they had already finished, be reported as a clean run.
+  if (interrupted) throw new Error(`smoke: plugin load failed: interrupted by ${interrupted}`);
   process.stdout.write("smoke: all steps passed\n");
 } catch (error) {
   process.stderr.write(`${(error as Error).message}\n`);
   process.exitCode = 1;
 } finally {
-  stopGateway();
+  await stopGateway();
+  for (const timer of killTimers) clearTimeout(timer);
   if (workDir && !keepWorkDir) {
     // The isolated Gateway can still be flushing logs after SIGTERM, so retry
     // briefly rather than leave temp state behind.
