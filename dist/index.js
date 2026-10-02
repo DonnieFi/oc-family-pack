@@ -2,17 +2,16 @@ import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { ConfigSchema, parseConfig } from "./config.js";
 import { contract } from "./contract.js";
-import { buildWeekPayload } from "./payload.js";
-import { readEcWeather } from "./weather-ec.js";
+import { familyHandlers } from "./handlers.js";
 const plugin = defineFeaturePlugin({
     contract,
     name: "Family",
     description: "A calm family week view in the Control UI: shared calendars, local weather, and quick chats with your agents.",
+    // Queries are operator.read; defineFeaturePlugin sets that scope on every query.
+    // Family commands are not registered here. The contract commands adapter always
+    // sets requiredScopes, which the shipped command gate then limits to the owner.
     setup(api) {
-        const config = parseConfig(api.pluginConfig);
-        return {
-            "family.week": ({ start }) => buildWeekPayload(config, start, Date.now(), () => readEcWeather(config.location)),
-        };
+        return familyHandlers(parseConfig(api.pluginConfig));
     },
 });
 // defineFeaturePlugin (openclaw 2026.9.7) has no configSchema option and publishes a strict

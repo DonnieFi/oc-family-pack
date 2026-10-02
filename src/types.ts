@@ -1,5 +1,15 @@
 import type { Static } from "typebox";
-import type { CalendarRefSchema, FamilyEventSchema, WeatherCardSchema, WeekPayloadSchema } from "./contract.ts";
+import type {
+  CalendarChangedSchema,
+  CalendarRefSchema,
+  CalendarWriteSchema,
+  FamilyEventSchema,
+  MembersPayloadSchema,
+  TodayPayloadSchema,
+  WeatherCardSchema,
+  WeatherStateSchema,
+  WeekPayloadSchema,
+} from "./contract.ts";
 
 export type MemberRole = "parent" | "kid" | "guest";
 export type CalendarKind = "personal" | "shared" | "school";
@@ -51,7 +61,12 @@ export type SourceState<T> =
 export type FamilyEvent = Static<typeof FamilyEventSchema>;
 export type CalendarRef = Static<typeof CalendarRefSchema>;
 export type WeatherCard = Static<typeof WeatherCardSchema>;
+export type WeatherState = Static<typeof WeatherStateSchema>;
 export type WeekPayload = Static<typeof WeekPayloadSchema>;
+export type MembersPayload = Static<typeof MembersPayloadSchema>;
+export type CalendarWrite = Static<typeof CalendarWriteSchema>;
+export type TodayPayload = Static<typeof TodayPayloadSchema>;
+export type CalendarChanged = Static<typeof CalendarChangedSchema>;
 export type CalendarState = WeekPayload["calendar"];
 export type Member = WeekPayload["members"][number];
 export type WeekDay = WeekPayload["days"][number];
