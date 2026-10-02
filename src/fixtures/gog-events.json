@@ -51,6 +51,28 @@
       "etag": "   ",
       "start": { "dateTime": "2026-09-29T12:00:00-04:00" },
       "end": { "dateTime": "2026-09-29T12:30:00-04:00" }
+    },
+    {
+      "id": "e7",
+      "status": "confirmed",
+      "summary": "Art &amp; music",
+      "location": "Room &#39;A&#39;",
+      "start": { "dateTime": "2026-10-01T15:00:00-04:00" },
+      "end": { "dateTime": "2026-10-01T16:00:00-04:00" }
+    },
+    {
+      "id": "e1",
+      "status": "confirmed",
+      "summary": "Late swim again",
+      "start": { "dateTime": "2026-10-01T01:00:00Z" },
+      "end": { "dateTime": "2026-10-01T02:00:00Z" }
+    },
+    {
+      "id": "e8",
+      "status": "confirmed",
+      "summary": "Impossible day",
+      "start": { "date": "2026-13-45" },
+      "end": { "date": "2026-13-46" }
     }
   ],
   "nextPageToken": ""

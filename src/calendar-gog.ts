@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { EVENT_ID_MAX, LINK_MAX, LOCATION_MAX, MESSAGE_MAX, TITLE_MAX } from "./contract.ts";
 import type { CalendarConfig, CalendarState, Config, FamilyEvent } from "./types.ts";
-import { addDays, startOfLocalDay, type Week } from "./week.ts";
+import { addDays, parseDate, startOfLocalDay, type Week } from "./week.ts";
 
 const execFileAsync = promisify(execFile);
 const GOG_TIMEOUT_MS = 20_000;
@@ -12,7 +12,15 @@ export const GOG_SETUP_HINT =
 /** gog 0.39's wording for a missing account, OAuth client, or usable token; anything else is a per-calendar failure. */
 const GOG_AUTH_FAILURE =
   /missing --account|OAuth client credentials missing|No OAuth client credentials stored|\(401 authError\)|invalid_grant|no TTY available for keyring/;
-const UNREADABLE = "gog returned unreadable output";
+const UNREADABLE = "unreadable output";
+/**
+ * `--max` is Google Calendar `maxResults`: events per page, not a total.
+ * `--all-pages` walks pages in gog's `collectAllPages`, which allows 10,000 pages
+ * and then fails with "pagination exceeded max pages" instead of returning a short list.
+ * A leftover nextPageToken means this response stopped before the last page.
+ */
+const GOG_PAGE_SIZE = "250";
+const GOG_PAGE_CAP = /pagination exceeded max pages/;
 
 /** Resolves with gog's stdout; rejects like `execFile` on a spawn failure, non-zero exit, or timeout. */
 export type RunGog = (file: string, args: string[]) => Promise<{ stdout: string }>;
@@ -44,6 +52,23 @@ export function clip(value: string, maxLength: number): string {
   return value.length > maxLength ? value.slice(0, maxLength) : value;
 }
 
+const HTML_NAMED: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+
+/** School and ICS feeds store `&amp;` and `&#39;` in titles. One decode, the same way a browser does. */
+function unescapeHtml(value: string): string {
+  return value.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z][a-zA-Z0-9]+);/g, (entity, body: string) => {
+    if (body.startsWith("#")) {
+      const hex = body[1] === "x" || body[1] === "X";
+      const code = Number.parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
+      if (!Number.isInteger(code) || code < 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) {
+        return entity;
+      }
+      return String.fromCodePoint(code);
+    }
+    return HTML_NAMED[body.toLowerCase()] ?? entity;
+  });
+}
+
 function readTime(value: unknown): { at: string; allDay: boolean } | undefined {
   if (!isRecord(value)) {
     return undefined;
@@ -52,7 +77,8 @@ function readTime(value: unknown): { at: string; allDay: boolean } | undefined {
   if (typeof dateTime === "string" && Number.isFinite(Date.parse(dateTime))) {
     return { at: new Date(dateTime).toISOString(), allDay: false };
   }
-  if (typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+  // Round-trip: 2026-13-45 matches the shape but is not a day, and addDays would throw on it.
+  if (typeof date === "string" && parseDate(date) !== undefined) {
     return { at: date, allDay: true };
   }
   return undefined;
@@ -92,8 +118,13 @@ export function parseGogEvents(raw: unknown, calendar: CalendarConfig): GogEvent
     return undefined;
   }
   const events: GogEvent[] = [];
+  const seen = new Set<string>();
   for (const item of items) {
     if (!isRecord(item) || item.status === "cancelled" || typeof item.id !== "string") {
+      continue;
+    }
+    const id = clip(`${calendar.key}/${item.id}`, EVENT_ID_MAX);
+    if (seen.has(id)) {
       continue;
     }
     const start = readTime(item.start);
@@ -101,18 +132,30 @@ export function parseGogEvents(raw: unknown, calendar: CalendarConfig): GogEvent
     if (!start || !end || start.allDay !== end.allDay) {
       continue;
     }
+    let endAt = end.at;
+    if (start.allDay && end.at === start.at) {
+      try {
+        endAt = addDays(start.at, 1);
+      } catch (error) {
+        if (error instanceof RangeError) {
+          continue;
+        }
+        throw error;
+      }
+    }
+    seen.add(id);
     const event: GogEvent = {
-      id: clip(`${calendar.key}/${item.id}`, EVENT_ID_MAX),
-      title: clip(nonEmpty(item.summary) ?? "(No title)", TITLE_MAX),
+      id,
+      title: clip(unescapeHtml(nonEmpty(item.summary) ?? "(No title)"), TITLE_MAX),
       start: start.at,
-      end: start.allDay && end.at === start.at ? addDays(start.at, 1) : end.at,
+      end: endAt,
       allDay: start.allDay,
       calendarKey: calendar.key,
       google: googleFields(item.id, item),
     };
     const location = nonEmpty(item.location);
     if (location) {
-      event.location = clip(location, LOCATION_MAX);
+      event.location = clip(unescapeHtml(location), LOCATION_MAX);
     }
     const htmlLink = httpsUrl(item.htmlLink);
     if (htmlLink) {
@@ -127,13 +170,50 @@ function toWire({ google: _google, ...event }: GogEvent): FamilyEvent {
   return event;
 }
 
-type CalendarRead = { status: "ok"; events: GogEvent[] } | { status: "unconfigured" } | { status: "error"; message: string };
+type CalendarRead =
+  | { status: "ok"; events: GogEvent[]; truncated: boolean }
+  | { status: "unconfigured" }
+  | { status: "auth" }
+  | { status: "error"; message: string };
+
+function calendarProblem(label: string, reason: string): string {
+  return `Could not read the "${label}" calendar: ${reason}`.slice(0, MESSAGE_MAX);
+}
+
+function pageCapWarning(label: string): string {
+  return `The "${label}" calendar hit gog's page cap, so some events are missing.`;
+}
+
+/** Classifies a failed gog run. stderr is read only to choose a fixed message; it is never copied. */
+function classifyFailure(error: unknown, label: string): CalendarRead {
+  const failure = isRecord(error) ? error : {};
+  const stderr = typeof failure.stderr === "string" ? failure.stderr : "";
+  if (failure.code === "ENOENT") {
+    return { status: "unconfigured" };
+  }
+  if (failure.killed === true) {
+    return { status: "error", message: calendarProblem(label, "timed out") };
+  }
+  if (GOG_PAGE_CAP.test(stderr)) {
+    return { status: "error", message: pageCapWarning(label) };
+  }
+  if (typeof failure.code === "number" && GOG_AUTH_FAILURE.test(stderr)) {
+    return { status: "auth" };
+  }
+  const code =
+    typeof failure.code === "number" || typeof failure.code === "string"
+      ? String(failure.code)
+      : typeof failure.signal === "string"
+        ? failure.signal
+        : "1";
+  return { status: "error", message: calendarProblem(label, `gog error code ${code}`) };
+}
+
+function hasAnotherPage(raw: unknown): boolean {
+  return isRecord(raw) && typeof raw.nextPageToken === "string" && raw.nextPageToken.trim() !== "";
+}
 
 async function readCalendar(config: Config, calendar: CalendarConfig, week: Week, runGog: RunGog): Promise<CalendarRead> {
-  const failed = (reason: string): CalendarRead => ({
-    status: "error",
-    message: `Could not read the "${calendar.label}" calendar: ${reason.replaceAll(calendar.id, "<id>").slice(0, 200)}`,
-  });
   const from = new Date(startOfLocalDay(week.range.start, week.range.timezone)).toISOString();
   const to = new Date(startOfLocalDay(addDays(week.range.end, 1), week.range.timezone)).toISOString();
   let stdout: string;
@@ -147,40 +227,29 @@ async function readCalendar(config: Config, calendar: CalendarConfig, week: Week
       to,
       "--all-pages",
       "--max",
-      "250",
+      GOG_PAGE_SIZE,
       "--json",
       "--no-input",
       "--",
       calendar.id,
     ]));
   } catch (error) {
-    const failure = isRecord(error) ? error : {};
-    if (failure.code === "ENOENT") {
-      return { status: "unconfigured" };
-    }
-    if (typeof failure.code === "string") {
-      return failed(`gog could not run (${failure.code})`);
-    }
-    if (typeof failure.code !== "number") {
-      return failed(failure.killed === true ? "gog timed out" : "gog was stopped");
-    }
-    const stderr = typeof failure.stderr === "string" ? failure.stderr.trim() : "";
-    if (GOG_AUTH_FAILURE.test(stderr)) {
-      return { status: "unconfigured" };
-    }
-    return failed(stderr.split("\n").at(-1) || `gog exited with code ${failure.code}`);
+    return classifyFailure(error, calendar.label);
   }
   let raw: unknown;
   try {
     raw = JSON.parse(stdout);
   } catch {
-    return failed(UNREADABLE);
+    return { status: "error", message: calendarProblem(calendar.label, UNREADABLE) };
   }
   const events = parseGogEvents(raw, calendar);
-  return events ? { status: "ok", events } : failed(UNREADABLE);
+  if (!events) {
+    return { status: "error", message: calendarProblem(calendar.label, UNREADABLE) };
+  }
+  return { status: "ok", events, truncated: hasAnotherPage(raw) };
 }
 
-/** One failing calendar becomes a warning beside the rest; the source fails only when gog is unusable or every calendar fails. */
+/** One calendar's failure becomes a warning beside the rest. The source is unconfigured only when gog is missing or every calendar fails auth. */
 export async function readGogCalendars(config: Config, week: Week, runGog: RunGog = execGog()): Promise<CalendarState> {
   if (config.calendars.length === 0) {
     return { status: "unconfigured", hint: `Add calendars to the plugin config. ${GOG_SETUP_HINT}` };
@@ -189,8 +258,21 @@ export async function readGogCalendars(config: Config, week: Week, runGog: RunGo
   if (reads.some((read) => read.status === "unconfigured")) {
     return { status: "unconfigured", hint: GOG_SETUP_HINT };
   }
-  const warnings = reads.flatMap((read) => (read.status === "error" ? [read.message] : []));
-  if (warnings.length === reads.length) {
+  if (reads.every((read) => read.status === "auth")) {
+    return { status: "unconfigured", hint: GOG_SETUP_HINT };
+  }
+  const warnings = reads.flatMap((read, index) => {
+    const label = config.calendars[index]?.label ?? "Calendar";
+    if (read.status === "auth") {
+      return [`Reconnect gog for ${label}`];
+    }
+    if (read.status === "error") {
+      return [read.message];
+    }
+    return read.status === "ok" && read.truncated ? [pageCapWarning(label)] : [];
+  });
+  const failed = reads.filter((read) => read.status === "error" || read.status === "auth").length;
+  if (failed === reads.length) {
     return { status: "error", message: clip(warnings.join(" "), MESSAGE_MAX) };
   }
   return {

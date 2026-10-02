@@ -1,7 +1,8 @@
 import type { Location, SourceState, WeatherCard } from "./types.ts";
 
 const ENDPOINT = "https://api.weather.gc.ca/collections/citypageweather-realtime/items";
-const BBOX_STEPS = [0.5, 1.5, 5] as const;
+/** A five-degree box can land on a station hundreds of kilometres away, so the search stops at 1.5. */
+const BBOX_STEPS = [0.5, 1.5] as const;
 const CACHE_MS = 30 * 60_000;
 const FETCH_TIMEOUT_MS = 10_000;
 const FORECAST_PERIODS = 4;
@@ -108,8 +109,12 @@ export function parseCityPage(feature: EcFeature): WeatherCard {
   return card;
 }
 
+function clampLat(value: number): number {
+  return Math.min(90, Math.max(-90, value));
+}
+
 export function bboxUrl(location: Location, radius: number): string {
-  const box = [location.lon - radius, location.lat - radius, location.lon + radius, location.lat + radius]
+  const box = [location.lon - radius, clampLat(location.lat - radius), location.lon + radius, clampLat(location.lat + radius)]
     .map((value) => value.toFixed(3))
     .join(",");
   return `${ENDPOINT}?f=json&bbox=${box}&limit=5`;
@@ -118,15 +123,16 @@ export function bboxUrl(location: Location, radius: number): string {
 type Fetch = (url: string, init: { signal: AbortSignal; headers: Record<string, string> }) => Promise<Response>;
 
 async function lookup(location: Location, fetcher: Fetch): Promise<SourceState<WeatherCard>> {
+  const point: Location = { ...location, lat: clampLat(location.lat) };
   for (const radius of BBOX_STEPS) {
-    const response = await fetcher(bboxUrl(location, radius), {
+    const response = await fetcher(bboxUrl(point, radius), {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: { Accept: "application/geo+json, application/json" },
     });
     if (!response.ok) {
       return { status: "error", message: `Environment Canada returned HTTP ${response.status}. Try again shortly.` };
     }
-    const nearest = nearestFeature(parseEcFeatures(await response.json()), location);
+    const nearest = nearestFeature(parseEcFeatures(await response.json()), point);
     if (nearest) {
       const card = parseCityPage(nearest);
       return { status: "ok", data: location.label ? { ...card, stationName: location.label } : card };

@@ -19,7 +19,40 @@ export function addDays(date, days) {
     if (time === undefined) {
         throw new RangeError(`Invalid date ${date}`);
     }
-    return new Date(time + days * DAY_MS).toISOString().slice(0, 10);
+    // Years outside 0000–9999 are not YYYY-MM-DD. Some engines throw from toISOString;
+    // others emit an expanded year (`+010000-01-01`) whose first ten characters are not a date.
+    let day;
+    try {
+        day = new Date(time + days * DAY_MS).toISOString().slice(0, 10);
+    }
+    catch (error) {
+        if (error instanceof RangeError) {
+            throw new RangeError(`Invalid date ${date}`);
+        }
+        throw error;
+    }
+    if (parseDate(day) === undefined) {
+        throw new RangeError(`Invalid date ${day}`);
+    }
+    return day;
+}
+/** The page's `?start=` stays inside this window around today. family.week itself does not. */
+export const PAGE_START_PAST_DAYS = 8 * 7;
+export const PAGE_START_FUTURE_DAYS = 52 * 7;
+/** Clamps a page start into the window, or drops a value that is not a calendar date. */
+export function boundWeekStart(start, today) {
+    if (start === undefined || parseDate(start) === undefined || parseDate(today) === undefined) {
+        return undefined;
+    }
+    const earliest = addDays(today, -PAGE_START_PAST_DAYS);
+    const latest = addDays(today, PAGE_START_FUTURE_DAYS);
+    if (start < earliest) {
+        return earliest;
+    }
+    if (start > latest) {
+        return latest;
+    }
+    return start;
 }
 const formatters = new Map();
 function zoneParts(instant, timezone) {

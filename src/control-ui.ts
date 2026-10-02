@@ -10,7 +10,7 @@ import {
 import { createFeatureClient } from "openclaw/plugin-sdk/feature-contract";
 import { contract } from "./contract.ts";
 import type { CalendarRef, FamilyEvent, Member, WeekPayload } from "./types.ts";
-import { addDays, localDate, parseDate } from "./week.ts";
+import { addDays, boundWeekStart, localDate } from "./week.ts";
 import "./control-ui.css";
 
 const PAGE_ID = "family";
@@ -81,6 +81,17 @@ function formats(timezone: string, locale: string) {
 }
 
 const noon = (date: string) => new Date(`${date}T12:00:00Z`);
+
+function shiftWeek(start: string, days: number, today: string): string | undefined {
+  try {
+    return boundWeekStart(addDays(start, days), today);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return undefined;
+    }
+    throw error;
+  }
+}
 const isWeekend = (date: string) => [0, 6].includes(noon(date).getUTCDay());
 
 function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) {
@@ -92,11 +103,11 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
   const root = h("div", { class: "oc-family-pack" }, h("div", { class: "ocfp-app" }, content, chatStrip), dialogHolder);
   container.append(root);
 
-  const requestedStart = (props: ControlUiViewContext["props"]) => {
-    const start = props.start;
-    return start !== undefined && parseDate(start) !== undefined ? start : undefined;
-  };
-  let start = requestedStart(initial.props);
+  const browserToday = (now = new Date()) =>
+    `${String(now.getFullYear()).padStart(4, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  /** `?start=` is clamped to 8 weeks back through 52 weeks ahead. family.week can still be called outside that window. */
+  const requestedStart = (props: ControlUiViewContext["props"], today: string) => boundWeekStart(props.start, today);
+  let start = requestedStart(initial.props, browserToday());
   let person: string | null = null;
   let selectedDay = "";
   let dialog: ControlUiComponentHandle<ControlUiDialogProps> | undefined;
@@ -189,9 +200,9 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
       h(
         "nav",
         { class: "ocfp-week-nav", "aria-label": "Change week" },
-        weekLink(addDays(week.range.start, -7), { class: "ocfp-btn ocfp-btn-icon", "aria-label": "Previous week" }, icon("prev")),
+        weekLink(shiftWeek(week.range.start, -7, week.today), { class: "ocfp-btn ocfp-btn-icon", "aria-label": "Previous week" }, icon("prev")),
         weekLink(undefined, { class: "ocfp-btn ocfp-btn-today", "aria-current": inWeek ? "true" : "false" }, "Today"),
-        weekLink(addDays(week.range.start, 7), { class: "ocfp-btn ocfp-btn-icon", "aria-label": "Next week" }, icon("next")),
+        weekLink(shiftWeek(week.range.start, 7, week.today), { class: "ocfp-btn ocfp-btn-icon", "aria-label": "Next week" }, icon("next")),
       ),
     );
 
@@ -522,7 +533,7 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
 
   return {
     update(next: ControlUiViewContext) {
-      const nextStart = requestedStart(next.props);
+      const nextStart = requestedStart(next.props, browserToday());
       if (nextStart !== start) {
         start = nextStart;
         closeDialog();

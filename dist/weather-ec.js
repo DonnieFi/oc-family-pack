@@ -1,5 +1,6 @@
 const ENDPOINT = "https://api.weather.gc.ca/collections/citypageweather-realtime/items";
-const BBOX_STEPS = [0.5, 1.5, 5];
+/** A five-degree box can land on a station hundreds of kilometres away, so the search stops at 1.5. */
+const BBOX_STEPS = [0.5, 1.5];
 const CACHE_MS = 30 * 60_000;
 const FETCH_TIMEOUT_MS = 10_000;
 const FORECAST_PERIODS = 4;
@@ -95,22 +96,26 @@ export function parseCityPage(feature) {
         card.lowC = lowC;
     return card;
 }
+function clampLat(value) {
+    return Math.min(90, Math.max(-90, value));
+}
 export function bboxUrl(location, radius) {
-    const box = [location.lon - radius, location.lat - radius, location.lon + radius, location.lat + radius]
+    const box = [location.lon - radius, clampLat(location.lat - radius), location.lon + radius, clampLat(location.lat + radius)]
         .map((value) => value.toFixed(3))
         .join(",");
     return `${ENDPOINT}?f=json&bbox=${box}&limit=5`;
 }
 async function lookup(location, fetcher) {
+    const point = { ...location, lat: clampLat(location.lat) };
     for (const radius of BBOX_STEPS) {
-        const response = await fetcher(bboxUrl(location, radius), {
+        const response = await fetcher(bboxUrl(point, radius), {
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
             headers: { Accept: "application/geo+json, application/json" },
         });
         if (!response.ok) {
             return { status: "error", message: `Environment Canada returned HTTP ${response.status}. Try again shortly.` };
         }
-        const nearest = nearestFeature(parseEcFeatures(await response.json()), location);
+        const nearest = nearestFeature(parseEcFeatures(await response.json()), point);
         if (nearest) {
             const card = parseCityPage(nearest);
             return { status: "ok", data: location.label ? { ...card, stationName: location.label } : card };

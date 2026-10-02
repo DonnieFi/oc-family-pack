@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { nearestFeature, parseCityPage, parseEcFeatures, readEcWeather } from "./weather-ec.ts";
+import { bboxUrl, nearestFeature, parseCityPage, parseEcFeatures, readEcWeather } from "./weather-ec.ts";
 
 const ottawa = JSON.parse(readFileSync(new URL("./fixtures/ec-ottawa.json", import.meta.url), "utf8")) as unknown;
 const empty = { type: "FeatureCollection", features: [] };
@@ -30,14 +30,19 @@ test("widens the search box until a city page appears", async () => {
   const requested: string[] = [];
   const fetcher = async (url: string) => {
     requested.push(url);
-    return Response.json(requested.length < 3 ? empty : ottawa);
+    return Response.json(requested.length < 2 ? empty : ottawa);
   };
   const state = await readEcWeather({ lat: 45.9, lon: -76.9, label: "Cottage" }, fetcher, 1);
   assert.deepEqual(
     requested.map((url) => new URL(url).searchParams.get("bbox")),
-    ["-77.400,45.400,-76.400,46.400", "-78.400,44.400,-75.400,47.400", "-81.900,40.900,-71.900,50.900"],
+    ["-77.400,45.400,-76.400,46.400", "-78.400,44.400,-75.400,47.400"],
   );
   assert.equal(state.status === "ok" && state.data.stationName, "Cottage");
+});
+
+test("a search box near a pole stays within latitude 90", () => {
+  assert.equal(new URL(bboxUrl({ lat: 89.2, lon: -75 }, 1.5)).searchParams.get("bbox"), "-76.500,87.700,-73.500,90.000");
+  assert.equal(new URL(bboxUrl({ lat: -89.2, lon: -75 }, 1.5)).searchParams.get("bbox"), "-76.500,-90.000,-73.500,-87.700");
 });
 
 test("a location outside Canada explains that weather covers Canada only", async () => {

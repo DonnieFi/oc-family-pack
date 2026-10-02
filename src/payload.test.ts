@@ -150,8 +150,16 @@ test("a week over the event cap or the host's size limit becomes a calendar erro
     [tooMany, tooLarge].map((payload) => [payload.calendar, payload.days.flatMap((day) => day.eventIds).length, payload.members.length, payload.weather.status]),
     [
       [{ status: "error", message: "This week has 201 events, more than Family can show at once. Remove a busy calendar from the plugin config." }, 0, 32, "ok"],
-      [{ status: "error", message: "This week has 150 events, more than Family can show at once. Remove a busy calendar from the plugin config." }, 0, 32, "ok"],
+      [{ status: "error", message: "This week is 418667 bytes, more than Family can show at once. Remove a busy calendar from the plugin config." }, 0, 32, "ok"],
     ],
   );
   assert.equal(Value.Check(WeekPayloadSchema, tooMany), true);
+});
+
+test("a family.week start of 9999-12-31 is a config error instead of a range crash", async () => {
+  const config = parseConfig({ demo: true, timezone: "UTC" });
+  await assert.rejects(() => buildWeekPayload(config, "9999-12-31", Date.parse("2026-09-30T16:00:00Z"), noWeather), {
+    name: "ConfigError",
+    message: "oc-family-pack config: start must be a week Family can show",
+  });
 });

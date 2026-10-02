@@ -43,8 +43,12 @@ test("gog events become wire events keyed by calendar position, with Google writ
       ["c0/e3", "Pizza day", "2026-10-02", "2026-10-03", true],
       ["c0/e5", "School drop-off", "2026-09-28T12:15:00.000Z", "2026-09-28T12:45:00.000Z", false],
       ["c0/e6", "(No title)", "2026-09-29T16:00:00.000Z", "2026-09-29T16:30:00.000Z", false],
+      ["c0/e7", "Art & music", "2026-10-01T19:00:00.000Z", "2026-10-01T20:00:00.000Z", false],
     ],
   );
+  assert.equal(events.find((event) => event.id === "c0/e7")?.location, "Room 'A'");
+  assert.equal(events.filter((event) => event.id === "c0/e1").length, 1);
+  assert.equal(events.some((event) => event.title === "Impossible day"), false);
   assert.deepEqual(events[0], {
     id: "c0/e1",
     title: "Late swim",
@@ -99,13 +103,17 @@ test("events group onto local days in the configured timezone, not UTC days", ()
     { date: "2026-09-28", isToday: false, eventIds: ["c0/e5"] },
     { date: "2026-09-29", isToday: false, eventIds: ["c0/e6"] },
     { date: "2026-09-30", isToday: true, eventIds: ["c0/e1"] },
-    { date: "2026-10-01", isToday: false, eventIds: [] },
+    { date: "2026-10-01", isToday: false, eventIds: ["c0/e7"] },
     { date: "2026-10-02", isToday: false, eventIds: ["c0/e3"] },
     { date: "2026-10-03", isToday: false, eventIds: ["c0/e2"] },
     { date: "2026-10-04", isToday: false, eventIds: ["c0/e2"] },
   ]);
   const utc = resolveWeek(undefined, now, "UTC");
-  assert.deepEqual(groupByDay(utc.dates, utc.today, events, "UTC")[3], { date: "2026-10-01", isToday: false, eventIds: ["c0/e1"] });
+  assert.deepEqual(groupByDay(utc.dates, utc.today, events, "UTC")[3], {
+    date: "2026-10-01",
+    isToday: false,
+    eventIds: ["c0/e1", "c0/e7"],
+  });
 });
 
 test("gog gets the week window and the calendar id after --, so an id cannot pass as a flag", async () => {
@@ -156,20 +164,20 @@ test("stderr from a gog run that succeeded is not read as an auth failure; unrea
   const garbled = fakeGog("garbled", "echo 'Note: token refreshed' >&2; echo 'not json'");
   const ok = await readGogCalendars(familyConfig(noisy, [{ id: "cal-kid", label: "Kid" }]), week);
   const unreadable = await readGogCalendars(familyConfig(garbled, [{ id: "cal-kid", label: "Kid" }]), week);
-  assert.deepEqual(ok.status === "ok" && [ok.data.length, ok.warnings], [5, []]);
-  assert.deepEqual(unreadable, { status: "error", message: 'Could not read the "Kid" calendar: gog returned unreadable output' });
+  assert.deepEqual(ok.status === "ok" && [ok.data.length, ok.warnings], [6, []]);
+  assert.deepEqual(unreadable, { status: "error", message: 'Could not read the "Kid" calendar: unreadable output' });
 });
 
 test("a gog run that outlives its timeout is reported as timed out", async () => {
   const slow = fakeGog("slow", "exec sleep 5");
   const state = await readGogCalendars(familyConfig(slow, [{ id: "cal-kid", label: "Kid" }]), week, execGog(100));
-  assert.deepEqual(state, { status: "error", message: 'Could not read the "Kid" calendar: gog timed out' });
+  assert.deepEqual(state, { status: "error", message: 'Could not read the "Kid" calendar: timed out' });
 });
 
-test("one failing calendar becomes a redacted warning while the others still show; all failing is an error", async () => {
+test("one failing calendar becomes a fixed warning while the others still show; all failing is an error", async () => {
   const gog = fakeGog(
     "one-busy",
-    `case "$last" in *busy*) echo "Google API error (429 rateLimitExceeded): Rate Limit Exceeded for $last" >&2; exit 5;; esac\ncat '${fixturePath}'`,
+    `case "$last" in *busy*) echo "Google API error (429 rateLimitExceeded): Rate Limit Exceeded for teacher@example.com" >&2; exit 5;; esac\ncat '${fixturePath}'`,
   );
   const mixed = await readGogCalendars(
     familyConfig(gog, [
@@ -179,9 +187,11 @@ test("one failing calendar becomes a redacted warning while the others still sho
     week,
   );
   assert.deepEqual(mixed.status === "ok" && [mixed.data.map((event) => event.id), mixed.warnings], [
-    ["c1/e1", "c1/e2", "c1/e3", "c1/e5", "c1/e6"],
-    ['Could not read the "Busy" calendar: Google API error (429 rateLimitExceeded): Rate Limit Exceeded for <id>'],
+    ["c1/e1", "c1/e2", "c1/e3", "c1/e5", "c1/e6", "c1/e7"],
+    ['Could not read the "Busy" calendar: gog error code 5'],
   ]);
+  assert.equal(JSON.stringify(mixed).includes("teacher@example.com"), false);
+  assert.equal(JSON.stringify(mixed).includes("busy-feed@group.calendar.google.com"), false);
   const allBusy = await readGogCalendars(
     familyConfig(gog, [
       { id: "busy-a@example.com", label: "A" },
@@ -191,7 +201,91 @@ test("one failing calendar becomes a redacted warning while the others still sho
   );
   assert.deepEqual(allBusy, {
     status: "error",
-    message:
-      'Could not read the "A" calendar: Google API error (429 rateLimitExceeded): Rate Limit Exceeded for <id> Could not read the "B" calendar: Google API error (429 rateLimitExceeded): Rate Limit Exceeded for <id>',
+    message: 'Could not read the "A" calendar: gog error code 5 Could not read the "B" calendar: gog error code 5',
   });
+  assert.equal(JSON.stringify(allBusy).includes("teacher@example.com"), false);
+});
+
+test("one calendar's auth failure warns by name and the others still render; every auth failure is not set up", async () => {
+  const gog = fakeGog(
+    "mixed-auth",
+    `case "$last" in *school*) echo 'invalid_grant for teacher@example.com' >&2; exit 1;; esac\ncat '${fixturePath}'`,
+  );
+  const mixed = await readGogCalendars(
+    familyConfig(gog, [
+      { id: "school@example.com", label: "School" },
+      { id: "cal-kid", label: "Kid" },
+    ]),
+    week,
+  );
+  assert.deepEqual(mixed.status === "ok" && [mixed.data.map((event) => event.id), mixed.warnings], [
+    ["c1/e1", "c1/e2", "c1/e3", "c1/e5", "c1/e6", "c1/e7"],
+    ["Reconnect gog for School"],
+  ]);
+  assert.equal(JSON.stringify(mixed).includes("teacher@example.com"), false);
+  assert.equal(JSON.stringify(mixed).includes("invalid_grant"), false);
+  const hint =
+    "Install gog, run `gog auth add you@example.com --services calendar`, then list calendar IDs with `gog calendar calendars`.";
+  const signedOut = fakeGog("all-auth", "echo 'invalid_grant for teacher@example.com' >&2; exit 1");
+  const allAuth = await readGogCalendars(
+    familyConfig(signedOut, [
+      { id: "school@example.com", label: "School" },
+      { id: "kid@example.com", label: "Kid" },
+    ]),
+    week,
+  );
+  assert.deepEqual(allAuth, { status: "unconfigured", hint });
+  assert.equal(JSON.stringify(allAuth).includes("teacher@example.com"), false);
+});
+
+test("an all-day date that does not exist is dropped and the week read still succeeds", async () => {
+  const run: RunGog = async () => ({
+    stdout: JSON.stringify({
+      events: [
+        { id: "bad", summary: "Impossible day", start: { date: "2026-13-45" }, end: { date: "2026-13-46" } },
+        { id: "ok", summary: "Pizza day", start: { date: "2026-10-02" }, end: { date: "2026-10-03" } },
+      ],
+    }),
+  });
+  const state = await readGogCalendars(familyConfig("gog", [{ id: "cal-kid", label: "Kid" }]), week, run);
+  assert.deepEqual(state, {
+    status: "ok",
+    data: [{ id: "c0/ok", title: "Pizza day", start: "2026-10-02", end: "2026-10-03", allDay: true, calendarKey: "c0" }],
+    warnings: [],
+  });
+});
+
+test("a calendar that still has another page warns without copying the page token", async () => {
+  const run: RunGog = async () => ({
+    stdout: JSON.stringify({
+      events: [{ id: "e9", summary: "Assembly", start: { date: "2026-10-02" }, end: { date: "2026-10-03" } }],
+      nextPageToken: "page-token-secret",
+    }),
+  });
+  const state = await readGogCalendars(familyConfig("gog", [{ id: "school@example.com", label: "School" }]), week, run);
+  assert.deepEqual(state, {
+    status: "ok",
+    data: [{ id: "c0/e9", title: "Assembly", start: "2026-10-02", end: "2026-10-03", allDay: true, calendarKey: "c0" }],
+    warnings: ['The "School" calendar hit gog\'s page cap, so some events are missing.'],
+  });
+  assert.equal(JSON.stringify(state).includes("page-token-secret"), false);
+});
+
+test("gog's page-cap failure is a fixed warning and does not copy stderr", async () => {
+  const gog = fakeGog(
+    "page-cap",
+    `case "$last" in *school*) echo 'pagination exceeded max pages after teacher@example.com' >&2; exit 1;; esac\ncat '${fixturePath}'`,
+  );
+  const state = await readGogCalendars(
+    familyConfig(gog, [
+      { id: "school@example.com", label: "School" },
+      { id: "cal-kid", label: "Kid" },
+    ]),
+    week,
+  );
+  assert.equal(state.status, "ok");
+  assert.deepEqual(state.status === "ok" && state.warnings, ['The "School" calendar hit gog\'s page cap, so some events are missing.']);
+  assert.equal(JSON.stringify(state).includes("teacher@example.com"), false);
+  assert.equal(JSON.stringify(state).includes("pagination exceeded"), false);
+  assert.equal(state.status === "ok" && state.data.some((event) => event.id === "c1/e7"), true);
 });

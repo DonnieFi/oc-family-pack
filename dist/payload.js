@@ -1,4 +1,5 @@
 import { readGogCalendars } from "./calendar-gog.js";
+import { ConfigError } from "./config.js";
 import { MAX_WEEK_EVENTS } from "./contract.js";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.js";
 import { groupByDay, resolveMembers, resolveWeek } from "./week.js";
@@ -18,19 +19,21 @@ export function jsonNodeCount(value) {
 export function fitsHostLimits(value) {
     return jsonNodeCount(value) <= HOST_MAX_NODES && Buffer.byteLength(JSON.stringify(value), "utf8") <= HOST_MAX_BYTES;
 }
+function oversizeMessage(eventCount, bytes) {
+    const detail = eventCount > MAX_WEEK_EVENTS ? `has ${eventCount} events` : `is ${bytes} bytes`;
+    return `This week ${detail}, more than Family can show at once. Remove a busy calendar from the plugin config.`;
+}
 /** A week too large for the host becomes a calendar error, so the roster and weather still load. */
 export function fitWeek(payload) {
     const { calendar } = payload;
     if (calendar.status !== "ok" || (calendar.data.length <= MAX_WEEK_EVENTS && fitsHostLimits(payload))) {
         return payload;
     }
+    const bytes = Buffer.byteLength(JSON.stringify(payload), "utf8");
     return {
         ...payload,
         days: payload.days.map((day) => ({ ...day, eventIds: [] })),
-        calendar: {
-            status: "error",
-            message: `This week has ${calendar.data.length} events, more than Family can show at once. Remove a busy calendar from the plugin config.`,
-        },
+        calendar: { status: "error", message: oversizeMessage(calendar.data.length, bytes) },
     };
 }
 function readCalendar(config, week) {
@@ -40,7 +43,17 @@ function calendarRef({ key, label, kind, owners }) {
     return { key, label, kind, ownerIds: owners };
 }
 export async function buildWeekPayload(config, requestedStart, now, readWeather) {
-    const week = resolveWeek(requestedStart, now, config.timezone);
+    let week;
+    try {
+        // A start in the last week of year 9999 makes addDays throw: the range end is not a four-digit date.
+        week = resolveWeek(requestedStart, now, config.timezone);
+    }
+    catch (error) {
+        if (error instanceof RangeError) {
+            throw new ConfigError("start", "must be a week Family can show");
+        }
+        throw error;
+    }
     const [calendar, weather] = await Promise.all([readCalendar(config, week), readWeather()]);
     return fitWeek({
         mode: config.demo ? "demo" : "live",
