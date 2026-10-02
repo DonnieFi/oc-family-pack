@@ -34,7 +34,10 @@
 /.beads/hooks/
 
 # Planning, research, audits and proof artifacts: local only.
-/docs/
+# The plan map (docs/overview.html) is public, served by GitHub Pages.
+!/docs/
+/docs/*
+!/docs/overview.html
 
 node_modules/
 coverage/

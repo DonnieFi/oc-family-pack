@@ -17,9 +17,12 @@ The repo is public at `DonnieFi/oc-family-pack`. `.gitignore` is an allowlist.
   `FAQ.md`, `LICENSE`, package/manifest files,
   this file, agent config (`.agents/`, `.claude/`, `.codex/`) and the beads
   plan ship.
-- `docs/` is local only (gitignored): planning, research, audits
-  (`docs/fpack_audit.md`), the plan map (`docs/overview.html`), design notes
-  (`docs/research/`) and proof screenshots/logs (`docs/proof/`). Put new
+- The plan map `docs/overview.html` is public: it ships and GitHub Pages
+  serves it. Its bead text is the same public text as `.beads/issues.jsonl`,
+  so the same privacy scan applies.
+- The rest of `docs/` is local only (gitignored): planning, research, audits
+  (`docs/fpack_audit.md`), the plan-map generator (`docs/plan-map.py`), design
+  notes (`docs/research/`) and proof screenshots/logs (`docs/proof/`). Put new
   planning and research there, not in `/tmp` or the repo root.
 - The plan ships as `.beads/issues.jsonl` (`bd export`) plus
   `.beads/interactions.jsonl`. Re-export after bead changes you commit:
@@ -92,7 +95,7 @@ authority covers these steps only. A current "don't commit/push" still wins.
 7. Refresh the plan map at `docs/overview.html` from the beads. Every bead's
    status, parent, blockers, and feature-shelf place match `bd show`, and
    hovering a bead still shows its description, design, acceptance, and notes.
-   The file stays in `docs/`.
+   Commit the refreshed map; it is public.
 8. Delete the merged branch locally and on the remote, then close the epic.
 
 **Beads without code:** decisions and setup beads (`s5k.1`, `s5k.29`, and
