@@ -58,10 +58,41 @@ function readTime(value) {
 function nonEmpty(value) {
     return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
-/** The page renders this as a link, so only https URLs survive, and a cut URL would be broken, so long ones are dropped. */
-function httpsUrl(value) {
+/** Base64 (standard or url-safe) of a Google `eid`. Invalid padding decodes to nothing. */
+function decodeEid(eid) {
+    const normalized = eid.replace(/-/g, "+").replace(/_/g, "/");
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized))
+        return undefined;
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const decoded = Buffer.from(padded, "base64").toString("utf8");
+    return decoded && !decoded.includes("\u0000") ? decoded : undefined;
+}
+/**
+ * A link the page may open. Google's `eid` is the event id plus the calendar id,
+ * and that calendar id is often an email, so any eid that decodes to an address
+ * is dropped. The wire keeps calendar keys (`c0`) instead.
+ */
+function googleEventLink(value) {
     const text = nonEmpty(value);
-    return text && text.length <= LINK_MAX && URL.parse(text)?.protocol === "https:" ? text : undefined;
+    if (!text || text.length > LINK_MAX)
+        return undefined;
+    const url = URL.parse(text);
+    if (!url || url.protocol !== "https:" || url.username || url.password)
+        return undefined;
+    const host = url.hostname.toLowerCase();
+    if (host !== "calendar.google.com" && host !== "www.google.com")
+        return undefined;
+    for (const part of url.searchParams.values()) {
+        if (part.includes("@"))
+            return undefined;
+    }
+    const eid = url.searchParams.get("eid");
+    if (eid) {
+        const decoded = decodeEid(eid);
+        if (decoded === undefined || decoded.includes("@"))
+            return undefined;
+    }
+    return text;
 }
 function instant(value) {
     return typeof value === "string" && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : undefined;
@@ -129,7 +160,7 @@ export function parseGogEvents(raw, calendar) {
         if (location) {
             event.location = clip(unescapeHtml(location), LOCATION_MAX);
         }
-        const htmlLink = httpsUrl(item.htmlLink);
+        const htmlLink = googleEventLink(item.htmlLink);
         if (htmlLink) {
             event.htmlLink = htmlLink;
         }

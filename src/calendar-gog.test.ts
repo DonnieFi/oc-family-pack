@@ -76,6 +76,44 @@ test("recurring instances keep their series id and original slot; unsafe links a
   assert.deepEqual(google("c0/e6"), [undefined, { eventId: "e6" }]);
 });
 
+test("a Google link whose eid decodes to a calendar address is omitted", () => {
+  const email = "parent@example.com";
+  const eid = Buffer.from(`e9 ${email}`).toString("base64");
+  const events =
+    parseGogEvents(
+      [
+        {
+          id: "e9",
+          summary: "Practice",
+          htmlLink: `https://calendar.google.com/calendar/event?eid=${eid}`,
+          start: { dateTime: "2026-10-01T15:00:00Z" },
+          end: { dateTime: "2026-10-01T16:00:00Z" },
+        },
+        {
+          id: "e10",
+          summary: "Homepage",
+          htmlLink: "https://example.com/event",
+          start: { date: "2026-10-01" },
+        },
+        {
+          id: "e11",
+          summary: "Address in the query",
+          htmlLink: "https://www.google.com/calendar/event?eid=ZXhhbXBsZS1lMQ&src=parent@example.com",
+          start: { date: "2026-10-01" },
+        },
+      ],
+      kidCalendar,
+    ) ?? [];
+  const payload = JSON.stringify(events);
+  assert.equal(payload.includes(email), false);
+  assert.equal(payload.includes(eid), false);
+  assert.equal(payload.includes("example.com"), false);
+  assert.deepEqual(
+    events.map((event) => event.htmlLink),
+    [undefined, undefined, undefined],
+  );
+});
+
 test("over-long Google strings are cut to their wire limits and an over-long link is dropped", () => {
   const [event] =
     parseGogEvents(
