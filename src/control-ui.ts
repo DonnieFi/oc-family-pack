@@ -9,13 +9,18 @@ import {
 } from "openclaw/plugin-sdk/control-ui";
 import { createFeatureClient } from "openclaw/plugin-sdk/feature-contract";
 import { contract } from "./contract.ts";
+import { mixTowardInk } from "./contrast.ts";
 import type { CalendarRef, FamilyEvent, Member, WeekPayload } from "./types.ts";
 import { addDays, boundWeekStart, localDate } from "./week.ts";
 import "./control-ui.css";
 
 const PAGE_ID = "family";
 
-type Load = { kind: "loading" } | { kind: "ready"; week: WeekPayload } | { kind: "failed"; message: string };
+type Load =
+  | { kind: "loading" }
+  | { kind: "denied" }
+  | { kind: "ready"; week: WeekPayload }
+  | { kind: "failed"; message: string };
 type Child = Node | string | null | undefined | false;
 type Attrs = Record<string, string | boolean | undefined>;
 
@@ -94,7 +99,7 @@ function shiftWeek(start: string, days: number, today: string): string | undefin
 }
 const isWeekend = (date: string) => [0, 6].includes(noon(date).getUTCDay());
 
-function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) {
+export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) {
   const host: ControlUiHost = initial.host;
   const feature = createFeatureClient(contract, host);
   const content = h("div", { class: "ocfp-stack" });
@@ -114,9 +119,19 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
   let stopWatching: () => void = () => {};
   let agentHandles: ControlUiComponentHandle<{ agentId: string; label: string }>[] = [];
   let agentSignature = "";
+  let disposed = false;
+  const pageAbort = new AbortController();
+  const lifetime = AbortSignal.any([initial.signal, pageAbort.signal]);
+  const alive = () => !disposed && !initial.signal.aborted;
+  lifetime.addEventListener("abort", () => stopWatching(), { once: true });
 
   function watchWeek() {
     stopWatching();
+    if (!alive()) return;
+    if (!host.connection.canRead) {
+      render({ kind: "denied" });
+      return;
+    }
     root.setAttribute("aria-busy", "true");
     if (!content.hasChildNodes()) render({ kind: "loading" });
     stopWatching = feature.watch("family.week", start ? { start } : {}, {
@@ -139,6 +154,7 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
   }
 
   function render(load: Load) {
+    if (!alive()) return;
     root.removeAttribute("aria-busy");
     if (load.kind === "loading") {
       content.replaceChildren(
@@ -147,11 +163,28 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
       );
       return;
     }
+    if (load.kind === "denied") {
+      content.replaceChildren(
+        h("header", { class: "ocfp-masthead" }, h("div", {}, h("p", { class: "ocfp-kicker" }, "Family week"), h("h1", { class: "ocfp-title" }, "This week"))),
+        h("div", { class: "ocfp-notice ocfp-panel", role: "status" }, h("p", {}, "You need read access to see the family week.")),
+      );
+      return;
+    }
     if (load.kind === "failed") {
       const retry = on(h("button", { type: "button", class: "ocfp-btn ocfp-btn-today" }, "Try again"), "click", watchWeek);
       content.replaceChildren(
         h("header", { class: "ocfp-masthead" }, h("div", {}, h("p", { class: "ocfp-kicker" }, "Family week"), h("h1", { class: "ocfp-title" }, "This week"))),
-        h("div", { class: "ocfp-notice ocfp-panel is-error", role: "alert" }, emptyState("alert", "Could not load the week", load.message), retry),
+        h(
+          "div",
+          { class: "ocfp-notice ocfp-panel is-error", role: "alert" },
+          h(
+            "div",
+            { class: "ocfp-empty" },
+            h("div", { class: "ocfp-empty-title" }, icon("alert"), "Couldn't load the week."),
+            h("p", { class: "ocfp-muted-reason" }, load.message),
+          ),
+          retry,
+        ),
       );
       return;
     }
@@ -171,8 +204,13 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
     const calendarOf = (event: FamilyEvent) => calendars.get(event.calendarKey);
     const isShared = (event: FamilyEvent) => calendarOf(event)?.kind === "shared";
     const ownerIds = (event: FamilyEvent) => calendarOf(event)?.ownerIds ?? [];
+    const theme = getComputedStyle(document.documentElement);
+    const ink = theme.getPropertyValue("--text-strong").trim() || "#211e1a";
+    const card = theme.getPropertyValue("--card").trim() || "#ffffff";
+    const light = document.documentElement.getAttribute("data-theme-mode") === "light";
+    const onCard = (color: string) => (light && !color.startsWith("var(") ? mixTowardInk(color, ink, card).color : color);
     const eventColor = (event: FamilyEvent) =>
-      isShared(event) ? "var(--family-neutral)" : (members.get(ownerIds(event)[0] ?? "")?.color ?? "var(--family-neutral)");
+      isShared(event) ? "var(--family-neutral)" : onCard(members.get(ownerIds(event)[0] ?? "")?.color ?? "var(--family-neutral)");
     const matches = (event: FamilyEvent) => !person || isShared(event) || ownerIds(event).includes(person);
 
     const start = noon(week.range.start);
@@ -256,7 +294,7 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
             { class: "ocfp-owner-dots", "aria-hidden": "true" },
             ...ownerIds(event).flatMap((id) => {
               const member = members.get(id);
-              return member ? [paint(h("span", { class: "ocfp-owner-dot" }), { "--ocfp-dot": member.color })] : [];
+              return member ? [paint(h("span", { class: "ocfp-owner-dot" }), { "--ocfp-dot": onCard(member.color) })] : [];
             }),
           );
     const eventCard = (event: FamilyEvent, date: string) =>
@@ -287,7 +325,7 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
         const classes = ["ocfp-day", day.isToday && "is-today", isWeekend(day.date) && "is-weekend", selectedDay === day.date && "is-selected"];
         return h(
           "section",
-          { class: classes.filter(Boolean).join(" "), id: `ocfp-day-${day.date}`, role: "tabpanel", "aria-label": fmt.long.format(date) },
+          { class: classes.filter(Boolean).join(" "), id: `ocfp-day-${day.date}`, role: "region", "aria-label": fmt.long.format(date) },
           h(
             "header",
             { class: "ocfp-day-head" },
@@ -299,13 +337,13 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
       }),
     );
 
-    const tabs = h("div", { class: "ocfp-day-tabs", role: "tablist", "aria-label": "Day" });
+    const tabs = h("div", { class: "ocfp-day-tabs", role: "group", "aria-label": "Day" });
     const selectDay = (date: string, focus: boolean) => {
       selectedDay = date;
       for (const node of grid.querySelectorAll(".ocfp-day")) node.classList.toggle("is-selected", node.id === `ocfp-day-${date}`);
       for (const tab of tabs.querySelectorAll<HTMLButtonElement>(".ocfp-day-tab")) {
-        const selected = tab.getAttribute("aria-controls") === `ocfp-day-${date}`;
-        tab.setAttribute("aria-selected", String(selected));
+        const selected = tab.dataset.date === date;
+        tab.setAttribute("aria-pressed", String(selected));
         tab.tabIndex = selected ? 0 : -1;
         if (selected && focus) tab.focus();
       }
@@ -318,14 +356,14 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
               "button",
               {
                 type: "button",
-                role: "tab",
                 class: `ocfp-day-tab${day.isToday ? " is-today" : ""}`,
-                "aria-selected": String(selectedDay === day.date),
-                "aria-controls": `ocfp-day-${day.date}`,
+                "data-date": day.date,
+                "aria-pressed": String(selectedDay === day.date),
+                ...(day.isToday ? { "aria-current": "date" } : {}),
                 tabindex: selectedDay === day.date ? "0" : "-1",
                 "aria-label": fmt.long.format(noon(day.date)),
               },
-              fmt.weekday.format(noon(day.date)),
+              day.isToday ? "Today" : fmt.weekday.format(noon(day.date)),
               h("b", {}, fmt.day.format(noon(day.date))),
             ),
             "click",
@@ -470,6 +508,7 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
   }
 
   function renderAgents() {
+    if (!alive()) return;
     const agents = host.agents.rows.filter((agent: ControlUiAgent) => agent.kind !== "system");
     const name = (agent: ControlUiAgent) => agent.identity?.name?.trim() || agent.name?.trim() || agent.id;
     const signature = agents.map((agent) => `${agent.id}\u0000${name(agent)}\u0000${agent.identity?.emoji ?? ""}`).join("\u0001");
@@ -494,36 +533,68 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
     );
   }
 
-  /** The agent's main session from the host's session list; the first snapshot may still be loading. */
+  /** The agent's main session. Stops after 10 seconds so the chat button cannot stay disabled. */
   function findMainSession(agentId: string): Promise<string | undefined> {
     const listed = host.sessions.rows.find((row) => row.agentId === agentId && row.isMain);
     if (listed) return Promise.resolve(listed.key);
     return new Promise((resolve, reject) => {
-      let settled = false;
       let subscription: ControlUiSessionListSubscription | undefined;
-      subscription = host.sessions.observe({ agentId, limit: 200 }, ({ result, loading, error }) => {
-        if (settled || loading || (!result && !error)) return;
-        settled = true;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const stop = () => {
+        clearTimeout(timer);
+        timer = undefined;
+        lifetime.removeEventListener("abort", onAbort);
         subscription?.dispose();
-        if (error) reject(new Error(error));
-        else resolve(result?.sessions.find((row) => row.isMain)?.key);
+      };
+      const succeed = (key: string | undefined) => {
+        stop();
+        resolve(key);
+      };
+      const fail = (error: Error) => {
+        stop();
+        reject(error);
+      };
+      const onAbort = () => succeed(undefined);
+      timer = setTimeout(() => fail(new Error("timed out")), 10_000);
+      if (!alive()) {
+        succeed(undefined);
+        return;
+      }
+      lifetime.addEventListener("abort", onAbort, { once: true });
+      subscription = host.sessions.observe({ agentId, limit: 200 }, ({ result, loading, error }) => {
+        if (timer === undefined || !alive()) return;
+        if (loading || (!result && !error)) return;
+        if (error) fail(new Error(error));
+        else succeed(result?.sessions.find((row) => row.isMain)?.key);
       });
-      if (settled) subscription.dispose();
+      if (timer === undefined) subscription.dispose();
     });
   }
 
   async function openAgentChat(agentId: string, button: HTMLButtonElement) {
+    if (!alive()) return;
     button.disabled = true;
     chatStrip.querySelector(".ocfp-chat-error")?.remove();
     try {
-      const sessionKey = (await findMainSession(agentId)) ?? (await host.sessions.create({ agentId }));
+      const found = await findMainSession(agentId);
+      if (!alive()) return;
+      const sessionKey = found ?? (await host.sessions.create({ agentId }));
+      if (!alive()) return;
       if (!sessionKey) throw new Error("The Gateway did not create a session.");
       host.sessions.open({ sessionKey, agentId });
     } catch (error) {
+      if (!alive()) return;
       const reason = error instanceof Error ? error.message : String(error);
-      chatStrip.append(h("p", { class: "ocfp-chat-hint ocfp-chat-error", role: "alert" }, `Could not open the chat. ${reason}`));
+      chatStrip.append(
+        h(
+          "div",
+          { class: "ocfp-chat-error", role: "alert" },
+          h("p", { class: "ocfp-chat-error-title" }, "Couldn't open the chat."),
+          h("p", { class: "ocfp-muted-reason" }, reason),
+        ),
+      );
     } finally {
-      button.disabled = false;
+      if (alive()) button.disabled = false;
     }
   }
 
@@ -533,6 +604,7 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
 
   return {
     update(next: ControlUiViewContext) {
+      if (!alive()) return;
       const nextStart = requestedStart(next.props, browserToday());
       if (nextStart !== start) {
         start = nextStart;
@@ -541,6 +613,8 @@ function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) 
       }
     },
     dispose() {
+      disposed = true;
+      pageAbort.abort();
       stopWatching();
       stopHost();
       closeDialog();
