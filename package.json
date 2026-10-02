@@ -10,7 +10,7 @@
     "validate": "openclaw plugins validate --json",
     "pack": "openclaw plugins pack --json",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --test --disable-warning=ExperimentalWarning \"src/**/*.test.ts\"",
+    "test": "node --test --disable-warning=ExperimentalWarning --import ./scripts/css-test-register.ts \"src/**/*.test.ts\"",
     "smoke": "node --disable-warning=ExperimentalWarning scripts/smoke.ts",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "check:dist": "node -e \"const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),cp=require('node:child_process');const out=fs.mkdtempSync(path.join(os.tmpdir(),'ocfp-dist-'));try{cp.execFileSync('tsc',['-p','tsconfig.build.json','--outDir',out],{stdio:'inherit'});const js=(dir)=>fs.readdirSync(dir).filter((f)=>f.endsWith('.js'));const names=[...new Set([...js(out),...js('dist')])].sort();const stale=names.filter((f)=>!fs.existsSync(path.join(out,f))||!fs.existsSync(path.join('dist',f))||fs.readFileSync(path.join(out,f),'utf8')!==fs.readFileSync(path.join('dist',f),'utf8'));if(stale.length){console.error('dist/ is stale, run npm run build: '+stale.join(', '));process.exitCode=1}else{console.log('dist/ matches src/ ('+names.length+' files)')}}finally{fs.rmSync(out,{recursive:true,force:true})}\"",

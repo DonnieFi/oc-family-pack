@@ -348,6 +348,24 @@
   font-size: 13px;
 }
 
+.ocfp-muted-reason,
+.ocfp-chat-error-title {
+  margin: 0;
+  font-size: 13px;
+}
+
+.ocfp-muted-reason {
+  color: var(--muted);
+}
+
+.ocfp-empty p.ocfp-muted-reason {
+  color: var(--muted);
+}
+
+.ocfp-chat-error-title {
+  color: var(--text);
+}
+
 .ocfp-week-area {
   display: flex;
   flex-direction: column;
@@ -485,8 +503,7 @@
   cursor: pointer;
   transition:
     border-color var(--duration-normal) var(--ease-out),
-    background var(--duration-normal) var(--ease-out),
-    opacity var(--duration-normal) var(--ease-out);
+    background var(--duration-normal) var(--ease-out);
 }
 
 .ocfp-event:hover {
@@ -502,8 +519,21 @@
 }
 
 .ocfp-event.is-dimmed {
-  opacity: 0.32;
-  filter: saturate(0.5);
+  border-color: var(--border);
+  background:
+    linear-gradient(90deg, var(--family-neutral) 0 3px, transparent 3px),
+    var(--card);
+  color: var(--muted);
+}
+
+.ocfp-event.is-dimmed .ocfp-event-title {
+  color: var(--text-strong);
+}
+
+.ocfp-event.is-dimmed .ocfp-event-meta,
+.ocfp-event.is-dimmed .ocfp-event-location,
+.ocfp-event.is-dimmed .ocfp-chip-role {
+  color: var(--muted);
 }
 
 .ocfp-event-meta {
@@ -800,9 +830,10 @@
 
   .ocfp-day-tab.is-today {
     border-color: color-mix(in oklab, var(--family-warm) 45%, var(--border));
+    text-transform: none;
   }
 
-  .ocfp-day-tab[aria-selected="true"] {
+  .ocfp-day-tab[aria-pressed="true"] {
     border-color: color-mix(in oklab, var(--family-warm) 70%, var(--border));
     background: color-mix(in oklab, var(--family-warm) 16%, var(--card));
     color: var(--text-strong);
@@ -827,7 +858,6 @@
   }
 
   .ocfp-day-events {
-    gap: 8px;
     padding: 12px;
     min-height: 220px;
   }
