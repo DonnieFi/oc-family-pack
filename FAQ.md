@@ -42,11 +42,32 @@ installer asks you to accept the plugin's capabilities first.
 
 ## Where does my family data go?
 
-Nowhere new. Calendar events are read by gog on your Gateway host and rendered
-in your Control UI. Nothing is stored; each page load reads the week again. The
-only outside request the plugin makes is the Environment Canada weather lookup.
+Calendar events are read by gog on your Gateway host and rendered in your
+Control UI. Each page load reads the week again. The plugin also keeps a SQLite
+database on the Gateway host at
+`$OPENCLAW_STATE_DIR/plugins/oc-family-pack/oc-family-pack.sqlite`. When
+`OPENCLAW_STATE_DIR` is unset, that path is under `~/.openclaw`. The only
+outside request the plugin makes is the Environment Canada weather lookup.
 That lookup sends a search box around your configured coordinates.
 The page loads no fonts, scripts, or images from other sites.
+
+## Does uninstall delete the family database?
+
+No. Uninstall removes the plugin config and the installed copy of the code.
+The database stays where it is, so a later install sees the same data. You
+re-enter the config and enable the plugin again.
+
+To delete the data, uninstall first, then remove the directory:
+
+```bash
+rm -rf "${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/plugins/oc-family-pack"
+```
+
+## Why does `openclaw plugins pack` fail?
+
+Pack builds one archive file. The family store loads `dist/store-worker.js`
+next to the main plugin file, and pack rejects that layout, so a pack artifact
+does not run. A git install or an npm install keeps both files and works.
 
 ## Why is it read-only?
 

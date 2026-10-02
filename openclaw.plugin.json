@@ -13,6 +13,13 @@
   "activation": {
     "onStartup": true
   },
+  "backupResources": [
+    {
+      "disposition": "include",
+      "scope": "state",
+      "relativePath": "plugins/oc-family-pack"
+    }
+  ],
   "configGroups": [
     {
       "id": "family-view",

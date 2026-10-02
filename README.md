@@ -53,7 +53,7 @@ Briefs stay short on purpose. Routine items fold into a single line so only the 
 | Requirement | Why |
 | --- | --- |
 | OpenClaw `2026.9.7` or newer | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Tested on `2026.9.7`; see [Development](#development) for the post-update smoke. |
-| Node.js `24.16+` | Matches the OpenClaw runtime |
+| Node.js `>=24.16.0 <25` or `>=26.1.0` | Matches the OpenClaw runtime |
 | [`gog`](https://github.com/openclaw/gogcli) with Calendar access | Reads and writes Google Calendar using your existing sign-in |
 | **Custom plugin UI** lab enabled | Required for native pages from non-bundled plugins |
 | HTTPS, Tailscale Serve, or `127.0.0.1` | Native plugin pages need a secure origin |
@@ -138,6 +138,14 @@ Each family operation is defined once and shared by the page and the agent tools
 ## Privacy
 
 Everything runs on your own OpenClaw Gateway. Calendar data is read through your local `gog` sign-in, weather requests send only your coordinates to Environment Canada, and nothing is sent to a third-party service by this plugin.
+
+The plugin keeps its own SQLite database on the Gateway host, under `plugins/oc-family-pack/` in the OpenClaw state directory. Uninstall removes the plugin config and the installed code, and leaves that database in place. To delete it after uninstall:
+
+```bash
+rm -rf "${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/plugins/oc-family-pack"
+```
+
+`openclaw plugins pack` builds a single-file archive. This plugin loads `dist/store-worker.js` from the same directory as the main file, and pack rejects that layout, so a pack artifact will not run. Git installs and npm installs keep the files side by side and are unaffected.
 
 ## Development
 

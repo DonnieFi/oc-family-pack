@@ -12,10 +12,10 @@
  * The live Gateway is never touched. State, config, and the port all live under
  * a temp dir that is deleted on the way out, and the port is never 18789.
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve as pathResolve } from "node:path";
 import { Value } from "typebox/value";
@@ -485,6 +485,31 @@ async function stagePlugin(target: string): Promise<void> {
  */
 const gatewayStops = new Set<Promise<void>>();
 
+async function bootGateway(env: NodeJS.ProcessEnv, port: number, logPath: string): Promise<void> {
+  await stopGateway();
+  const out = openSync(logPath, "w");
+  let spawnFailure: string | undefined;
+  const child = spawn(hostBinary, ["gateway", "run", "--port", String(port), "--bind", "loopback"], {
+    env,
+    stdio: ["ignore", out, out],
+    detached: true,
+  });
+  gateway = child;
+  child.on("error", (error) => {
+    spawnFailure = `could not start the isolated Gateway: ${error.message}`;
+  });
+  try {
+    await waitForReady(
+      logPath,
+      () => spawnFailure,
+      () => (gateway === child ? child.exitCode : null),
+    );
+  } catch (error) {
+    await stopGateway();
+    throw error;
+  }
+}
+
 function stopGateway(): Promise<void> {
   const child = gateway;
   gateway = undefined;
@@ -612,13 +637,47 @@ function stripAnsi(text: string): string {
   return text.replace(/\u001b\[[0-9;]*m/g, "");
 }
 
-function pluginSqliteFiles(stateDir: string): string[] {
-  const dir = join(stateDir, "plugins", "oc-family-pack");
-  try {
-    return readdirSync(dir).filter((name) => name.endsWith(".sqlite") || name.endsWith(".db"));
-  } catch {
-    return [];
+function storeDbPath(stateDir: string): string {
+  return join(stateDir, "plugins", PLUGIN_ID, "oc-family-pack.sqlite");
+}
+
+function readMigrations(path: string): { id: string; applied_at: number }[] {
+  const script = `
+    import { DatabaseSync } from "node:sqlite";
+    const db = new DatabaseSync(process.env.DB, { readOnly: true });
+    const rows = db.prepare("SELECT id, applied_at FROM oc_family_pack_schema_migrations ORDER BY id").all();
+    db.close();
+    process.stdout.write(JSON.stringify(rows));
+  `;
+  const result = spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", "--input-type=module", "-e", script], {
+    env: { ...process.env, DB: path },
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    fail("sqlite store", `could not read the migrations table: ${(result.stderr || "").trim().slice(0, 300)}`);
   }
+  return JSON.parse(result.stdout) as { id: string; applied_at: number }[];
+}
+
+function assertStoreModes(path: string): void {
+  const dirMode = statSync(join(path, "..")).mode & 0o777;
+  if (dirMode !== 0o700) fail("sqlite store", `plugin directory mode is ${dirMode.toString(8)}, expected 700`);
+  for (const suffix of ["", "-wal", "-shm"]) {
+    const file = `${path}${suffix}`;
+    const name = file.slice(file.lastIndexOf("/") + 1);
+    if (!existsSync(file)) fail("sqlite store", `missing ${name} while the store is open`);
+    const fileMode = statSync(file).mode & 0o777;
+    if (fileMode !== 0o600) fail("sqlite store", `${name} mode is ${fileMode.toString(8)}, expected 600`);
+  }
+}
+
+async function waitForStore(stateDir: string): Promise<string> {
+  const path = storeDbPath(stateDir);
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (existsSync(path)) return path;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  fail("sqlite store", "the store database was not created");
 }
 
 async function main(): Promise<void> {
@@ -708,27 +767,7 @@ async function main(): Promise<void> {
   if (validated.valid !== true) fail("manifest", `plugins validate reported ${JSON.stringify(validated.errors ?? validated)}`);
   note("manifest validates", "manifest");
 
-  const out = openSync(logPath, "w");
-  gateway = spawn(hostBinary, ["gateway", "run", "--port", String(port), "--bind", "loopback"], {
-    env,
-    stdio: ["ignore", out, out],
-    // Own process group, so cleanup can take the host and its children together.
-    detached: true,
-  });
-  // Without this, a spawn failure is an uncaught exception: a stack trace, and
-  // the cleanup below never runs.
-  // Record the failure rather than throwing from the handler: throwing inside an
-  // event emission is an uncaught exception, which prints a stack trace and
-  // skips the cleanup that removes the temp state. waitForReady reports it.
-  let spawnFailure: string | undefined;
-  gateway.on("error", (error) => {
-    spawnFailure = `could not start the isolated Gateway: ${error.message}`;
-  });
-  await waitForReady(
-    logPath,
-    () => spawnFailure,
-    () => gateway?.exitCode ?? null,
-  );
+  await bootGateway(env, port, logPath);
   note("isolated Gateway ready", "plugin load");
 
   const call = async (method: string, params: unknown, step: Step): Promise<Record<string, unknown>> => {
@@ -814,55 +853,133 @@ async function main(): Promise<void> {
   }
   note(`page registered, built assets present in the installed root`, "page registration");
 
-  // 7. The scheduler surface the briefs will register jobs on. This is a host
-  // liveness probe, not a plugin integration point: the plugin registers no
-  // service or cron job yet, so a pass here means the host surface answers, and
-  // nothing more. The real check lands with the briefs epic.
+  // 7. The scheduler surface the briefs will register jobs on. The plugin's
+  // store is a service, not a cron job, so this only checks that the host
+  // scheduler answers. The real job check lands with the briefs epic.
   const jobs = await call("cron.list", {}, "service scheduler");
   if (!Array.isArray(jobs.jobs)) fail("service scheduler", "cron.list did not return a jobs array");
-  note(`host scheduler surface answers (${jobs.jobs.length} host jobs); plugin registers none until the briefs epic`, "service scheduler");
+  note(`host scheduler surface answers (${jobs.jobs.length} host jobs); the store is a service, and briefs register jobs later`, "service scheduler");
 
-  // 8. The plugin-owned store. The plugin writes no state yet (s5k.19), so this
-  // asserts the contract that will hold when it does: the store lives under the
-  // plugin's own state directory and nowhere else. A store appearing outside it
-  // would mean the plugin reached for shared state, which the architecture
-  // rules forbid. The directory is named from the plugin id, not assumed from a
-  // --link layout.
+  // 8. The plugin-owned store. The service opens the real database, applies
+  // 0001-initial, and leaves that row in place across a Gateway restart, a
+  // forced reinstall, and plugins update. Backup must snapshot it instead of
+  // archiving it as opaque bytes. A store that cannot open must not take the Gateway down.
   const pluginStateDir = join(stateDir, "plugins", PLUGIN_ID);
-  try {
-    mkdirSync(pluginStateDir, { recursive: true });
-    const probe = join(pluginStateDir, ".smoke-write-probe");
-    writeFileSync(probe, "ok");
-    rmSync(probe);
-  } catch (error) {
-    fail("sqlite store", `the plugin state directory is not writable: ${(error as Error).message}`);
+  const opened = await waitForStore(stateDir);
+  assertStoreModes(opened);
+  const firstRows = readMigrations(opened);
+  if (firstRows.length !== 1 || firstRows[0]?.id !== "0001-initial") {
+    fail("sqlite store", `expected one 0001-initial row, got ${JSON.stringify(firstRows)}`);
   }
-  const sqlite = pluginSqliteFiles(pluginStateDir);
-  // Recurse for stray plugin-owned databases. The host writes its own (at
-  // state/state/openclaw.sqlite, plus per-feature databases under
-  // state/tmp), so only a file that names this plugin counts as ours; flagging
-  // every .sqlite in the state dir would fail on the host's own bookkeeping.
+  const appliedAt = firstRows[0].applied_at;
+  const readyLine = stripAnsi(readFileSync(logPath, "utf8"))
+    .split("\n")
+    .find((line) => line.includes("oc-family-pack store ready"));
+  if (!readyLine) fail("sqlite store", "the store did not log ready");
+  note(readyLine.trim(), "sqlite store");
   const hostDb = join(stateDir, "state", "openclaw.sqlite");
-  const strays = stateFiles(stateDir)
-    .filter(
-      (full) =>
-        (full.endsWith(".sqlite") || full.endsWith(".db")) &&
-        !full.startsWith(pluginStateDir) &&
-        full !== hostDb &&
-        full.toLowerCase().includes(PLUGIN_ID),
-    );
+  const strays = stateFiles(stateDir).filter(
+    (full) =>
+      (full.endsWith(".sqlite") || full.endsWith(".db")) &&
+      !full.startsWith(pluginStateDir) &&
+      full !== hostDb &&
+      full.toLowerCase().includes(PLUGIN_ID),
+  );
   if (strays.length) {
     fail(
       "sqlite store",
-      `plugin-owned state appeared outside ${pluginStateDir}, which the architecture rules forbid: ${strays.map((s) => s.slice(stateDir.length + 1)).join(", ")}`,
+      `plugin-owned state appeared outside ${pluginStateDir}: ${strays.map((s) => s.slice(stateDir.length + 1)).join(", ")}`,
     );
   }
-  note(
-    sqlite.length
-      ? `plugin sqlite store present under the plugin state dir: ${sqlite.join(", ")}`
-      : "plugin state dir is writable, nothing leaked outside it, and it is empty until writes land (s5k.19)",
+  note(`0001-initial applied at ${appliedAt}, directory 0700, database and WAL sidecars 0600`, "sqlite store");
+
+  await bootGateway(env, port, logPath);
+  const reopened = await waitForStore(stateDir);
+  assertStoreModes(reopened);
+  const secondRows = readMigrations(reopened);
+  if (secondRows[0]?.id !== "0001-initial" || secondRows[0]?.applied_at !== appliedAt) {
+    fail("sqlite store", `restart changed the 0001 row: ${JSON.stringify(secondRows)}`);
+  }
+  note("0001-initial survived a Gateway restart and was not applied again", "sqlite store");
+
+  await stopGateway();
+  await oc(["plugins", "install", sourceDir, "--force", "--link", "--accept-capabilities"], env, "sqlite store");
+  await bootGateway(env, port, logPath);
+  const afterInstall = readMigrations(await waitForStore(stateDir));
+  if (afterInstall[0]?.id !== "0001-initial" || afterInstall[0]?.applied_at !== appliedAt) {
+    fail("sqlite store", `reinstall changed the 0001 row: ${JSON.stringify(afterInstall)}`);
+  }
+  note("0001-initial survived plugins install --force", "sqlite store");
+
+  await stopGateway();
+  const updated = await oc(["plugins", "update", "oc-family-pack"], env, "sqlite store");
+  await bootGateway(env, port, logPath);
+  const afterUpdate = readMigrations(await waitForStore(stateDir));
+  if (afterUpdate[0]?.id !== "0001-initial" || afterUpdate[0]?.applied_at !== appliedAt) {
+    fail("sqlite store", `plugins update changed the 0001 row: ${JSON.stringify(afterUpdate)}`);
+  }
+  note(`plugins update skips path installs and left 0001-initial alone (${updated.trim().split("\n")[0] ?? "no output"})`, "sqlite store");
+
+  const backupRaw = await oc(
+    ["backup", "create", "--verify", "--json", "--output", join(workDir, "backups")],
+    env,
     "sqlite store",
   );
+  const backup = parseHostJson(backupRaw, "sqlite store", "backup create") as { warnings?: unknown };
+  const warnings = Array.isArray(backup.warnings) ? backup.warnings.map((warning) => String(warning)) : [];
+  const opaque = warnings.filter((warning) => /opaque/i.test(warning) && warning.includes(PLUGIN_ID));
+  if (opaque.length) fail("sqlite store", `backup archived the family database as opaque bytes: ${opaque.join(" | ")}`);
+  note(
+    warnings.length ? `backup create --verify warnings: ${warnings.join(" | ")}` : "backup create --verify reported no warnings",
+    "sqlite store",
+  );
+
+  // A real startup failure, not a hook: the store directory's path is a plain
+  // file, so the worker's mkdir throws. The Gateway must stay up, keep serving
+  // family.week, and show the service as failed. The journal fault and a fault
+  // during a call are unit tests in src/store.test.ts.
+  await stopGateway();
+  const heldDir = `${pluginStateDir}.held`;
+  renameSync(pluginStateDir, heldDir);
+  writeFileSync(pluginStateDir, "");
+  await bootGateway(env, port, logPath);
+  if (gateway?.exitCode !== null && gateway?.exitCode !== undefined) {
+    fail("sqlite store", "the isolated Gateway exited when the store could not open");
+  }
+  const blockedLog = stripAnsi(readFileSync(logPath, "utf8"));
+  if (!blockedLog.includes("oc-family-pack: family store worker failed")) {
+    fail("sqlite store", "the store failure was not in the Gateway log");
+  }
+  const listed = await call("plugins.list", {}, "sqlite store");
+  const entry = (listed.plugins as Array<{ id?: string; runtime?: { state?: string; error?: string } }> | undefined)?.find(
+    (plugin) => plugin.id === PLUGIN_ID,
+  );
+  if (entry?.runtime?.state !== "service-failed" || !entry.runtime.error?.startsWith("family-store:")) {
+    fail("sqlite store", `reportFailure did not reach the host: ${JSON.stringify(entry?.runtime)}`);
+  }
+  const duringFailure = await call(
+    "plugins.sessionAction",
+    { pluginId: "oc-family-pack", actionId: "family.week", payload: {} },
+    "sqlite store",
+  );
+  if (duringFailure.ok !== true) fail("sqlite store", "family.week failed while the store could not open");
+  note(`Gateway kept serving family.week with the store blocked; plugins.list shows ${entry.runtime.error}`, "sqlite store");
+
+  await stopGateway();
+  rmSync(pluginStateDir);
+  renameSync(heldDir, pluginStateDir);
+  await bootGateway(env, port, logPath);
+  const afterFailure = readMigrations(await waitForStore(stateDir));
+  if (afterFailure[0]?.id !== "0001-initial" || afterFailure[0]?.applied_at !== appliedAt) {
+    fail("sqlite store", `the 0001 row changed after the blocked start: ${JSON.stringify(afterFailure)}`);
+  }
+  const weekAfterFault = await call(
+    "plugins.sessionAction",
+    { pluginId: "oc-family-pack", actionId: "family.week", payload: {} },
+    "sqlite store",
+  );
+  if (weekAfterFault.ok !== true) fail("sqlite store", "family.week failed after the store came back");
+  note("store reopened with the same 0001 row once the path was a directory again", "sqlite store");
 
   // 9. Our host-limit arithmetic must agree with the host's own counter, so a
   // host change to those limits fails here instead of rotting the contract comment.
