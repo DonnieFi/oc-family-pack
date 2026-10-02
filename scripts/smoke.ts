@@ -178,9 +178,13 @@ function killGroup(child: ChildProcess, onGone?: () => void): void {
   }
   signal("SIGTERM");
   // Poll rather than fire once: the direct child can exit while its own
-  // children are still alive, and only the group knows they are there. The
-  // interval is not unref'd when a caller is waiting on onGone, because that
-  // poll is the only thing that will resolve them.
+  // children are still alive, and only the group knows they are there.
+  //
+  // The poll stays ref'd while the group is genuinely alive, because otherwise
+  // the process can exit before the SIGKILL tick and leave a SIGTERM-deaf
+  // descendant behind. A healthy call's group is already empty by the time the
+  // child exits, so the `groupAlive` check above returns without arming this at
+  // all and a clean run pays nothing.
   const escalate = setInterval(() => {
     if (!groupAlive()) {
       clearInterval(escalate);
@@ -189,7 +193,6 @@ function killGroup(child: ChildProcess, onGone?: () => void): void {
     }
     signal("SIGKILL");
   }, HOST_KILL_ESCALATION_MS);
-  if (onGone === undefined) escalate.unref();
 }
 
 function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"): Promise<string> {
@@ -221,16 +224,24 @@ function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"):
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (backstop !== undefined) clearTimeout(backstop);
       process.off("SIGINT", onSignal);
       process.off("SIGTERM", onSignal);
       fn();
     };
+    // Why we are tearing this call down, if we are. The child will exit because
+    // of our own kill, and that exit must not overwrite the real reason with a
+    // bare "exited by SIGKILL".
+    let abortReason: string | undefined;
+    let backstop: NodeJS.Timeout | undefined;
     const abort = (detail: string) => {
+      if (settled || abortReason !== undefined) return;
+      abortReason = detail;
       // Wait for the group to actually be gone before reporting, so the smoke
       // cannot exit while a SIGTERM-deaf host or an orphaned grandchild is
       // still running.
       killGroup(child, () => settle(() => reject(new Error(`smoke: ${detail}`))));
-      setTimeout(() => settle(() => reject(new Error(`smoke: ${detail}`))), KILL_WAIT_DEADLINE_MS);
+      backstop = setTimeout(() => settle(() => reject(new Error(`smoke: ${detail}`))), KILL_WAIT_DEADLINE_MS);
     };
     const onSignal = () => abort(`${step} failed: interrupted by ${interrupted ?? "signal"} during ${label}`);
     const timer = setTimeout(
@@ -253,10 +264,18 @@ function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"):
       // Sweep the group even on success: a host that exits 0 while leaving a
       // background child would otherwise orphan it, since nothing else in the
       // run would ever signal that group again. It is our own group, so this
-      // cannot touch anything else. Unref'd, so it never delays a clean exit.
+      // cannot touch anything else, and a healthy call's group is already empty
+      // so it costs nothing.
       killGroup(child);
       setTimeout(() => {
         settle(() => {
+          // If we killed this call, say why. Reporting "exited by SIGKILL"
+          // instead of the timeout or interrupt that caused it would point the
+          // operator at the host rather than at the smoke.
+          if (abortReason !== undefined) {
+            reject(new Error(`smoke: ${abortReason}`));
+            return;
+          }
           if (code === 0) {
             resolve(stdout);
             return;
@@ -400,17 +419,25 @@ async function stagePlugin(target: string): Promise<void> {
     child.stdout.on("error", () => {});
     child.stderr.on("error", () => {});
     let settled = false;
+    let abortReason: string | undefined;
+    let backstop: NodeJS.Timeout | undefined;
     const settle = (fn: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      if (backstop !== undefined) clearTimeout(backstop);
       process.off("SIGINT", onSignal);
       process.off("SIGTERM", onSignal);
       fn();
     };
     const abort = (detail: string) => {
+      if (settled || abortReason !== undefined) return;
+      abortReason = detail;
       killGroup(child, () => settle(() => reject(new Error(`smoke: plugin load failed: ${detail}`))));
-      setTimeout(() => settle(() => reject(new Error(`smoke: plugin load failed: ${detail}`))), KILL_WAIT_DEADLINE_MS);
+      backstop = setTimeout(
+        () => settle(() => reject(new Error(`smoke: plugin load failed: ${detail}`))),
+        KILL_WAIT_DEADLINE_MS,
+      );
     };
     const onSignal = () => abort(`interrupted by ${interrupted ?? "signal"} during npm install`);
     const timer = setTimeout(
@@ -422,8 +449,15 @@ async function stagePlugin(target: string): Promise<void> {
     process.once("SIGTERM", onSignal);
     child.on("error", (error) => settle(() => reject(new Error(`smoke: plugin load failed: could not run npm install: ${error.message}`))));
     child.on("exit", (code) => {
+      // Sweep the group on success too, for the same reason oc() does.
+      killGroup(child);
       setTimeout(() => {
         settle(() => {
+          // If we killed npm, report why rather than "exited by SIGKILL".
+          if (abortReason !== undefined) {
+            reject(new Error(`smoke: plugin load failed: ${abortReason}`));
+            return;
+          }
           if (code === 0) resolve();
           else
             reject(
@@ -463,16 +497,18 @@ function stopGateway(): Promise<void> {
     // deadline is a backstop: a group that somehow survives SIGKILL must not
     // leave the operator's shell hanging with no exit code.
     let reported = false;
-    const report = () => {
+    let deadline: NodeJS.Timeout | undefined;
+    const report = (forced: boolean) => {
       if (reported) return;
       reported = true;
-      if (child.exitCode === null && child.signalCode === null) {
-        process.stderr.write("smoke: the isolated Gateway is still running after SIGKILL; giving up on it\n");
+      if (deadline !== undefined) clearTimeout(deadline);
+      if (forced && child.exitCode === null && child.signalCode === null) {
+        process.stderr.write("smoke: the isolated Gateway survived SIGKILL; giving up waiting for it\n");
       }
       resolve();
     };
-    killGroup(child, report);
-    setTimeout(report, GATEWAY_STOP_DEADLINE_MS);
+    killGroup(child, () => report(false));
+    deadline = setTimeout(() => report(true), GATEWAY_STOP_DEADLINE_MS);
   });
   gatewayStops.add(stopped);
   void stopped.then(() => gatewayStops.delete(stopped));
@@ -494,9 +530,11 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
-async function waitForReady(logPath: string): Promise<void> {
+async function waitForReady(logPath: string, spawnFailure: () => string | undefined): Promise<void> {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     if (interrupted) fail("plugin load", `interrupted by ${interrupted} while waiting for the isolated Gateway`);
+    const spawnError = spawnFailure();
+    if (spawnError) fail("plugin load", spawnError);
     const log = readFileSync(logPath, "utf8");
     const trouble = log.split("\n").filter((line) => /failed during register|refusing|failed to load plugin/i.test(line));
     if (trouble.length) fail("plugin load", trouble.slice(0, 3).join(" | ").slice(0, 500));
@@ -665,8 +703,14 @@ async function main(): Promise<void> {
   });
   // Without this, a spawn failure is an uncaught exception: a stack trace, and
   // the cleanup below never runs.
-  gateway.on("error", (error) => fail("plugin load", `could not start the isolated Gateway: ${error.message}`));
-  await waitForReady(logPath);
+  // Record the failure rather than throwing from the handler: throwing inside an
+  // event emission is an uncaught exception, which prints a stack trace and
+  // skips the cleanup that removes the temp state. waitForReady reports it.
+  let spawnFailure: string | undefined;
+  gateway.on("error", (error) => {
+    spawnFailure = `could not start the isolated Gateway: ${error.message}`;
+  });
+  await waitForReady(logPath, () => spawnFailure);
   note("isolated Gateway ready", "plugin load");
 
   const call = async (method: string, params: unknown, step: Step): Promise<Record<string, unknown>> => {

@@ -124,8 +124,9 @@ install. A cancelled run never reports success: every step boundary checks for
 an interrupt, and every child process the smoke starts — host calls and the
 staged `npm install` — is async, gets a closed stdin, and is bounded by a
 timeout. Children run in their own process group and the smoke takes the whole
-group down, escalating until it is gone, so a host that ignores SIGTERM or
-leaves a background child behind cannot outlive the run. What it does not yet
+group down, escalating until it is gone, so a host that ignores SIGTERM cannot
+outlive the run; the group is also swept after a normal exit, so a host that
+leaves a background child behind does not orphan it. What it does not yet
 prove: the scheduler step is a host liveness probe, the store step only checks
 the plugin state dir is writable and that no file naming this plugin appeared
 outside it, and the update step cannot exercise a git refresh because the smoke
