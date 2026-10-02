@@ -383,11 +383,12 @@ async function freePort(): Promise<number> {
 }
 
 /** The files a git install would have, so the smoke exercises the shipped shape. */
-const SHIPPED = ["package.json", "openclaw.plugin.json", "dist", "src", "README.md", "FAQ.md", "LICENSE"];
+const SHIPPED = ["package.json", "package-lock.json", "openclaw.plugin.json", "dist", "src", "README.md", "FAQ.md", "LICENSE"];
 
 /**
  * Copies the shipping files into a fresh directory and installs the one runtime
- * dependency. `openclaw` is deliberately left out: the host supplies it, and
+ * dependency from the committed lockfile. `npm ci` fails when the lockfile is
+ * missing or out of step with package.json. `openclaw` is deliberately left out: the host supplies it, and
  * nesting it inside the plugin is what the install step rejects.
  */
 async function stagePlugin(target: string): Promise<void> {
@@ -405,7 +406,7 @@ async function stagePlugin(target: string): Promise<void> {
   // blocked the event loop, so a Ctrl-C during it was not delivered until it
   // returned, and a stalled install could hang the run with no way out.
   await new Promise<void>((resolve, reject) => {
-    const child = spawn("npm", ["install", "--omit=dev", "--no-audit", "--no-fund", "--prefix", target], {
+    const child = spawn("npm", ["ci", "--omit=dev", "--no-audit", "--no-fund", "--prefix", target], {
       env: process.env,
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,
@@ -440,15 +441,15 @@ async function stagePlugin(target: string): Promise<void> {
       );
       killGroup(child, () => settle(() => reject(new Error(`smoke: plugin load failed: ${detail}`))));
     };
-    const onSignal = () => abort(`interrupted by ${interrupted ?? "signal"} during npm install`);
+    const onSignal = () => abort(`interrupted by ${interrupted ?? "signal"} during npm ci`);
     const timer = setTimeout(
-      () => abort(`npm install timed out after ${HOST_CALL_TIMEOUT_MS}ms`),
+      () => abort(`npm ci timed out after ${HOST_CALL_TIMEOUT_MS}ms`),
       HOST_CALL_TIMEOUT_MS,
     );
     timer.unref();
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
-    child.on("error", (error) => settle(() => reject(new Error(`smoke: plugin load failed: could not run npm install: ${error.message}`))));
+    child.on("error", (error) => settle(() => reject(new Error(`smoke: plugin load failed: could not run npm ci: ${error.message}`))));
     child.on("exit", (code) => {
       // Sweep the group on success too, for the same reason oc() does.
       killGroup(child);
@@ -463,7 +464,7 @@ async function stagePlugin(target: string): Promise<void> {
           else
             reject(
               new Error(
-                `smoke: plugin load failed: npm install exited ${
+                `smoke: plugin load failed: npm ci exited ${
                   code === null ? `by ${child.signalCode ?? "signal"}` : `with exit code ${code}`
                 }${stderr.trim() ? `: ${stderr.trim().slice(0, 500)}` : ""}`,
               ),

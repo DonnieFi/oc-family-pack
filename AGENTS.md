@@ -108,8 +108,12 @@ close with a reason instead of a commit.
 `npm run typecheck`, `npm test`, then `openclaw plugins build`,
 `openclaw plugins validate`, and `openclaw plugins build --check` once the
 feature-plugin build is in place. `npm run check` is the whole set plus the
-`dist/` staleness check. Tests assert literal values against
-synthetic fixtures in `src/fixtures/`.
+`dist/` staleness check. Config schema drift fails there too: the manifest
+holds the schema, and `openclaw plugins build --check` fails when it no longer
+matches `src/config.ts`. Tests assert literal values against synthetic fixtures
+in `src/fixtures/`. `package-lock.json` is committed so a git install resolves
+the pinned `typebox`; the smoke stages its install with `npm ci`, which fails
+when the lockfile is missing or out of step with `package.json`.
 
 Plugin APIs are experimental, so the plugin pins a tested host range rather
 than claiming to work everywhere. After every `openclaw update` on a host,
@@ -130,11 +134,11 @@ timeout. Children run in their own process group and the smoke takes the whole
 group down, escalating until it is gone, so a host that ignores SIGTERM cannot
 outlive the run; the group is also swept after a normal exit, so a host that
 leaves a background child behind does not orphan it. What it does not yet
-prove: the scheduler step is a host liveness probe, the store step only checks
-the plugin state dir is writable and that no file naming this plugin appeared
-outside it, and the update step cannot exercise a git refresh because the smoke
-installs from a local copy. No plugin code writes state or registers jobs until
-s5k.19 and the briefs epic.
+prove: the scheduler step is a host liveness probe, and the update step cannot
+exercise a git refresh because the smoke installs from a local copy. The store
+step opens the real database and checks its modes, that `0001-initial` survives
+a restart, a forced reinstall and update, and that a store which cannot open
+leaves the Gateway serving. No plugin code registers jobs until the briefs epic.
 
 Two builds of the same OpenClaw version can disagree on the Control UI bundle
 hash, because the difference is only in minifier identifier names. So `dist/`

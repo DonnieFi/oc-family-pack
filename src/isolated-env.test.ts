@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { isolatedGatewayEnv } from "../scripts/isolated-env.ts";
 
@@ -35,4 +36,22 @@ test("caller OpenClaw overrides do not reach the isolated Gateway", () => {
   );
   assert.equal(parent.OPENCLAW_WORKSPACE_DIR, "/operator/state");
   assert.equal(parent.PI_CODING_AGENT_DIR, "/operator/agent");
+});
+
+test("the smoke hands the isolated env to every Gateway call", () => {
+  const smoke = readFileSync(new URL("../scripts/smoke.ts", import.meta.url), "utf8");
+  assert.equal(
+    smoke.match(/const env = isolatedGatewayEnv\(process\.env, \{ stateDir, configPath \}\);/g)?.length,
+    1,
+  );
+  const boots = [...smoke.matchAll(/await bootGateway\(([^,]+),/g)].map((match) => match[1]);
+  assert.ok(boots.length > 0);
+  assert.deepEqual(boots.filter((arg) => arg !== "env"), []);
+  // Host calls get env too, except the version probe, which runs before the temp dir exists.
+  const calls = [...smoke.matchAll(/await oc\(\[([^\]]*)\],\s*([^,)]+)/g)].map((match) => ({ args: match[1], env: match[2] }));
+  assert.ok(calls.length > 0);
+  assert.deepEqual(
+    calls.filter((call) => call.env !== "env" && call.args !== '"--version"'),
+    [],
+  );
 });

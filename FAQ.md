@@ -46,7 +46,9 @@ Calendar events are read by gog on your Gateway host and rendered in your
 Control UI. Each page load reads the week again. The plugin also keeps a SQLite
 database on the Gateway host at
 `$OPENCLAW_STATE_DIR/plugins/oc-family-pack/oc-family-pack.sqlite`. When
-`OPENCLAW_STATE_DIR` is unset, that path is under `~/.openclaw`. The only
+`OPENCLAW_STATE_DIR` is unset, that path is under `~/.openclaw`. Right now it only
+records which updates have run. Features that save family data will add their
+own tables, and this answer will list what each one keeps. The only
 outside request the plugin makes is the Environment Canada weather lookup.
 That lookup sends a search box around your configured coordinates.
 The page loads no fonts, scripts, or images from other sites.
@@ -78,8 +80,9 @@ planned, and they will be explicit actions.
 
 ## Who can see the Family page?
 
-Anyone signed in to the Control UI with at least `operator.read`, once custom
-plugin UI is on, currently sees the whole household week. Per-person filtering
-(parents see every calendar; kids see shared, school, and their own) is the
-planned server check against the signed-in client. The Chat with strip uses
-that person's own agent list, so it only shows agents they can already open.
+Everyone signed in to the Control UI with at least `operator.read`, once
+custom plugin UI is on, sees every configured calendar. The member chips only
+filter the view; they do not hide anyone's events from anyone. Roles don't
+limit what anyone can see. If a calendar should stay
+private, leave it out of the config. The Chat with strip uses that person's
+own agent list, so it only shows agents they can already open.

@@ -139,7 +139,9 @@ Each family operation is defined once and shared by the page and the agent tools
 
 Everything runs on your own OpenClaw Gateway. Calendar data is read through your local `gog` sign-in, weather requests send only your coordinates to Environment Canada, and nothing is sent to a third-party service by this plugin.
 
-The plugin keeps its own SQLite database on the Gateway host, under `plugins/oc-family-pack/` in the OpenClaw state directory. Uninstall removes the plugin config and the installed code, and leaves that database in place. To delete it after uninstall:
+Everyone signed in to the Control UI sees every configured calendar. The member chips only filter the view, so leave out any calendar that should stay private.
+
+The plugin keeps its own SQLite database (today it holds only update records) on the Gateway host, under `plugins/oc-family-pack/` in the OpenClaw state directory. Uninstall removes the plugin config and the installed code, and leaves that database in place. To delete it after uninstall:
 
 ```bash
 rm -rf "${OPENCLAW_STATE_DIR:-$HOME/.openclaw}/plugins/oc-family-pack"

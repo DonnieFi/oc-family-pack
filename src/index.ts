@@ -42,9 +42,11 @@ const plugin = defineFeaturePlugin({
   },
 });
 
-// defineFeaturePlugin (openclaw 2026.9.7) has no configSchema option and publishes a strict
-// empty schema, which `openclaw plugins build` writes into the manifest the host validates
-// config against. Delete this once the SDK accepts configSchema.
+// defineFeaturePlugin (openclaw 2026.9.7) takes no configSchema option, and the
+// plugin it returns exposes configSchema as a getter with no setter, so assigning
+// it throws in this module. The tool metadata is what `openclaw plugins build`
+// writes into the manifest, so the real schema goes there. Tracked upstream in
+// s5k.31.2; delete this once the SDK accepts configSchema.
 const metadata = getToolPluginMetadata(plugin);
 if (!metadata) {
   throw new Error("oc-family-pack: feature plugin metadata is missing");
