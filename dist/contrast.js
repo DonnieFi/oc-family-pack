@@ -71,7 +71,7 @@ function formatOklch(color) {
     return `oklch(${color.l.toFixed(4)} ${color.c.toFixed(4)} ${color.h.toFixed(2)})`;
 }
 /** Mix `color` toward `ink` in oklch, the smallest step that reaches `minRatio` on `background`. */
-export function mixTowardInk(color, ink, background, minRatio = 3) {
+export function mixTowardInk(color, ink, background, minRatio = 3.1) {
     const source = toOklch(color);
     const target = toOklch(ink);
     for (let step = 0; step <= 1000; step += 1) {

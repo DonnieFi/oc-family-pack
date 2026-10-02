@@ -91,6 +91,7 @@ function mountPage(options: {
   let requests = 0;
   let creates = 0;
   let opens: string[] = [];
+  let sessionDisposes = 0;
   const host = {
     apiVersion: 1,
     pluginId: "oc-family-pack",
@@ -124,7 +125,12 @@ function mountPage(options: {
       refresh: async () => {},
       observe: (_query: unknown, listener: Listen) => {
         options.observe?.(listener);
-        return { dispose() {}, refresh: async () => {} };
+        return {
+          dispose() {
+            sessionDisposes += 1;
+          },
+          refresh: async () => {},
+        };
       },
       open: (session: { sessionKey: string }) => {
         opens.push(session.sessionKey);
@@ -163,12 +169,23 @@ function mountPage(options: {
     container,
     signal,
     view,
-    counts: () => ({ requests, creates, opens }),
+    counts: () => ({ requests, creates, opens, sessionDisposes }),
   };
 }
 
 function dayTabs(container: ParentNode) {
   return [...container.querySelectorAll<HTMLButtonElement>(".ocfp-day-tab")];
+}
+
+function declaredColor(css: string, selector: string): string | undefined {
+  for (const block of css.split("}")) {
+    const [head, body] = block.split("{");
+    if (!head || !body) continue;
+    const selectors = head.split(",").map((part) => part.trim());
+    if (!selectors.includes(selector)) continue;
+    return /color:\s*([^;]+)/.exec(body)?.[1]?.trim();
+  }
+  return undefined;
 }
 
 describe("family page", { concurrency: 1 }, () => {
@@ -205,13 +222,26 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(today?.getAttribute("aria-pressed"), "false");
   });
 
-  test("light mode mixes a member colour toward ink until it clears 3:1", async () => {
+  test("light mode mixes a member colour toward ink until it clears 3.1:1", async () => {
     const page = mountPage({ mode: "light" });
     await flush();
     const alex = page.container.querySelector<HTMLElement>("[data-event-id='e-alex']");
     const shared = page.container.querySelector<HTMLElement>("[data-event-id='e-family']");
-    assert.equal(alex?.style.getPropertyValue("--ocfp-event"), "oklch(0.6606 0.1239 224.11)");
+    assert.equal(alex?.style.getPropertyValue("--ocfp-event"), "oklch(0.6509 0.1212 220.72)");
     assert.equal(shared?.style.getPropertyValue("--ocfp-event"), "var(--family-neutral)");
+  });
+
+  test("a dimmed event title uses the muted token", async () => {
+    const page = mountPage({});
+    await flush();
+    const sam = [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-chip")].find((chip) => chip.textContent?.startsWith("Sam"));
+    assert.ok(sam);
+    sam.click();
+    const alex = page.container.querySelector("[data-event-id='e-alex']");
+    const title = alex?.querySelector(".ocfp-event-title");
+    assert.equal(alex?.classList.contains("is-dimmed"), true);
+    assert.equal(title?.textContent, "Dentist");
+    assert.equal(declaredColor(readFileSync(new URL("./control-ui.css", import.meta.url), "utf8"), ".ocfp-event.is-dimmed .ocfp-event-title"), "var(--muted)");
   });
 
   test("dark mode keeps a member colour that already clears 3:1", async () => {
@@ -331,9 +361,54 @@ describe("family page", { concurrency: 1 }, () => {
     await flush();
     assert.deepEqual(page.counts().opens, []);
     assert.equal(page.counts().creates, 0);
+    assert.equal(page.counts().sessionDisposes, 1);
     assert.equal(button.disabled, false);
     assert.equal(page.container.querySelector(".ocfp-chat-error-title")?.textContent, "Couldn't open the chat.");
     assert.equal(page.container.querySelector(".ocfp-muted-reason")?.textContent, "timed out");
+  });
+
+  test("a synchronous observe result settles the lookup once and a later callback does nothing", async () => {
+    const finals = [
+      {
+        first: { result: { sessions: [{ key: "main-session", agentId: "guide", isMain: true } as never] }, loading: false, error: null },
+        opens: ["main-session"],
+        reason: null,
+      },
+      {
+        first: { result: null, loading: false, error: "session list failed" },
+        opens: [],
+        reason: "session list failed",
+      },
+    ] as const;
+    for (const final of finals) {
+      let listener: Listen = () => {};
+      const page = mountPage({
+        observe: (next) => {
+          listener = next;
+          next(final.first);
+        },
+      });
+      await flush();
+      const button = page.container.querySelector<HTMLButtonElement>("button.ocfp-agent");
+      assert.ok(button);
+      button.click();
+      await flush();
+      assert.deepEqual(page.counts().opens, [...final.opens]);
+      assert.equal(page.counts().creates, 0);
+      assert.equal(page.counts().sessionDisposes, 1);
+      assert.equal(page.container.querySelector(".ocfp-muted-reason")?.textContent ?? null, final.reason);
+      listener({
+        result: { sessions: [{ key: "late-session", agentId: "guide", isMain: true } as never] },
+        loading: false,
+        error: null,
+      });
+      await flush();
+      assert.deepEqual(page.counts().opens, [...final.opens]);
+      assert.equal(page.counts().creates, 0);
+      assert.equal(page.counts().sessionDisposes, 1);
+      assert.equal(page.container.querySelector(".ocfp-muted-reason")?.textContent ?? null, final.reason);
+      assert.equal(button.disabled, false);
+    }
   });
 
   test("the phone day list does not repeat the event gap", () => {

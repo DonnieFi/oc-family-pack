@@ -92,7 +92,7 @@ export function mixTowardInk(
   color: string,
   ink: string,
   background: string,
-  minRatio = 3,
+  minRatio = 3.1,
 ): { inkPercent: number; ratio: number; color: string } {
   const source = toOklch(color);
   const target = toOklch(ink);

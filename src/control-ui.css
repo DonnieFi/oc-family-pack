@@ -526,10 +526,7 @@
   color: var(--muted);
 }
 
-.ocfp-event.is-dimmed .ocfp-event-title {
-  color: var(--text-strong);
-}
-
+.ocfp-event.is-dimmed .ocfp-event-title,
 .ocfp-event.is-dimmed .ocfp-event-meta,
 .ocfp-event.is-dimmed .ocfp-event-location,
 .ocfp-event.is-dimmed .ocfp-chip-role {

@@ -538,39 +538,36 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     const listed = host.sessions.rows.find((row) => row.agentId === agentId && row.isMain);
     if (listed) return Promise.resolve(listed.key);
     return new Promise((resolve, reject) => {
-      let settled = false;
       let subscription: ControlUiSessionListSubscription | undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const stop = () => {
         clearTimeout(timer);
+        timer = undefined;
         lifetime.removeEventListener("abort", onAbort);
         subscription?.dispose();
       };
       const succeed = (key: string | undefined) => {
-        if (settled) return;
-        settled = true;
         stop();
         resolve(key);
       };
       const fail = (error: Error) => {
-        if (settled) return;
-        settled = true;
         stop();
         reject(error);
       };
       const onAbort = () => succeed(undefined);
-      const timer = setTimeout(() => fail(new Error("timed out")), 10_000);
+      timer = setTimeout(() => fail(new Error("timed out")), 10_000);
       if (!alive()) {
         succeed(undefined);
         return;
       }
       lifetime.addEventListener("abort", onAbort, { once: true });
       subscription = host.sessions.observe({ agentId, limit: 200 }, ({ result, loading, error }) => {
-        if (settled || !alive()) return;
+        if (timer === undefined || !alive()) return;
         if (loading || (!result && !error)) return;
         if (error) fail(new Error(error));
         else succeed(result?.sessions.find((row) => row.isMain)?.key);
       });
-      if (settled) subscription.dispose();
+      if (timer === undefined) subscription.dispose();
     });
   }
 
