@@ -2,10 +2,10 @@ import type { CalendarConfig, FamilyEvent, MemberConfig } from "./types.ts";
 import { addDays, localTime, type Week } from "./week.ts";
 
 export const DEMO_MEMBERS: MemberConfig[] = [
-  { profileId: "alex", displayName: "Alex", role: "parent" },
-  { profileId: "sam", displayName: "Sam", role: "parent" },
-  { profileId: "riley", displayName: "Riley", role: "kid" },
-  { profileId: "jordan", displayName: "Jordan", role: "kid" },
+  { profileId: "alex", displayName: "Alex", role: "parent", devices: [] },
+  { profileId: "sam", displayName: "Sam", role: "parent", devices: [] },
+  { profileId: "riley", displayName: "Riley", role: "kid", devices: [] },
+  { profileId: "jordan", displayName: "Jordan", role: "kid", devices: [] },
 ];
 
 const CALENDARS = {

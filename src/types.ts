@@ -4,11 +4,23 @@ import type { CalendarRefSchema, FamilyEventSchema, WeatherCardSchema, WeekPaylo
 export type MemberRole = "parent" | "kid" | "guest";
 export type CalendarKind = "personal" | "shared" | "school";
 
+/** A device signal. MACs are already lowercase and colon-separated; they are not a person identity. */
+export type MemberDevice = {
+  label: string;
+  primaryMac: string;
+  aliasMacs: string[];
+  source: string;
+};
+
 export type MemberConfig = {
   profileId: string;
   displayName: string;
   color?: string;
   role: MemberRole;
+  /** Discord sender id. Stays in config; never copied onto the week payload. */
+  discordId?: string;
+  /** Normalized at parse. Stays in config; never copied onto the week payload. */
+  devices: MemberDevice[];
 };
 
 export type CalendarConfig = {

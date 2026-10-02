@@ -143,6 +143,50 @@
               "type": "string",
               "maxLength": 100,
               "pattern": "^(?:#[0-9a-fA-F]{3,8}|(?:rgb|rgba|hsl|hsla|oklch|oklab)\\([0-9.,%\\s/-]+\\)|[a-zA-Z]+)$"
+            },
+            "discordId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "devices": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "label",
+                  "primaryMac",
+                  "source"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "primaryMac": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "aliasMacs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    },
+                    "maxItems": 32
+                  },
+                  "source": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "additionalProperties": false
+              },
+              "maxItems": 32
             }
           },
           "additionalProperties": false
