@@ -38,6 +38,7 @@ test("the contract registers exactly the three read queries", () => {
 
 test("registered queries are operator.read session actions and there is no command adapter", () => {
   const actions: { id: string; requiredScopes: string[] }[] = [];
+  const cli: string[] = [];
   let commands = 0;
   plugin.register({
     id: contract.pluginId,
@@ -48,6 +49,18 @@ test("registered queries are operator.read session actions and there is no comma
     registerCommand() {
       commands += 1;
     },
+    registerCli(registrar: (ctx: { program: { command: (name: string) => unknown } }) => void) {
+      const node = {
+        description: () => node,
+        command: (name: string) => {
+          cli.push(name);
+          return node;
+        },
+        option: () => node,
+        action: () => node,
+      };
+      registrar({ program: { command: (name: string) => { cli.push(name); return node; } } });
+    },
   } as unknown as Parameters<typeof plugin.register>[0]);
   assert.deepEqual(actions, [
     { id: "family.members", requiredScopes: ["operator.read"] },
@@ -55,6 +68,7 @@ test("registered queries are operator.read session actions and there is no comma
     { id: "family.week", requiredScopes: ["operator.read"] },
   ]);
   assert.equal(commands, 0);
+  assert.deepEqual(cli, ["family", "gog"]);
 });
 
 test("calendar-changed matches the feature event id pattern and is not registered", () => {

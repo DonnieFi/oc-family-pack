@@ -2,8 +2,18 @@ import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { ConfigSchema, parseConfig } from "./config.js";
 import { contract } from "./contract.js";
+import { execGog } from "./calendar-gog.js";
+import { registerFamilyCli } from "./gog-setup.js";
 import { familyHandlers } from "./handlers.js";
 import { openFamilyStore } from "./store.js";
+function configuredGogPath(raw) {
+    try {
+        return parseConfig(raw).gogPath;
+    }
+    catch {
+        return "gog";
+    }
+}
 const plugin = defineFeaturePlugin({
     contract,
     name: "Family",
@@ -12,6 +22,9 @@ const plugin = defineFeaturePlugin({
     // Family commands are not registered here. The contract commands adapter always
     // sets requiredScopes, which the shipped command gate then limits to the owner.
     setup(api) {
+        api.registerCli(({ program }) => {
+            registerFamilyCli(program, { run: execGog(), gogPath: configuredGogPath(api.pluginConfig) });
+        });
         // Discovery loads the plugin without starting it. The worker belongs to the
         // service start, which the host only calls in a live Gateway.
         if (api.registrationMode === "full") {

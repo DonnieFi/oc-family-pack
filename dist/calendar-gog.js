@@ -4,7 +4,7 @@ import { EVENT_ID_MAX, LINK_MAX, LOCATION_MAX, MESSAGE_MAX, TITLE_MAX } from "./
 import { addDays, parseDate, startOfLocalDay } from "./week.js";
 const execFileAsync = promisify(execFile);
 const GOG_TIMEOUT_MS = 20_000;
-export const GOG_SETUP_HINT = "Install gog, run `gog auth add you@example.com --services calendar`, then list calendar IDs with `gog calendar calendars`.";
+export const GOG_SETUP_HINT = "Run `openclaw family gog` and follow the command it prints.";
 /** gog 0.39's wording for a missing account, OAuth client, or usable token; anything else is a per-calendar failure. */
 const GOG_AUTH_FAILURE = /missing --account|OAuth client credentials missing|No OAuth client credentials stored|\(401 authError\)|invalid_grant|no TTY available for keyring/;
 const UNREADABLE = "unreadable output";

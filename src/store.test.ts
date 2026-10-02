@@ -317,6 +317,7 @@ test("the family-store service opens the database, and discovery does not regist
       discovery.push(service);
     },
     registerSessionAction() {},
+    registerCli() {},
   });
   assert.deepEqual(discovery, []);
 
@@ -334,6 +335,7 @@ test("the family-store service opens the database, and discovery does not regist
       services.push(service);
     },
     registerSessionAction() {},
+    registerCli() {},
   });
   const service = services.find((entry) => entry.id === "family-store");
   assert.ok(service);

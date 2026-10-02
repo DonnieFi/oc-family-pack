@@ -190,7 +190,7 @@ test("a missing gog binary or an unauthorized gog reads as not set up", async ()
   );
   const unauthorized = await readGogCalendars(familyConfig(signedOut, [{ id: "cal-kid", label: "Kid" }]), week);
   const hint =
-    "Install gog, run `gog auth add you@example.com --services calendar`, then list calendar IDs with `gog calendar calendars`.";
+    "Run `openclaw family gog` and follow the command it prints.";
   assert.deepEqual([missing, unauthorized], [
     { status: "unconfigured", hint },
     { status: "unconfigured", hint },
@@ -263,7 +263,7 @@ test("one calendar's auth failure warns by name and the others still render; eve
   assert.equal(JSON.stringify(mixed).includes("teacher@example.com"), false);
   assert.equal(JSON.stringify(mixed).includes("invalid_grant"), false);
   const hint =
-    "Install gog, run `gog auth add you@example.com --services calendar`, then list calendar IDs with `gog calendar calendars`.";
+    "Run `openclaw family gog` and follow the command it prints.";
   const signedOut = fakeGog("all-auth", "echo 'invalid_grant for teacher@example.com' >&2; exit 1");
   const allAuth = await readGogCalendars(
     familyConfig(signedOut, [
