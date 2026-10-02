@@ -104,8 +104,31 @@ close with a reason instead of a commit.
 `package.json` owns the commands. Typical loop: `npm install`,
 `npm run typecheck`, `npm test`, then `openclaw plugins build`,
 `openclaw plugins validate`, and `openclaw plugins build --check` once the
-feature-plugin build is in place. Tests assert literal values against
+feature-plugin build is in place. `npm run check` is the whole set plus the
+`dist/` staleness check. Tests assert literal values against
 synthetic fixtures in `src/fixtures/`.
+
+Plugin APIs are experimental, so the plugin pins a tested host range rather
+than claiming to work everywhere. After every `openclaw update` on a host,
+run `npm run smoke` (bead `s5k.31.1`). It boots an isolated Gateway on the
+host you actually run — not the pinned devDependency, which `npm run` would
+otherwise put first on `PATH` — and fails with the name of the broken step. It
+never touches the live Gateway or the real state dir.
+
+What it proves: the plugin loads, the manifest validates, a real `family.week`
+query matches the contract schema, the page registers with its built assets
+present in the installed copy, the plugin's host-payload limits still agree
+with the host's own counter, and the update path resolves the install. What it
+does not yet prove: the scheduler step is a host liveness probe, and the store
+step only checks the plugin state dir is writable and nothing leaked outside
+it, because no plugin code writes state or registers jobs until s5k.19 and
+the briefs epic.
+
+The smoke installs from a clean copy of the tree, because a dev `node_modules`
+holding a real `openclaw` directory makes the host count its 64 bundled
+extensions as children of our install record and refuse the install. Bump
+`build.openclawVersion` and `install.minHostVersion` together when the host
+moves.
 
 ## Live proof
 

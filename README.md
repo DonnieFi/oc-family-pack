@@ -52,7 +52,7 @@ Briefs stay short on purpose. Routine items fold into a single line so only the 
 
 | Requirement | Why |
 | --- | --- |
-| OpenClaw `2026.9.7` or newer | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`) |
+| OpenClaw `2026.9.7` or newer | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Tested on `2026.9.7`; see [Development](#development) for the post-update smoke. |
 | Node.js `24.16+` | Matches the OpenClaw runtime |
 | [`gog`](https://github.com/openclaw/gogcli) with Calendar access | Reads and writes Google Calendar using your existing sign-in |
 | **Custom plugin UI** lab enabled | Required for native pages from non-bundled plugins |
@@ -146,11 +146,18 @@ npm install
 npm run build      # backend and Control UI bundle
 npm run validate   # manifest, schema, and stale-build checks
 npm test
+npm run check      # everything above, plus the built dist/ staleness check
 ```
 
 After browser-only changes, rebuild and use **Plugins → Advanced → Customize UI → Reload plugin UI**. Backend changes need a plugin reload.
 
-OpenClaw plugin APIs are experimental. This plugin pins and tests against the host version above.
+OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Tested on OpenClaw `2026.9.7`.** After you run `openclaw update`, run the smoke to check this plugin against your new host:
+
+```bash
+npm run smoke
+```
+
+It boots a throwaway Gateway on a temp state dir and a free loopback port, never touching your running one, then checks the plugin loads, the manifest validates, a real `family.week` query matches the contract schema, the page registers, and the plugin's host-payload limits still agree with the host's own. A break fails with the name of the step that broke. It tests the OpenClaw build you actually run, not the pinned devDependency; set `OCFP_SMOKE_HOST_BIN` to point it at a specific binary, or `OCFP_SMOKE_KEEP=1` to keep the throwaway state for inspection.
 
 ## Roadmap
 
