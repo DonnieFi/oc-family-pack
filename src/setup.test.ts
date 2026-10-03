@@ -140,3 +140,84 @@ test("the access command keeps everyone already in allowUsers, with the role the
   // sam keeps parent from his scopes; pat has none, so stays the guest access made him.
   assert.match(result.text, /^`openclaw family access lan --parent alex --guest pat --kid riley --parent sam`$/m);
 });
+
+const SNOWFLAKE = "100000000000000001";
+
+function lanGateway(extra: Record<string, unknown> = {}) {
+  const lan = JSON.parse(/^Gateway config:\n(\{[\s\S]*?^\})$/m.exec(planAccess("lan", { parent: ["alex"] }, {}).text)?.[1] ?? "{}").gateway;
+  return { ...lan, controlUi: { ...lan.controlUi, allowedOrigins: ["https://192.168.1.20"] }, auth: { ...lan.auth, password: "x" }, ...extra };
+}
+
+test("a Discord ID changes only that person's discordId and keeps everything else as written", () => {
+  const result = planSetup(host(complete), { discord: [`alex=${SNOWFLAKE}`] }, READY, "UTC");
+  const config = patchOf(result.text).plugins.entries["oc-family-pack"].config;
+  assert.deepEqual(Object.keys(config), ["members"]);
+  const [alex, ...rest] = config.members as Record<string, unknown>[];
+  assert.equal(rest.length, 0);
+  assert.equal(JSON.stringify(alex), JSON.stringify({ ...ALEX, discordId: SNOWFLAKE }));
+  // Solo has no per-person profiles, so there is nothing to link.
+  assert.equal(result.text.includes("users.linkChannelIdentity"), false);
+});
+
+test("a placeholder or a mention is refused before any patch is printed", () => {
+  for (const pair of ["alex=DISCORD_ID_alex", `alex=<@${SNOWFLAKE}>`, SNOWFLAKE, `=${SNOWFLAKE}`]) {
+    const result = planSetup(host(complete), { discord: [pair] }, READY, "UTC");
+    assert.equal(result.ok, false);
+    assert.equal(result.text, "Give each Discord ID as `--discord NAME=ID`. The ID is the number Copy User ID gives you, 17 to 20 digits long.");
+  }
+});
+
+test("a Discord ID needs a person in the family, which can be someone added in the same command", () => {
+  const stranger = planSetup(host(complete), { discord: [`riley=${SNOWFLAKE}`] }, READY, "UTC");
+  assert.equal(stranger.text, "`riley` isn't in the family yet. Add them with `--parent`, `--kid` or `--guest` in the same command.");
+  const added = planSetup(host(complete), { kid: ["riley"], discord: [`riley=${SNOWFLAKE}`] }, READY, "UTC");
+  const members = patchOf(added.text).plugins.entries["oc-family-pack"].config.members as Record<string, unknown>[];
+  assert.equal(JSON.stringify(members[0]), JSON.stringify(ALEX));
+  assert.deepEqual(members[1], { profileId: "riley", displayName: "Riley", role: "kid", discordId: SNOWFLAKE });
+});
+
+test("two people can't share a Discord ID, and an ID that's already set is no change", () => {
+  const withId = { ...complete, members: [{ ...ALEX, discordId: SNOWFLAKE }] };
+  const shared = planSetup(host(withId), { kid: ["riley"], discord: [`riley=${SNOWFLAKE}`] }, READY, "UTC");
+  assert.equal(shared.text, "alex and riley have the same Discord ID. Each person needs their own.");
+  const twice = planSetup(host(complete), { discord: [`alex=${SNOWFLAKE}`, `alex=100000000000000002`] }, READY, "UTC");
+  assert.equal(twice.text, "`alex` has more than one Discord ID. Give each person one.");
+  const same = planSetup(host(withId), { discord: [`alex=${SNOWFLAKE}`] }, READY, "UTC");
+  assert.match(same.text, /^No changes to make\.$/m);
+  assert.equal(same.text.includes(PATCH_INTRO), false);
+});
+
+test("in LAN mode the patch is followed by the link command, never a call", () => {
+  const result = planSetup(host(complete, lanGateway()), { discord: [`alex=${SNOWFLAKE}`] }, READY, "UTC");
+  assert.match(
+    result.text,
+    /^openclaw gateway call users\.linkChannelIdentity --params '\{"profileId":"PROFILE_alex","identity":\{"channelId":"discord","accountId":"default","senderId":"100000000000000001"\}\}'$/m,
+  );
+  assert.match(result.text, /^Replace each PROFILE_ placeholder with that person's profile id from `users\.list`\.$/m);
+  assert.ok(result.text.indexOf("}\n\nThen link") > result.text.indexOf(PATCH_INTRO), "the link comes after the patch, outside it");
+
+  const one = { ...host(complete, lanGateway()), channels: { discord: { accounts: { family: {} } } } };
+  assert.match(planSetup(one, { discord: [`alex=${SNOWFLAKE}`] }, READY, "UTC").text, /"accountId":"family"/);
+  const two = { ...host(complete, lanGateway()), channels: { discord: { accounts: { family: {}, work: {} } } } };
+  const placeholder = planSetup(two, { discord: [`alex=${SNOWFLAKE}`] }, READY, "UTC").text;
+  assert.match(placeholder, /"accountId":"ACCOUNT"/);
+  assert.match(placeholder, /^Replace ACCOUNT with the `channels\.discord\.accounts` entry the family uses\.$/m);
+});
+
+test("people without a Discord ID get the optional command, which never holds up setup", () => {
+  const riley = { profileId: "riley", displayName: "Riley", role: "kid" };
+  const result = planSetup(host({ ...complete, members: [{ ...ALEX, discordId: SNOWFLAKE }, riley] }), {}, READY, "UTC");
+  assert.equal(result.ok, true);
+  assert.match(result.text, /^`openclaw family setup --discord riley=DISCORD_ID_riley`\nOptional\. In Discord, turn on Developer Mode, then right-click the person and pick Copy User ID\.$/m);
+  assert.equal(checklist(result.text).length, 5, "Discord IDs are not a checklist line");
+  const everyone = planSetup(host({ ...complete, members: [{ ...ALEX, discordId: SNOWFLAKE }] }), {}, READY, "UTC");
+  assert.equal(everyone.text.includes("--discord"), false);
+});
+
+test("setup reads only pure modules: no Gateway, process, file or network imports", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("./setup.ts", import.meta.url), "utf8");
+  const imports = [...source.matchAll(/^import .* from "([^"]+)";$/gm)].map((match) => match[1]);
+  assert.deepEqual(imports.sort(), ["./access.ts", "./config.ts", "./gog-setup.ts", "./weather-ec.ts"]);
+  assert.match(source, /^import type \{ GogSetupPlan \} from "\.\/gog-setup\.ts";$/m);
+});

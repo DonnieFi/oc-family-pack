@@ -43,7 +43,7 @@ const HASH_STEP = "Run `caddy hash-password` once for each person and paste each
 const ROLES_INTRO = "Everyone starts as a guest who can only read. The role caps what someone can do, and `identityScopes` grants it. This block sets both.";
 const TOKEN_NOTE = "The shared Gateway token stops working in LAN mode. Keep the Gateway password, because `users.setRole` uses it.";
 const SET_ROLE_INTRO = "After each person signs in once, set their role:";
-const PROFILE_STEP = "Replace each PROFILE_ placeholder with that person's profile id from `users.list`.";
+export const PROFILE_STEP = "Replace each PROFILE_ placeholder with that person's profile id from `users.list`.";
 const BAD_USERNAME =
   "Usernames use lower-case letters, numbers, dots, dashes or underscores. Try `alex`, not `Alex Smith`.\nEach person sees their username as their name in the Control UI, so use what the family calls them.";
 

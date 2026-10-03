@@ -70,7 +70,7 @@ The repository ships its built `dist/`, so no build step is needed. `--accept-ca
 
 Calendar sign-in is `gog`, including on a headless Gateway. Run `openclaw family gog` and follow what it prints. A headless host takes two `gog auth add` commands: the first prints a URL, and the second exchanges the browser redirect (`openclaw family gog --auth-url '…'`). Repeat until it tells you to list calendars, then put those ids in the config below. The commands never pass `--readonly`.
 
-`openclaw family setup` shows what is left: access mode, time zone, location, members, and calendars, each marked Done or To do, then the next step. Add people with `--parent`, `--kid`, or `--guest`. It never writes config: it prints a members patch to check with `openclaw config patch --stdin --dry-run` and apply with `openclaw config patch --stdin`. People already in the config are kept as they are.
+`openclaw family setup` shows what is left: access mode, time zone, location, members, and calendars, each marked Done or To do, then the next step. Add people with `--parent`, `--kid`, or `--guest`. It never writes config: it prints a members patch to check with `openclaw config patch --stdin --dry-run` and apply with `openclaw config patch --stdin`. People already in the config are kept as they are. `--discord alex=ID` adds someone's Discord user ID the same way.
 
 To try it without calendars first, set `demo: true` (see below). Add your configuration, then enable the plugin:
 
@@ -131,7 +131,7 @@ Family Pack reuses what OpenClaw already owns instead of rebuilding it.
 | Need | Owned by |
 | --- | --- |
 | Who someone is on the page | Not built yet. Until then everyone signed in sees the same week. A later Gateway method will match `profileId` to the proxy username |
-| Who someone is in Discord | Not built yet. A later match will compare the roster Discord id to the sender |
+| Who someone is in Discord | The roster `discordId`, set with `openclaw family setup --discord NAME=ID`. In LAN mode setup also prints the `users.linkChannelIdentity` command that ties it to the person's Gateway profile |
 | Sign-in for each family member | [Multi-user Gateway](https://docs.openclaw.ai/concepts/multi-user). See [Household access](#household-access) |
 | Google Calendar access | `gog` |
 | Chat surfaces | Control UI chat and the Discord channel |

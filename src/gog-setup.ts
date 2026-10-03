@@ -308,7 +308,8 @@ export function registerFamilyCli(
     .option("--parent <name...>", "Parents to add to the family")
     .option("--kid <name...>", "Kids to add to the family")
     .option("--guest <name...>", "Guests to add to the family")
-    .action(async (opts: AccessOptions) => {
+    .option("--discord <name=id...>", "Discord user IDs, like alex=123456789012345678")
+    .action(async (opts: AccessOptions & { discord?: string[] }) => {
       const gog = await diagnoseGog(deps.run, deps.gogPath ? { gogPath: deps.gogPath } : {});
       const result = planSetup(
         deps.host,
@@ -316,6 +317,7 @@ export function registerFamilyCli(
           ...(opts.parent ? { parent: opts.parent } : {}),
           ...(opts.kid ? { kid: opts.kid } : {}),
           ...(opts.guest ? { guest: opts.guest } : {}),
+          ...(opts.discord ? { discord: opts.discord } : {}),
         },
         gog,
         deps.hostZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,

@@ -23,6 +23,7 @@ import { parseConfig } from "../src/config.ts";
 import { MAX_WEEK_EVENTS, contract } from "../src/contract.ts";
 import { buildWeekPayload, fitsHostLimits, jsonNodeCount } from "../src/payload.ts";
 import { planAccess } from "../src/access.ts";
+import { planSetup } from "../src/setup.ts";
 import { isolatedGatewayEnv } from "./isolated-env.ts";
 
 const ROOT = dirname(dirname(new URL(import.meta.url).pathname));
@@ -1174,6 +1175,24 @@ async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port:
     fail(step, `alex has no operator.write after users.setRole parent: ${JSON.stringify(scopesOf(alexAgain))}`);
   }
   note(`users.setRole made alex a parent: ${scopesOf(alexAgain).join(", ")}`, step);
+
+  // Send the link line setup prints for a Discord ID exactly as printed, with
+  // alex's real profile id in place of the placeholder.
+  const discordId = "100000000000000001";
+  const setupText = planSetup(
+    { gateway: config.gateway, plugins: { entries: { [PLUGIN_ID]: { config: { members: [{ profileId: "alex", displayName: "Alex", role: "parent" }] } } } } },
+    { discord: [`alex=${discordId}`] },
+    { status: "ready", command: "", message: "" },
+    "UTC",
+  ).text;
+  const linkLine = /^openclaw gateway call users\.linkChannelIdentity --params '(.*)'$/m.exec(setupText)?.[1];
+  if (!linkLine) fail(step, `setup printed no Discord link line in LAN mode:\n${setupText}`);
+  await cli("users.linkChannelIdentity", JSON.parse(linkLine.replace("PROFILE_alex", alexId)));
+  const links = ((await cli("users.listChannelIdentities", { profileId: alexId })) as { links?: { identity?: Record<string, string> }[] }).links ?? [];
+  if (!links.some((link) => link.identity?.channelId === "discord" && link.identity.senderId === discordId)) {
+    fail(step, `the printed link did not tie Discord ${discordId} to alex: ${JSON.stringify(links)}`);
+  }
+  note(`setup's printed link tied Discord ${discordId} to alex's profile (account ${links[0]?.identity?.accountId})`, step);
 
   const stranger = (await proxiedSession(port, "mallory", []))[0];
   // Her headers match alex's apart from the username. Pin the refusal so a

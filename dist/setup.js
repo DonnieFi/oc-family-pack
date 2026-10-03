@@ -1,9 +1,13 @@
 // Guided setup: what the Family page still needs, and the one next step.
 // Pure: reads the host config it is given and prints a config patch. Nothing
 // here writes config, stores a password, or calls the Gateway.
-import { detectAccess, outsideSignIn, people, ROLES, SCOPES } from "./access.js";
+import { detectAccess, outsideSignIn, people, PROFILE_STEP, ROLES, SCOPES } from "./access.js";
+import { DISCORD_ID } from "./config.js";
 import { WEATHER_SETUP_HINT } from "./weather-ec.js";
 const CONFIG_PATH = "plugins.entries.oc-family-pack.config";
+const DISCORD_HELP = "Optional. In Discord, turn on Developer Mode, then right-click the person and pick Copy User ID.";
+const BAD_DISCORD = "Give each Discord ID as `--discord NAME=ID`. The ID is the number Copy User ID gives you, 17 to 20 digits long.";
+const LINK_INTRO = "Then link each Discord ID to that person's profile, so the Gateway knows who's talking in Discord:";
 export const PATCH_INTRO = "Check it first with `openclaw config patch --stdin --dry-run`, then run it again without `--dry-run` to apply it.";
 function record(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value) ? value : {};
@@ -85,48 +89,122 @@ function steps(host, gog, hostZone) {
         { name: "Calendars", done: gog.status === "ready" && calendars.length > 0, next: "`openclaw family gog`" },
     ];
 }
+/** `NAME=ID` pairs from `--discord`, checked before anything is printed. */
+function discordIds(pairs) {
+    const ids = new Map();
+    for (const pair of pairs) {
+        const at = pair.indexOf("=");
+        const name = pair.slice(0, at).toLowerCase();
+        const id = pair.slice(at + 1);
+        if (at < 1 || !DISCORD_ID.test(id))
+            return { error: BAD_DISCORD };
+        if (ids.has(name))
+            return { error: `\`${name}\` has more than one Discord ID. Give each person one.` };
+        ids.set(name, id);
+    }
+    return { ids };
+}
 /**
  * New members go after the existing ones, which are copied exactly as written:
  * `config patch` replaces whole arrays, so leaving one out would delete it.
+ * A Discord ID changes only that person's `discordId`.
  */
-function membersPatch(existing, list) {
+function membersPatch(existing, list, ids) {
     const taken = new Set(existing.map(profileId));
     const skipped = list.filter((person) => taken.has(person.name)).map((person) => `${person.name} is already set up, so that entry was left as it is.`);
     const added = list
         .filter((person) => !taken.has(person.name))
-        .map((person) => ({ profileId: person.name, displayName: person.name[0]?.toUpperCase() + person.name.slice(1), role: person.role }));
-    if (added.length === 0)
+        .map((person) => ({
+        profileId: person.name,
+        displayName: person.name[0]?.toUpperCase() + person.name.slice(1),
+        role: person.role,
+        ...(ids.has(person.name) ? { discordId: ids.get(person.name) } : {}),
+    }));
+    const known = new Set([...taken, ...added.map((member) => member.profileId)]);
+    const stranger = [...ids.keys()].find((name) => !known.has(name));
+    if (stranger)
+        return { skipped, error: `\`${stranger}\` isn't in the family yet. Add them with \`--parent\`, \`--kid\` or \`--guest\` in the same command.` };
+    let changed = added.length;
+    const kept = existing.map((entry) => {
+        const id = ids.get(profileId(entry));
+        if (id === undefined || record(entry).discordId === id)
+            return entry;
+        changed += 1;
+        return { ...record(entry), discordId: id };
+    });
+    const members = [...kept, ...added];
+    // parseConfig refuses a shared id, so catch it here instead of in the patch.
+    const owners = new Map();
+    for (const member of members) {
+        const id = record(member).discordId;
+        if (typeof id !== "string")
+            continue;
+        const owner = owners.get(id);
+        if (owner)
+            return { skipped, error: `${owner} and ${profileId(member)} have the same Discord ID. Each person needs their own.` };
+        owners.set(id, profileId(member));
+    }
+    if (changed === 0)
         return { skipped };
-    const patch = { plugins: { entries: { "oc-family-pack": { config: { members: [...existing, ...added] } } } } };
+    const patch = { plugins: { entries: { "oc-family-pack": { config: { members } } } } };
     return { skipped, patch: JSON.stringify(patch, null, 2) };
+}
+/** The Discord account the family uses: the only one configured, or OpenClaw's default. */
+function discordAccount(host) {
+    const accounts = Object.keys(record(record(record(record(host).channels).discord).accounts));
+    if (accounts.length > 1)
+        return "ACCOUNT";
+    return accounts[0] ?? "default";
+}
+/** `users.linkChannelIdentity` params for one person. The smoke sends exactly these. */
+export function discordLink(profile, accountId, senderId) {
+    return { profileId: profile, identity: { channelId: "discord", accountId, senderId } };
+}
+function linkLines(host, ids) {
+    if (ids.size === 0 || detectAccess(record(host).gateway).mode !== "lan")
+        return [];
+    const account = discordAccount(host);
+    return [
+        "",
+        LINK_INTRO,
+        ...[...ids].map(([name, id]) => `openclaw gateway call users.linkChannelIdentity --params '${JSON.stringify(discordLink(`PROFILE_${name}`, account, id))}'`),
+        PROFILE_STEP,
+        ...(account === "ACCOUNT" ? ["Replace ACCOUNT with the `channels.discord.accounts` entry the family uses."] : []),
+    ];
+}
+/** Members without a Discord ID, as the optional command that adds them. */
+function discordHint(host) {
+    const members = familyConfig(host).members;
+    const missing = (Array.isArray(members) ? members : []).filter((member) => record(member).discordId === undefined).map(profileId);
+    if (missing.length === 0)
+        return [];
+    return ["", `\`openclaw family setup --discord ${missing.map((name) => `${name}=DISCORD_ID_${name}`).join(" ")}\``, DISCORD_HELP];
 }
 /** `openclaw family setup`: a Done or To do line per part, then the one next step. */
 export function planSetup(host, input, gog, hostZone) {
     const list = steps(host, gog, hostZone);
     const checklist = list.map((step) => `${step.name}: ${step.done ? "Done" : "To do"}`);
-    const asked = (input.parent ?? []).length + (input.kid ?? []).length + (input.guest ?? []).length > 0;
+    const named = (input.parent ?? []).length + (input.kid ?? []).length + (input.guest ?? []).length > 0;
+    const asked = named || (input.discord ?? []).length > 0;
     if (asked) {
-        const found = people(input);
+        const found = named ? people(input) : { list: [] };
         if ("error" in found)
             return { ok: false, text: found.error };
+        const parsed = discordIds(input.discord ?? []);
+        if ("error" in parsed)
+            return { ok: false, text: parsed.error };
         const existing = familyConfig(host).members;
-        const { skipped, patch } = membersPatch(Array.isArray(existing) ? existing : [], found.list);
+        const { skipped, patch, error } = membersPatch(Array.isArray(existing) ? existing : [], found.list, parsed.ids);
+        if (error)
+            return { ok: false, text: error };
         if (patch) {
-            return {
-                ok: false,
-                text: [
-                    ...skipped,
-                    PATCH_INTRO,
-                    patch,
-                    "",
-                    ...checklist,
-                ].join("\n"),
-            };
+            return { ok: false, text: [...skipped, PATCH_INTRO, patch, ...linkLines(host, parsed.ids), "", ...checklist].join("\n") };
         }
         checklist.unshift(...skipped, "No changes to make.", "");
     }
+    const optional = asked ? [] : discordHint(host);
     const next = list.find((step) => !step.done);
     if (!next)
-        return { ok: true, text: [...checklist, "", "Everything is set up."].join("\n") };
-    return { ok: false, text: [...checklist, "", `Next: ${next.next}`].join("\n") };
+        return { ok: true, text: [...checklist, ...optional, "", "Everything is set up."].join("\n") };
+    return { ok: false, text: [...checklist, ...optional, "", `Next: ${next.next}`].join("\n") };
 }
