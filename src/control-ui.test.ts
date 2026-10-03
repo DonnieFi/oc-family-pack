@@ -82,7 +82,8 @@ function mountPage(options: {
   mode?: "light" | "dark";
   canRead?: boolean;
   props?: Record<string, unknown>;
-  result?: { ok: true; result: WeekPayload } | { ok: false; error: string };
+  /** What the family.week Gateway method answers: the week, or an error it rejects with. */
+  result?: WeekPayload | Error;
   request?: () => Promise<unknown>;
   observe?: (listener: Listen) => void;
   create?: () => Promise<string | null>;
@@ -123,7 +124,8 @@ function mountPage(options: {
       requests += 1;
       calls.push(args);
       if (options.request) return options.request();
-      return Promise.resolve(options.result ?? { ok: true, result: week() });
+      const result = options.result ?? week();
+      return result instanceof Error ? Promise.reject(result) : Promise.resolve(result);
     },
     onEvent: () => () => {},
     subscribe: () => () => {},
@@ -271,7 +273,7 @@ describe("family page", { concurrency: 1 }, () => {
   });
 
   test("a failed load names the failure, offers Try again, and shows the raw error", async () => {
-    const page = mountPage({ result: { ok: false, error: "calendar backend down" } });
+    const page = mountPage({ result: new Error("calendar backend down") });
     await flush();
     assert.equal(page.container.querySelector(".ocfp-empty-title")?.textContent, "Couldn't load the week.");
     assert.equal(page.container.querySelector(".ocfp-muted-reason")?.textContent, "calendar backend down");
@@ -288,7 +290,7 @@ describe("family page", { concurrency: 1 }, () => {
     });
     await flush();
     page.signal.abort();
-    release({ ok: true, result: week() });
+    release(week());
     await flush();
     assert.equal(page.container.querySelector(".ocfp-title")?.textContent?.includes("September 28") ?? false, false);
     assert.equal(page.container.querySelector(".ocfp-day-tab")?.className ?? "none", "none");
@@ -472,13 +474,13 @@ describe("family page", { concurrency: 1 }, () => {
     const alexMember = payload.members[0];
     assert.ok(alexMember);
     alexMember.color = "blue";
-    const page = mountPage({ mode: "light", result: { ok: true, result: payload } });
+    const page = mountPage({ mode: "light", result: payload });
     await flush();
     assert.equal(page.container.querySelector(".ocfp-title")?.textContent, "Sep 28 – Oct 4");
     const alex = page.container.querySelector<HTMLElement>("[data-event-id='e-alex']");
     assert.equal(alex?.style.getPropertyValue("--ocfp-event"), "blue");
     alexMember.color = "not-a-color";
-    const fallback = mountPage({ mode: "light", result: { ok: true, result: payload } });
+    const fallback = mountPage({ mode: "light", result: payload });
     await flush();
     assert.equal(fallback.container.querySelector(".ocfp-title")?.textContent, "Sep 28 – Oct 4");
     assert.equal(fallback.container.querySelector<HTMLElement>("[data-event-id='e-alex']")?.style.getPropertyValue("--ocfp-event"), "#211e1a");
@@ -487,7 +489,7 @@ describe("family page", { concurrency: 1 }, () => {
   test("previous and next are disabled when the week cannot move", async () => {
     const early = week();
     early.range = { start: "2026-08-03", end: "2026-08-09", timezone: "UTC" };
-    const earlyPage = mountPage({ result: { ok: true, result: early } });
+    const earlyPage = mountPage({ result: early });
     await flush();
     const earlyPrev = earlyPage.container.querySelector<HTMLButtonElement>("[aria-label='Previous week']");
     const earlyNext = earlyPage.container.querySelector("[aria-label='Next week']");
@@ -496,7 +498,7 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(earlyNext?.tagName, "A");
     const late = week();
     late.range = { start: "2027-09-27", end: "2027-10-03", timezone: "UTC" };
-    const latePage = mountPage({ result: { ok: true, result: late } });
+    const latePage = mountPage({ result: late });
     await flush();
     const latePrev = latePage.container.querySelector("[aria-label='Previous week']");
     const lateNext = latePage.container.querySelector<HTMLButtonElement>("[aria-label='Next week']");
@@ -511,10 +513,8 @@ describe("family page", { concurrency: 1 }, () => {
     const second = boundWeekStart("2020-01-01", "2026-09-30");
     const page = mountPage({ props: { start: "2020-01-01" } });
     await flush();
-    const starts = page.calls.map((call) => {
-      const body = call[1] as { payload?: { start?: string } } | undefined;
-      return body?.payload?.start;
-    });
+    assert.deepEqual(new Set(page.calls.map((call) => call[0])), new Set(["family.week"]));
+    const starts = page.calls.map((call) => (call[1] as { start?: string } | undefined)?.start);
     assert.deepEqual(starts, first === second ? [first] : [first, second]);
     assert.equal(page.container.querySelector(".ocfp-title")?.textContent, "Sep 28 – Oct 4");
   });
@@ -526,7 +526,7 @@ describe("family page", { concurrency: 1 }, () => {
       calendars: [],
       calendar: { status: "unconfigured", hint: "Add a calendar." },
     };
-    const page = mountPage({ result: { ok: true, result: empty } });
+    const page = mountPage({ result: empty });
     await flush();
     const text = page.container.textContent ?? "";
     assert.equal(text.includes("Set up your family"), true);
@@ -539,13 +539,26 @@ describe("family page", { concurrency: 1 }, () => {
   });
 
   test("once members exist, the calendar and weather hints come back", async () => {
-    const page = mountPage({ result: { ok: true, result: { ...week(), calendar: { status: "unconfigured", hint: "Add a calendar." } } } });
+    const page = mountPage({ result: { ...week(), calendar: { status: "unconfigured", hint: "Add a calendar." } } });
     await flush();
     const text = page.container.textContent ?? "";
     assert.equal(text.includes("Set up your family"), false);
     assert.equal(text.includes("Connect your family calendars"), true);
     assert.equal(text.includes("Weather is not set up."), true);
   });
+});
+
+test("someone with no calendars of their own gets one notice and blank days", async () => {
+  const page = mountPage({ result: { ...week(), calendars: [], calendar: { status: "hidden" } } });
+  await flush();
+  const text = page.container.textContent ?? "";
+  assert.equal(page.container.querySelectorAll(".ocfp-notice").length, 1);
+  assert.equal(text.includes("No calendars for you yet"), true);
+  assert.equal(text.includes("Ask a parent to share a calendar with you."), true);
+  assert.equal(text.includes("Nothing planned"), false);
+  assert.equal(text.includes("Connect your family calendars"), false);
+  assert.equal(text.includes("Calendar not connected"), false);
+  assert.ok(page.container.querySelector(".ocfp-weather"));
 });
 
 function browserToday(now = new Date()) {

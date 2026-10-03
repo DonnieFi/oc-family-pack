@@ -7,8 +7,7 @@ import {
   type ControlUiSessionListSubscription,
   type ControlUiViewContext,
 } from "openclaw/plugin-sdk/control-ui";
-import { createFeatureClient } from "openclaw/plugin-sdk/feature-contract";
-import { contract } from "./contract.ts";
+import { contract, WEEK_METHOD } from "./contract.ts";
 import { mixTowardInk } from "./contrast.ts";
 import type { CalendarRef, FamilyEvent, Member, WeekPayload } from "./types.ts";
 import { addDays, boundWeekStart, localDate, pageWeekStart } from "./week.ts";
@@ -89,9 +88,40 @@ const noon = (date: string) => new Date(`${date}T12:00:00Z`);
 
 const isWeekend = (date: string) => [0, 6].includes(noon(date).getUTCDay());
 
+/**
+ * Runs `load` now and again on every reconnect. An answer that a newer load or
+ * the returned stop overtook is dropped.
+ */
+function watchRequest<T>(host: ControlUiHost, load: () => Promise<T>, onChange: (value: T) => void, onError: (error: Error) => void): () => void {
+  let stopped = false;
+  let generation = 0;
+  let connected = host.connection.connected;
+  const refresh = () => {
+    const current = ++generation;
+    if (stopped || !host.connection.connected) return;
+    load().then(
+      (value) => {
+        if (!stopped && current === generation) onChange(value);
+      },
+      (error: unknown) => {
+        if (!stopped && current === generation) onError(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  };
+  const stopHost = host.subscribe(() => {
+    if (connected === host.connection.connected) return;
+    connected = host.connection.connected;
+    refresh();
+  });
+  refresh();
+  return () => {
+    stopped = true;
+    stopHost();
+  };
+}
+
 export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) {
   const host: ControlUiHost = initial.host;
-  const feature = createFeatureClient(contract, host);
   const content = h("div", { class: "ocfp-stack" });
   const chatStrip = h("section", { class: "ocfp-chat-strip ocfp-panel", "aria-label": "Chat with an agent" });
   const dialogHolder = h("div");
@@ -142,11 +172,12 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     }
     root.setAttribute("aria-busy", "true");
     if (!content.hasChildNodes()) render({ kind: "loading" });
-    stopWatching = feature.watch("family.week", start ? { start } : {}, {
-      events: [],
-      onChange: (week) => render({ kind: "ready", week }),
-      onError: (error) => render({ kind: "failed", message: error.message }),
-    });
+    stopWatching = watchRequest(
+      host,
+      () => host.request<WeekPayload>(WEEK_METHOD, start ? { start } : {}),
+      (week) => render({ kind: "ready", week }),
+      (error) => render({ kind: "failed", message: error.message }),
+    );
   }
 
   function weekHref(target: string | undefined) {
@@ -246,8 +277,12 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
         h(
           "p",
           { class: "ocfp-subtitle" },
-          ...(inWeek ? ["Today is ", h("strong", {}, fmt.long.format(noon(week.today))), " · "] : [`${fmt.year.format(end)} · `]),
-          week.calendar.status === "ok" ? `${count} ${count === 1 ? "event" : "events"} this week` : "Calendar not connected",
+          ...(inWeek ? ["Today is ", h("strong", {}, fmt.long.format(noon(week.today)))] : [fmt.year.format(end)]),
+          week.calendar.status === "ok"
+            ? ` · ${count} ${count === 1 ? "event" : "events"} this week`
+            : week.calendar.status === "hidden"
+              ? ""
+              : " · Calendar not connected",
         ),
       ),
       h(
@@ -306,9 +341,11 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
         : h(
             "div",
             { class: `ocfp-notice ocfp-panel${week.calendar.status === "error" ? " is-error" : ""}`, role: "status" },
-            week.calendar.status === "unconfigured"
-              ? emptyState("calendar", "Connect your family calendars", week.calendar.hint)
-              : emptyState("alert", "Calendar unavailable", week.calendar.message),
+            week.calendar.status === "hidden"
+              ? emptyState("calendar", "No calendars for you yet", "Ask a parent to share a calendar with you.")
+              : week.calendar.status === "unconfigured"
+                ? emptyState("calendar", "Connect your family calendars", week.calendar.hint)
+                : emptyState("alert", "Calendar unavailable", week.calendar.message),
           );
 
     const timeLabel = (event: FamilyEvent, date: string) => {

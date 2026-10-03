@@ -4,17 +4,15 @@ import { test } from "node:test";
 import { Value } from "typebox/value";
 import { parseConfig } from "./config.ts";
 import { MembersPayloadSchema, WeatherStateSchema, WeekPayloadSchema } from "./contract.ts";
-import { familyHandlers } from "./handlers.ts";
+import { familyHandlers, familyWeek } from "./handlers.ts";
 
 const DISCORD_ID = "100000000000000001";
 const PRIMARY_MAC = "AA-BB-CC-DD-EE-01";
 const ALIAS_MAC = "AA:BB:CC:DD:EE:02";
 
-test("family.week handler returns one literal demo week", async () => {
+test("family.week returns one literal demo week to the owner", async () => {
   const config = parseConfig({ demo: true, timezone: "America/Toronto" });
-  const week = await familyHandlers(config, { now: () => Date.parse("2026-09-30T16:00:00Z") })["family.week"]({
-    start: "2026-10-01",
-  });
+  const week = await familyWeek(config, { now: () => Date.parse("2026-09-30T16:00:00Z") })({ start: "2026-10-01" }, { kind: "owner" });
   assert.deepEqual(week, {
     mode: "demo",
     range: { start: "2026-09-28", end: "2026-10-04", timezone: "America/Toronto" },

@@ -1,11 +1,12 @@
 import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { ConfigSchema, parseConfig } from "./config.ts";
-import { contract } from "./contract.ts";
+import { contract, WEEK_METHOD } from "./contract.ts";
 import { execGog } from "./calendar-gog.ts";
 import { registerFamilyCli } from "./gog-setup.ts";
-import { familyHandlers } from "./handlers.ts";
+import { familyHandlers, familyWeek } from "./handlers.ts";
 import { openFamilyStore, type FamilyStore } from "./store.ts";
+import { weekMethod } from "./week-method.ts";
 
 function configuredGogPath(raw: unknown): string {
   try {
@@ -54,7 +55,11 @@ const plugin = defineFeaturePlugin({
         },
       });
     }
-    return familyHandlers(parseConfig(api.pluginConfig));
+    const config = parseConfig(api.pluginConfig);
+    // The week is a Gateway method, not a feature query, because only a Gateway
+    // method sees who signed in. Same operator.read scope the queries get.
+    api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config)), { scope: "operator.read" });
+    return familyHandlers(config);
   },
 });
 

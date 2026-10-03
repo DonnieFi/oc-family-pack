@@ -22,11 +22,10 @@ type _CalendarWriteOps = Assert<
     : false
 >;
 
-test("the contract registers exactly the three read queries", () => {
+test("the contract registers exactly the two read queries, and the week is not one", () => {
   assert.deepEqual(
     Object.entries(contract.operations).map(([name, operation]) => [name, operation.kind]),
     [
-      ["family.week", "query"],
       ["family.members", "query"],
       ["family.weather", "query"],
     ],
@@ -36,8 +35,9 @@ test("the contract registers exactly the three read queries", () => {
   assert.equal(Object.hasOwn(contract.events, CALENDAR_CHANGED_EVENT), false);
 });
 
-test("registered queries are operator.read session actions and there is no command adapter", () => {
+test("registered queries are operator.read session actions, the week is an operator.read Gateway method, and there is no command adapter", () => {
   const actions: { id: string; requiredScopes: string[] }[] = [];
+  const methods: { method: string; scope?: string }[] = [];
   const cli: string[] = [];
   let commands = 0;
   let cliCommands: readonly string[] = [];
@@ -49,6 +49,9 @@ test("registered queries are operator.read session actions and there is no comma
     },
     registerCommand() {
       commands += 1;
+    },
+    registerGatewayMethod(method: string, _handler: unknown, opts?: { scope?: string }) {
+      methods.push({ method, ...(opts?.scope ? { scope: opts.scope } : {}) });
     },
     registerCli(
       registrar: (ctx: { program: { command: (name: string) => unknown }; config: { gateway?: unknown } }) => void,
@@ -74,8 +77,8 @@ test("registered queries are operator.read session actions and there is no comma
   assert.deepEqual(actions, [
     { id: "family.members", requiredScopes: ["operator.read"] },
     { id: "family.weather", requiredScopes: ["operator.read"] },
-    { id: "family.week", requiredScopes: ["operator.read"] },
   ]);
+  assert.deepEqual(methods, [{ method: "family.week", scope: "operator.read" }]);
   assert.equal(commands, 0);
   assert.deepEqual(cliCommands, ["family"]);
   assert.deepEqual(cli, ["family", "gog", "access", "setup"]);

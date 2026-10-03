@@ -194,6 +194,7 @@ test("in LAN mode the patch is followed by the link command, never a call", () =
     /^openclaw gateway call users\.linkChannelIdentity --params '\{"profileId":"PROFILE_alex","identity":\{"channelId":"discord","accountId":"default","senderId":"100000000000000001"\}\}'$/m,
   );
   assert.match(result.text, /^Replace each PROFILE_ placeholder with that person's profile id from `users\.list`\.$/m);
+  assert.match(result.text, /^Run this after they've signed in once, so their profile exists\.\nopenclaw gateway call users\.linkChannelIdentity /m);
   assert.ok(result.text.indexOf("}\n\nThen link") > result.text.indexOf(PATCH_INTRO), "the link comes after the patch, outside it");
 
   const one = { ...host(complete, lanGateway()), channels: { discord: { accounts: { family: {} } } } };

@@ -94,7 +94,7 @@ Then open **Family** from the Control UI sidebar.
 
 ## Configuration
 
-Family Pack reads `plugins.entries["oc-family-pack"].config`. Each `profileId` is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. When the header is an email, `profileId` is the part before `@`. It is not the Gateway's internal profile id. A calendar's owners are those same ids. A school calendar belongs to the student.
+Family Pack reads `plugins.entries["oc-family-pack"].config`. Each `profileId` is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. Family Pack matches it exactly, so it must be the same name the Gateway signs that person in as. It is not the Gateway's internal profile id. A calendar's owners are those same ids. A school calendar belongs to the student.
 
 ```json5
 {
@@ -130,7 +130,7 @@ Family Pack reuses what OpenClaw already owns instead of rebuilding it.
 
 | Need | Owned by |
 | --- | --- |
-| Who someone is on the page | Not built yet. Until then everyone signed in sees the same week. A later Gateway method will match `profileId` to the proxy username |
+| Who someone is on the page | The Gateway's trusted-proxy sign-in. The `family.week` Gateway method matches that username exactly to `profileId` |
 | Who someone is in Discord | The roster `discordId`, set with `openclaw family setup --discord NAME=ID`. In LAN mode setup also prints the `users.linkChannelIdentity` command that ties it to the person's Gateway profile |
 | Sign-in for each family member | [Multi-user Gateway](https://docs.openclaw.ai/concepts/multi-user). See [Household access](#household-access) |
 | Google Calendar access | `gog` |
@@ -152,7 +152,7 @@ In LAN mode there's no sign-out and no way to switch accounts. A browser stays s
 
 Everything runs on your own OpenClaw Gateway. Calendar data is read through your local `gog` sign-in, weather requests send only your coordinates to Environment Canada, and nothing is sent to a third-party service by this plugin.
 
-Everyone signed in to the Control UI sees every configured calendar. The member chips only dim events in the view, so leave out any calendar that should stay private.
+The Gateway decides who sees which calendar before the week is sent to the page. Parents see every calendar, and everyone sees `shared` calendars. A `school` or `personal` calendar goes to its owners and the parents, or to parents only when it has no owners. Guests, and anyone signed in who isn't on the roster, see shared calendars only. The member chips only dim events in the view.
 
 The plugin keeps its own SQLite database on the Gateway host, under `plugins/oc-family-pack/` in the OpenClaw state directory. Today the file holds the schema migration record only. Later epics add the write log and delivery records. Uninstall removes the plugin config and the installed code, and leaves that database in place. To delete it after uninstall:
 
@@ -180,7 +180,7 @@ OpenClaw plugin APIs are experimental, so this plugin tracks host releases rathe
 npm run smoke
 ```
 
-It boots a throwaway Gateway on a temp state dir and a free loopback port, never touching your running one, then checks the plugin loads, the manifest validates, a real `family.week` query matches the contract schema, the page registers, and the plugin's host-payload limits still agree with the host's own. A break fails with the name of the step that broke. It tests the OpenClaw build you actually run, not the pinned devDependency: it looks for an `openclaw` outside this repo's own `node_modules/.bin`, and fails by name if there is none. Set `OCFP_SMOKE_HOST_BIN` to point it at a specific binary, or `OCFP_SMOKE_KEEP=1` to keep the throwaway state for inspection. If your host is a different build than the one this repo was tested against, the smoke stops at the manifest step and tells you to rebuild `dist/` with that host.
+It boots a throwaway Gateway on a temp state dir and a free loopback port, never touching your running one, then checks the plugin loads, the manifest validates, a real `family.week` call matches the contract schema, a signed-in kid sees only shared calendars and their own, the page registers, and the plugin's host-payload limits still agree with the host's own. A break fails with the name of the step that broke. It tests the OpenClaw build you actually run, not the pinned devDependency: it looks for an `openclaw` outside this repo's own `node_modules/.bin`, and fails by name if there is none. Set `OCFP_SMOKE_HOST_BIN` to point it at a specific binary, or `OCFP_SMOKE_KEEP=1` to keep the throwaway state for inspection. If your host is a different build than the one this repo was tested against, the smoke stops at the manifest step and tells you to rebuild `dist/` with that host.
 
 ## Roadmap
 

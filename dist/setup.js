@@ -167,6 +167,7 @@ function linkLines(host, ids) {
     return [
         "",
         LINK_INTRO,
+        "Run this after they've signed in once, so their profile exists.",
         ...[...ids].map(([name, id]) => `openclaw gateway call users.linkChannelIdentity --params '${JSON.stringify(discordLink(`PROFILE_${name}`, account, id))}'`),
         PROFILE_STEP,
         ...(account === "ACCOUNT" ? ["Replace ACCOUNT with the `channels.discord.accounts` entry the family uses."] : []),
