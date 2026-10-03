@@ -16,7 +16,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash, generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve as pathResolve } from "node:path";
 import { Value } from "typebox/value";
@@ -25,6 +25,7 @@ import { MAX_WEEK_EVENTS, WEEK_METHOD, WeekPayloadSchema } from "../src/contract
 import { buildWeekPayload, fitsHostLimits, jsonNodeCount } from "../src/payload.ts";
 import { planAccess } from "../src/access.ts";
 import { planSetup } from "../src/setup.ts";
+import { POLL_MS } from "../src/calendar-watch.ts";
 import { isolatedGatewayEnv } from "./isolated-env.ts";
 
 const ROOT = dirname(dirname(new URL(import.meta.url).pathname));
@@ -75,7 +76,9 @@ type Step =
   | "sqlite store"
   | "host json limits"
   | "update path"
-  | "household sign-in";
+  | "household sign-in"
+  | "calendar watch"
+  | "family_schedule tool";
 
 let workDir: string | undefined;
 let gateway: ChildProcess | undefined;
@@ -1031,6 +1034,8 @@ async function main(): Promise<void> {
 
   await deviceTokenOwner(port, TOKEN);
   await householdSignIn(env, configPath, port, logPath);
+  await calendarWatch(env, configPath, port, logPath);
+  await scheduleTool(configPath, port);
 }
 
 /** Stand-ins for what a real household fills in, used only on this isolated Gateway. */
@@ -1293,6 +1298,159 @@ async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port:
     fail(step, `mallory is not in allowUsers and should be refused with CONTROL_UI_DEVICE_IDENTITY_REQUIRED: ${JSON.stringify(stranger)}`);
   }
   note(`mallory, not in allowUsers, was turned away (${refusal})`, step);
+}
+
+/**
+ * Opens a session as `user` behind the household proxy and waits until every
+ * name in `events` has arrived as a broadcast event frame. `ready` runs once the
+ * session is signed in, so nothing it triggers can land before we listen.
+ */
+function awaitEvents(port: number, user: string, events: string[], timeoutMs: number, ready: () => Promise<void>): Promise<Map<string, unknown>> {
+  const step: Step = "calendar watch";
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`, { headers: { origin: `https://${HOUSEHOLD_ADDRESS}`, "x-forwarded-for": HOUSEHOLD_CLIENT, "x-forwarded-user": user } } as unknown as string[]);
+    const seen = new Map<string, unknown>();
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      ws.close();
+      if (error) reject(error);
+      else resolve(seen);
+    };
+    const timer = setTimeout(() => finish(new Error(`smoke: ${step} failed: no ${events.filter((name) => !seen.has(name)).join(" or ")} within ${timeoutMs / 1000}s`)), timeoutMs);
+    ws.onmessage = (message) => {
+      const frame = JSON.parse(String(message.data)) as { type: string; event?: string; ok?: boolean; payload?: unknown; error?: unknown };
+      if (frame.type === "event" && frame.event === "connect.challenge") {
+        ws.send(JSON.stringify({ type: "req", id: "1", method: "connect", params: { minProtocol: 4, maxProtocol: 4, client: CONTROL_UI_CLIENT, role: "operator", scopes: OPERATOR_SCOPES, caps: [] } }));
+        return;
+      }
+      if (frame.type === "res") {
+        if (frame.ok !== true) finish(new Error(`smoke: ${step} failed: ${user} could not sign in: ${JSON.stringify(frame.error)}`));
+        else ready().catch((error: Error) => finish(error));
+        return;
+      }
+      if (frame.type === "event" && frame.event && events.includes(frame.event) && !seen.has(frame.event)) {
+        seen.set(frame.event, frame.payload);
+        if (seen.size === events.length) finish();
+      }
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => finish(new Error(`smoke: ${step} failed: ${user}'s session closed before ${events.join(" and ")} arrived`));
+  });
+}
+
+/**
+ * 12. Change detection on the real host: a roster calendar backed by a stand-in
+ * gog in the temp dir. The service takes its baseline at start, the stand-in
+ * then reports a newer edit, and the next poll must reach a signed-in page as
+ * plugin events. No Google call and no real gog: gogPath is the stand-in.
+ * Waits one poll interval, since the interval is deliberately not configurable.
+ */
+async function calendarWatch(env: NodeJS.ProcessEnv, configPath: string, port: number, logPath: string): Promise<void> {
+  const step: Step = "calendar watch";
+  const dir = join(dirname(configPath), "gog");
+  mkdirSync(dir);
+  const calls = join(dir, "calls.log");
+  const edited = join(dir, "edited");
+  const gogPath = join(dir, "gog");
+  writeFileSync(
+    gogPath,
+    [
+      "#!/bin/sh",
+      `printf '%s\\n' "$*" >> '${calls}'`,
+      'case "$1 $2" in',
+      '  "calendar changed")',
+      `    if [ -e '${edited}' ]; then updated=2026-10-03T12:05:00.123Z; else updated=2026-10-03T12:00:00.000Z; fi`,
+      `    printf '{"events":[{"id":"ocfp-smoke","updated":"%s"}],"since":"2026-09-03T12:00:00Z"}\\n' "$updated" ;;`,
+      `  "calendar events") if [ -e '${dir}/events.json' ]; then cat '${dir}/events.json'; else printf '{"events":[]}\\n'; fi ;;`,
+      `  *) printf '{"events":[]}\\n' ;;`,
+      "esac",
+      "",
+    ].join("\n"),
+  );
+  chmodSync(gogPath, 0o700);
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as { plugins: { entries: Record<string, { enabled: boolean; config: unknown }> } };
+  const calendarId = "family@example.com";
+  config.plugins.entries[PLUGIN_ID] = {
+    enabled: true,
+    config: {
+      timezone: "America/Toronto",
+      gogPath,
+      members: [{ profileId: "alex", displayName: "Alex", role: "parent" }],
+      calendars: [{ id: calendarId, label: "Family", kind: "shared" }],
+    },
+  };
+  writeFileSync(configPath, JSON.stringify(config, null, 2));
+  const started = Date.now();
+  await bootGateway(env, port, logPath);
+  note(`isolated Gateway restarted with one roster calendar read through a stand-in gog`, step);
+
+  const changedEvent = `plugin.${PLUGIN_ID}.calendar-changed`;
+  const checkedEvent = `plugin.${PLUGIN_ID}.calendar-checked`;
+  const readCalls = () => (existsSync(calls) ? readFileSync(calls, "utf8").split("\n").filter((line) => line.startsWith("calendar changed")) : []);
+  const got = await awaitEvents(port, "alex", [changedEvent, checkedEvent], POLL_MS + 90_000, async () => {
+    for (let waited = 0; readCalls().length === 0; waited += 250) {
+      if (waited > 30_000) fail(step, "the service took no baseline read within 30s of start");
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    writeFileSync(edited, "");
+    note("baseline read taken at start; the stand-in now reports a newer edit", step);
+  });
+  const changed = got.get(changedEvent) as { reason?: string; calendarKeys?: unknown[]; at?: string } | undefined;
+  if (changed?.reason !== "external" || changed.calendarKeys?.length !== 0 || !Number.isFinite(Date.parse(changed.at ?? ""))) {
+    fail(step, `calendar-changed carried ${JSON.stringify(changed)}, expected { reason: "external", calendarKeys: [], at }`);
+  }
+  if (JSON.stringify(got.get(checkedEvent)) !== "{}") fail(step, `calendar-checked carried ${JSON.stringify(got.get(checkedEvent))}, expected {}`);
+  const [first, second] = readCalls();
+  const expected = (since: string) => `calendar changed --since ${since} --max 1 --json --no-input -- ${calendarId}`;
+  if (first !== expected("720h") || second !== expected("2026-10-03T12:00:00.000Z")) {
+    fail(step, `gog was called as ${JSON.stringify([first, second])}`);
+  }
+  note(`a signed-in page got calendar-changed and calendar-checked ${Math.round((Date.now() - started) / 1000)}s after start; the second poll asked gog for edits since the baseline`, step);
+}
+
+/**
+ * 13. The agent tool on the real host, still on the calendar-watch Gateway and
+ * its stand-in gog: today's one-off lands under "not the usual" and the
+ * on-time repeat in the usual line. The shared password is the owner. A caller
+ * claiming Discord carries no roster sender id, so "me" is refused.
+ */
+async function scheduleTool(configPath: string, port: number): Promise<void> {
+  const step: Step = "family_schedule tool";
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(Date.now());
+  const swim = `${today}T21:00:00Z`;
+  writeFileSync(
+    join(dirname(configPath), "gog", "events.json"),
+    JSON.stringify({
+      events: [
+        { id: "dentist", summary: "Dentist", start: { dateTime: `${today}T16:00:00Z` }, end: { dateTime: `${today}T17:00:00Z` } },
+        { id: "swim_1", summary: "Swim", start: { dateTime: swim }, end: { dateTime: `${today}T22:00:00Z` }, recurringEventId: "swim", originalStartTime: { dateTime: swim } },
+      ],
+    }),
+  );
+  const invoke = async (args: Record<string, unknown>, headers: Record<string, string> = {}) => {
+    const response = await fetch(`http://127.0.0.1:${port}/tools/invoke`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${HOUSEHOLD_PASSWORD}`, "content-type": "application/json", ...headers },
+      body: JSON.stringify({ tool: "family_schedule", args }),
+    });
+    const text = await response.text();
+    if (!response.ok) fail(step, `/tools/invoke answered ${response.status}: ${text.slice(0, 500)}`);
+    const body = JSON.parse(text) as { ok?: boolean; result?: { details?: unknown; content?: { type: string; text?: string }[] } };
+    const result = body.result?.details ?? JSON.parse(body.result?.content?.find((part) => part.type === "text")?.text ?? "null");
+    return result as Record<string, unknown>;
+  };
+  const owner = await invoke({});
+  const expected = { sections: [{ name: "not the usual", items: [{ title: "Dentist", time: "12:00 PM", owners: [] }] }], usual: "Usual: Swim 5:00 PM" };
+  if (JSON.stringify(owner) !== JSON.stringify(expected)) fail(step, `family_schedule returned ${JSON.stringify(owner)}, expected ${JSON.stringify(expected)}`);
+  note("the agent tool, called with the shared password, put Dentist under not the usual and Swim in the usual line", step);
+  const claimed = await invoke({ member: "me" }, { "x-openclaw-message-channel": "discord" });
+  if (JSON.stringify(claimed) !== JSON.stringify({ error: "I can't tell who 'me' is here. Name the person." })) {
+    fail(step, `a Discord caller with no roster sender id asked for "me" and got ${JSON.stringify(claimed)}`);
+  }
+  note('a caller claiming Discord with no roster sender id asking for "me" got the refusal and no events', step);
 }
 
 try {

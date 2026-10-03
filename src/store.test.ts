@@ -317,10 +317,12 @@ test("the family-store service opens the database, and discovery does not regist
       discovery.push(service);
     },
     registerSessionAction() {},
+    registerTool() {},
     registerGatewayMethod() {},
     registerCli() {},
   });
-  assert.deepEqual(discovery, []);
+  // The SDK registers its own event relay whenever the contract declares events; the family-store and calendar-watch services stay out of discovery.
+  assert.deepEqual(discovery.map((service) => service.id), ["oc-family-pack:feature-events"]);
 
   const services: {
     id: string;
@@ -336,9 +338,11 @@ test("the family-store service opens the database, and discovery does not regist
       services.push(service);
     },
     registerSessionAction() {},
+    registerTool() {},
     registerGatewayMethod() {},
     registerCli() {},
   });
+  assert.deepEqual(services.map((entry) => entry.id).sort(), ["calendar-watch", "family-store", "oc-family-pack:feature-events"]);
   const service = services.find((entry) => entry.id === "family-store");
   assert.ok(service);
   assert.deepEqual(service.reload?.configPrefixes, ["plugins.entries.oc-family-pack.config"]);

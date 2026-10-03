@@ -105,6 +105,16 @@
   font-weight: 600;
 }
 
+.ocfp-stale {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.ocfp-stale[hidden] {
+  display: none;
+}
+
 .ocfp-week-nav {
   display: flex;
   align-items: center;

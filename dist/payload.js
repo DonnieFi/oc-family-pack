@@ -38,6 +38,10 @@ export function fitWeek(payload) {
         calendar: { status: "error", message: oversizeMessage(calendar.data.length, bytes) },
     };
 }
+/** The week payload boundary: Google fields stay on the Gateway. */
+function toWire({ google: _google, ...event }) {
+    return event;
+}
 function readCalendar(config, shown, week) {
     if (config.demo) {
         const keys = new Set(shown.map((calendar) => calendar.key));
@@ -70,7 +74,7 @@ export async function buildWeekPayload(config, requestedStart, now, readWeather,
     const shown = calendars.filter((entry) => visible.has(entry.id));
     const [read, weather] = await Promise.all([readCalendar(config, shown, week), readWeather()]);
     // Merging runs on visible calendars only, so a merged event never names a hidden one.
-    const calendar = read.status === "ok" ? { ...read, data: mergeCopies(read.data) } : read;
+    const calendar = read.status === "ok" ? { ...read, data: mergeCopies(read.data).map(toWire) } : read;
     return fitWeek({
         mode: config.demo ? "demo" : "live",
         range: week.range,

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { EVENT_ID_MAX, LINK_MAX, LOCATION_MAX, MESSAGE_MAX, TITLE_MAX } from "./contract.ts";
-import type { CalendarConfig, CalendarState, Config, FamilyEvent } from "./types.ts";
+import type { CalendarConfig, CalendarStateOf, Config, FamilyEvent } from "./types.ts";
 import { addDays, parseDate, startOfLocalDay, type Week } from "./week.ts";
 
 const execFileAsync = promisify(execFile);
@@ -191,10 +191,6 @@ export function parseGogEvents(raw: unknown, calendar: CalendarConfig): GogEvent
   return events;
 }
 
-function toWire({ google: _google, ...event }: GogEvent): FamilyEvent {
-  return event;
-}
-
 type CalendarRead =
   | { status: "ok"; events: GogEvent[]; truncated: boolean }
   | { status: "unconfigured" }
@@ -238,9 +234,9 @@ function hasAnotherPage(raw: unknown): boolean {
   return isRecord(raw) && typeof raw.nextPageToken === "string" && raw.nextPageToken.trim() !== "";
 }
 
-async function readCalendar(config: Config, calendar: CalendarConfig, week: Week, runGog: RunGog): Promise<CalendarRead> {
-  const from = new Date(startOfLocalDay(week.range.start, week.range.timezone)).toISOString();
-  const to = new Date(startOfLocalDay(addDays(week.range.end, 1), week.range.timezone)).toISOString();
+async function readCalendar(config: Config, calendar: CalendarConfig, { range }: Pick<Week, "range">, runGog: RunGog): Promise<CalendarRead> {
+  const from = new Date(startOfLocalDay(range.start, range.timezone)).toISOString();
+  const to = new Date(startOfLocalDay(addDays(range.end, 1), range.timezone)).toISOString();
   let stdout: string;
   try {
     ({ stdout } = await runGog(config.gogPath, [
@@ -274,12 +270,15 @@ async function readCalendar(config: Config, calendar: CalendarConfig, week: Week
   return { status: "ok", events, truncated: hasAnotherPage(raw) };
 }
 
-/** One calendar's failure becomes a warning beside the rest. The source is unconfigured only when gog is missing or every calendar fails auth. */
-export async function readGogCalendars(config: Config, week: Week, runGog: RunGog = execGog()): Promise<CalendarState> {
+/**
+ * One calendar's failure becomes a warning beside the rest. The source is unconfigured only when gog is missing or every calendar fails auth.
+ * Events keep their Google fields for the classifier; the week payload strips them at its boundary.
+ */
+export async function readGogCalendars(config: Config, span: Pick<Week, "range">, runGog: RunGog = execGog()): Promise<CalendarStateOf<GogEvent>> {
   if (config.calendars.length === 0) {
     return { status: "unconfigured", hint: `Add calendars to the plugin config. ${GOG_SETUP_HINT}` };
   }
-  const reads = await Promise.all(config.calendars.map((calendar) => readCalendar(config, calendar, week, runGog)));
+  const reads = await Promise.all(config.calendars.map((calendar) => readCalendar(config, calendar, span, runGog)));
   if (reads.some((read) => read.status === "unconfigured")) {
     return { status: "unconfigured", hint: GOG_SETUP_HINT };
   }
@@ -302,7 +301,7 @@ export async function readGogCalendars(config: Config, week: Week, runGog: RunGo
   }
   return {
     status: "ok",
-    data: reads.flatMap((read) => (read.status === "ok" ? read.events.map(toWire) : [])),
+    data: reads.flatMap((read) => (read.status === "ok" ? read.events : [])),
     warnings,
   };
 }

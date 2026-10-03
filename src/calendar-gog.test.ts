@@ -288,7 +288,7 @@ test("an all-day date that does not exist is dropped and the week read still suc
   const state = await readGogCalendars(familyConfig("gog", [{ id: "cal-kid", label: "Kid" }]), week, run);
   assert.deepEqual(state, {
     status: "ok",
-    data: [{ id: "c0/ok", title: "Pizza day", start: "2026-10-02", end: "2026-10-03", allDay: true, calendarKey: "c0" }],
+    data: [{ id: "c0/ok", title: "Pizza day", start: "2026-10-02", end: "2026-10-03", allDay: true, calendarKey: "c0", google: { eventId: "ok" } }],
     warnings: [],
   });
 });
@@ -303,7 +303,7 @@ test("a calendar that still has another page warns without copying the page toke
   const state = await readGogCalendars(familyConfig("gog", [{ id: "school@example.com", label: "School" }]), week, run);
   assert.deepEqual(state, {
     status: "ok",
-    data: [{ id: "c0/e9", title: "Assembly", start: "2026-10-02", end: "2026-10-03", allDay: true, calendarKey: "c0" }],
+    data: [{ id: "c0/e9", title: "Assembly", start: "2026-10-02", end: "2026-10-03", allDay: true, calendarKey: "c0", google: { eventId: "e9" } }],
     warnings: ['The "School" calendar hit gog\'s page cap, so some events are missing.'],
   });
   assert.equal(JSON.stringify(state).includes("page-token-secret"), false);

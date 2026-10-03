@@ -255,12 +255,14 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/6b32cef993516bfa20b80dd35e8f040c344baa13d8ed65b1a9d6126de19e202a/index.js",
+    "entry": "dist/control-ui/937de607f088a555498bf1c840b5466ccfa6333eccddfa35a510c27af4da13fb/index.js",
     "styles": [
-      "dist/control-ui/6b32cef993516bfa20b80dd35e8f040c344baa13d8ed65b1a9d6126de19e202a/index.css"
+      "dist/control-ui/937de607f088a555498bf1c840b5466ccfa6333eccddfa35a510c27af4da13fb/index.css"
     ]
   },
   "contracts": {
-    "tools": []
+    "tools": [
+      "family_schedule"
+    ]
   }
 }

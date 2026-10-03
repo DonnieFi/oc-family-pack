@@ -1,9 +1,9 @@
-import { readGogCalendars } from "./calendar-gog.ts";
+import { readGogCalendars, type GoogleEventFields } from "./calendar-gog.ts";
 import { ConfigError } from "./config.ts";
 import { MAX_WEEK_EVENTS } from "./contract.ts";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.ts";
 import { mergeCopies } from "./merge.ts";
-import type { CalendarConfig, CalendarRef, CalendarState, Config, SourceState, WeatherCard, WeekPayload } from "./types.ts";
+import type { CalendarConfig, CalendarRef, CalendarState, CalendarStateOf, Config, FamilyEvent, SourceState, WeatherCard, WeekPayload } from "./types.ts";
 import { visibleCalendarIds, type Viewer } from "./visibility.ts";
 import { groupByDay, resolveMembers, resolveWeek, type Week } from "./week.ts";
 
@@ -45,7 +45,12 @@ export function fitWeek(payload: WeekPayload): WeekPayload {
   };
 }
 
-function readCalendar(config: Config, shown: CalendarConfig[], week: Week): Promise<CalendarState> {
+/** The week payload boundary: Google fields stay on the Gateway. */
+function toWire({ google: _google, ...event }: FamilyEvent & { google?: GoogleEventFields }): FamilyEvent {
+  return event;
+}
+
+function readCalendar(config: Config, shown: CalendarConfig[], week: Week): Promise<CalendarStateOf<FamilyEvent & { google?: GoogleEventFields }>> {
   if (config.demo) {
     const keys = new Set(shown.map((calendar) => calendar.key));
     return Promise.resolve({ status: "ok", data: demoEvents(week).filter((event) => keys.has(event.calendarKey)), warnings: [] });
@@ -83,7 +88,7 @@ export async function buildWeekPayload(
   const shown = calendars.filter((entry) => visible.has(entry.id));
   const [read, weather] = await Promise.all([readCalendar(config, shown, week), readWeather()]);
   // Merging runs on visible calendars only, so a merged event never names a hidden one.
-  const calendar = read.status === "ok" ? { ...read, data: mergeCopies(read.data) } : read;
+  const calendar: CalendarState = read.status === "ok" ? { ...read, data: mergeCopies(read.data).map(toWire) } : read;
   return fitWeek({
     mode: config.demo ? "demo" : "live",
     range: week.range,
