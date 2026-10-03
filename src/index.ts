@@ -24,7 +24,7 @@ const plugin = defineFeaturePlugin({
   // sets requiredScopes, which the shipped command gate then limits to the owner.
   setup(api) {
     api.registerCli(({ program, config }) => {
-      registerFamilyCli(program, { run: execGog(), gogPath: configuredGogPath(api.pluginConfig), gateway: config.gateway });
+      registerFamilyCli(program, { run: execGog(), gogPath: configuredGogPath(api.pluginConfig), gateway: config.gateway, host: config });
     }, {
       commands: ["family"],
       descriptors: [{ name: "family", description: "Family Pack setup", hasSubcommands: true }],

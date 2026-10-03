@@ -290,10 +290,16 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     );
     filters.hidden = week.members.length === 0;
 
-    const weather = h("aside", { class: "ocfp-weather ocfp-panel", "aria-label": "Weather" }, ...weatherContent(week, fmt));
+    // With no members yet, one setup state replaces the calendar and weather hints.
+    const unset = week.members.length === 0;
+    const weather =
+      unset && week.weather.status === "unconfigured"
+        ? null
+        : h("aside", { class: "ocfp-weather ocfp-panel", "aria-label": "Weather" }, ...weatherContent(week, fmt));
 
-    const notice =
-      week.calendar.status === "ok"
+    const notice = unset
+      ? h("div", { class: "ocfp-notice ocfp-panel", role: "status" }, emptyState("calendar", "Set up your family", "Run `openclaw family setup`."))
+      : week.calendar.status === "ok"
         ? week.calendar.warnings.length
           ? h("div", { class: "ocfp-notice ocfp-panel is-error", role: "status" }, emptyState("alert", "Some calendars are unavailable", week.calendar.warnings.join(" ")))
           : null
@@ -436,7 +442,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     content.replaceChildren(
       masthead,
       filters,
-      h("div", { class: "ocfp-layout" }, weather, h("section", { class: "ocfp-week-area", "aria-label": title }, notice, tabs, grid)),
+      h("div", { class: weather ? "ocfp-layout" : "ocfp-layout is-single" }, weather, h("section", { class: "ocfp-week-area", "aria-label": title }, notice, tabs, grid)),
     );
   }
 

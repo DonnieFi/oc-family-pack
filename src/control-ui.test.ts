@@ -518,6 +518,34 @@ describe("family page", { concurrency: 1 }, () => {
     assert.deepEqual(starts, first === second ? [first] : [first, second]);
     assert.equal(page.container.querySelector(".ocfp-title")?.textContent, "Sep 28 – Oct 4");
   });
+
+  test("with no members, one setup state replaces the calendar and weather hints", async () => {
+    const empty: WeekPayload = {
+      ...week(),
+      members: [],
+      calendars: [],
+      calendar: { status: "unconfigured", hint: "Add a calendar." },
+    };
+    const page = mountPage({ result: { ok: true, result: empty } });
+    await flush();
+    const text = page.container.textContent ?? "";
+    assert.equal(text.includes("Set up your family"), true);
+    assert.equal(text.includes("openclaw family setup"), true);
+    assert.equal(text.includes("Connect your family calendars"), false);
+    assert.equal(text.includes("Weather is not set up."), false);
+    assert.equal(page.container.querySelectorAll(".ocfp-notice").length, 1);
+    assert.equal(page.container.querySelector(".ocfp-weather"), null);
+    assert.equal(page.container.querySelector(".ocfp-layout")?.classList.contains("is-single"), true);
+  });
+
+  test("once members exist, the calendar and weather hints come back", async () => {
+    const page = mountPage({ result: { ok: true, result: { ...week(), calendar: { status: "unconfigured", hint: "Add a calendar." } } } });
+    await flush();
+    const text = page.container.textContent ?? "";
+    assert.equal(text.includes("Set up your family"), false);
+    assert.equal(text.includes("Connect your family calendars"), true);
+    assert.equal(text.includes("Weather is not set up."), true);
+  });
 });
 
 function browserToday(now = new Date()) {

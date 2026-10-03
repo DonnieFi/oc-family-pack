@@ -70,6 +70,8 @@ The repository ships its built `dist/`, so no build step is needed. `--accept-ca
 
 Calendar sign-in is `gog`, including on a headless Gateway. Run `openclaw family gog` and follow what it prints. A headless host takes two `gog auth add` commands: the first prints a URL, and the second exchanges the browser redirect (`openclaw family gog --auth-url '…'`). Repeat until it tells you to list calendars, then put those ids in the config below. The commands never pass `--readonly`.
 
+`openclaw family setup` shows what is left: access mode, time zone, location, members, and calendars, each marked Done or To do, then the next step. Add people with `--parent`, `--kid`, or `--guest`. It never writes config: it prints a members patch to check with `openclaw config patch --stdin --dry-run` and apply with `openclaw config patch --stdin`. People already in the config are kept as they are.
+
 To try it without calendars first, set `demo: true` (see below). Add your configuration, then enable the plugin:
 
 ```bash

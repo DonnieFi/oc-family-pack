@@ -1,8 +1,8 @@
 // Household access: detect which sign-in mode the Gateway is in and print the
 // setup for a mode. Pure: no imports, no files, no Gateway calls, no config
 // writes. Secrets in the config are checked for presence and never printed.
-const ROLES = ["parent", "kid", "guest"];
-const SCOPES = {
+export const ROLES = ["parent", "kid", "guest"];
+export const SCOPES = {
     parent: ["operator.read", "operator.write", "operator.sessions.write"],
     kid: ["operator.read", "operator.sessions.write"],
     guest: ["operator.read"],
@@ -108,7 +108,8 @@ export function formatDetection(found) {
     lines.push(`Next: openclaw family access ${found.mode}${found.mode === "solo" ? "" : " --parent NAME"}`);
     return { ok: count === 0, text: lines.join("\n") };
 }
-function people(input) {
+/** The username rule `access` and `setup` share, so the roster and `allowUsers` can't drift apart. */
+export function people(input) {
     const list = [];
     const seen = new Set();
     const entries = [

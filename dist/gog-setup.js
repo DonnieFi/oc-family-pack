@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { runAccess } from "./access.js";
+import { planSetup } from "./setup.js";
 const execFileAsync = promisify(execFile);
 export function execGogSetup(timeoutMs = 20_000) {
     return (file, args) => execFileAsync(file, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 });
@@ -227,6 +228,7 @@ function gatewayPort(gateway) {
 /**
  * `openclaw family gog` prints the one command that moves gog setup forward.
  * `openclaw family access` reports the household sign-in mode, or prints the setup for one.
+ * `openclaw family setup` lists what's done and prints the one next step.
  */
 export function registerFamilyCli(program, deps) {
     const write = deps.write ?? ((text) => console.log(text));
@@ -263,6 +265,22 @@ export function registerFamilyCli(program, deps) {
             ...(opts.guest ? { guest: opts.guest } : {}),
             ...(names ? { names } : {}),
         }, port !== undefined ? { port } : {});
+        write(result.text);
+        process.exitCode = result.ok ? 0 : 1;
+    });
+    family
+        .command("setup")
+        .description("List what the Family page still needs and print the one next step")
+        .option("--parent <name...>", "Parents to add to the family")
+        .option("--kid <name...>", "Kids to add to the family")
+        .option("--guest <name...>", "Guests to add to the family")
+        .action(async (opts) => {
+        const gog = await diagnoseGog(deps.run, deps.gogPath ? { gogPath: deps.gogPath } : {});
+        const result = planSetup(deps.host, {
+            ...(opts.parent ? { parent: opts.parent } : {}),
+            ...(opts.kid ? { kid: opts.kid } : {}),
+            ...(opts.guest ? { guest: opts.guest } : {}),
+        }, gog, deps.hostZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
         write(result.text);
         process.exitCode = result.ok ? 0 : 1;
     });

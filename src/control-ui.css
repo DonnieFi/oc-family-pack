@@ -233,6 +233,10 @@
   align-items: start;
 }
 
+.ocfp-layout.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .ocfp-panel {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);

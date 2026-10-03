@@ -7,10 +7,10 @@ export type AccessDetection = { mode: AccessMode; missing: string[] };
 export type AccessPeople = { parent?: string[]; kid?: string[]; guest?: string[]; names?: string[] };
 export type AccessResult = { ok: boolean; text: string };
 
-const ROLES = ["parent", "kid", "guest"] as const;
-type Role = (typeof ROLES)[number];
+export const ROLES = ["parent", "kid", "guest"] as const;
+export type Role = (typeof ROLES)[number];
 
-const SCOPES: Record<Role, string[]> = {
+export const SCOPES: Record<Role, string[]> = {
   parent: ["operator.read", "operator.write", "operator.sessions.write"],
   kid: ["operator.read", "operator.sessions.write"],
   guest: ["operator.read"],
@@ -128,9 +128,10 @@ export function formatDetection(found: AccessDetection): AccessResult {
   return { ok: count === 0, text: lines.join("\n") };
 }
 
-type Person = { name: string; role: Role };
+export type Person = { name: string; role: Role };
 
-function people(input: AccessPeople): { list: Person[] } | { error: string } {
+/** The username rule `access` and `setup` share, so the roster and `allowUsers` can't drift apart. */
+export function people(input: AccessPeople): { list: Person[] } | { error: string } {
   const list: Person[] = [];
   const seen = new Set<string>();
   const entries: [string, Role][] = [

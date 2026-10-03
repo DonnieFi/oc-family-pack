@@ -1176,8 +1176,13 @@ async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port:
   note(`users.setRole made alex a parent: ${scopesOf(alexAgain).join(", ")}`, step);
 
   const stranger = (await proxiedSession(port, "mallory", []))[0];
-  if (stranger?.ok !== false) fail(step, `mallory is not in allowUsers but signed in: ${JSON.stringify(stranger)}`);
-  note(`mallory, not in allowUsers, was turned away (${stranger.error?.details?.code ?? stranger.error?.code})`, step);
+  // Her headers match alex's apart from the username. Pin the refusal so a
+  // different failure can't pass for an allowUsers refusal.
+  const refusal = stranger?.error?.details?.code;
+  if (stranger?.ok !== false || refusal !== "CONTROL_UI_DEVICE_IDENTITY_REQUIRED") {
+    fail(step, `mallory is not in allowUsers and should be refused with CONTROL_UI_DEVICE_IDENTITY_REQUIRED: ${JSON.stringify(stranger)}`);
+  }
+  note(`mallory, not in allowUsers, was turned away (${refusal})`, step);
 }
 
 try {

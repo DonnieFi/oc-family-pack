@@ -200,3 +200,33 @@ test("openclaw family access reports from the host config and prints a mode's se
   process.exitCode = previous;
   assert.equal(lines.join("\n").includes("SENTINEL"), false);
 });
+
+test("openclaw family setup reads the host config, runs the gog checks, and fails until everything is done", async () => {
+  const lines: string[] = [];
+  const calls: string[] = [];
+  const { program, actions } = fakeProgram();
+  const host = {
+    gateway: { bind: "loopback", controlUi: { experimental: { customPlugins: true } } },
+    plugins: { entries: { "oc-family-pack": { config: { members: [{ profileId: "alex", displayName: "Alex", role: "parent" }] } } } },
+  };
+  registerFamilyCli(program, {
+    run: async (_file, args) => {
+      calls.push(args.join(" "));
+      const error = new Error("missing") as Error & { code: string };
+      error.code = "ENOENT";
+      throw error;
+    },
+    host,
+    hostZone: "America/Halifax",
+    write: (text) => lines.push(text),
+  });
+  const action = actions.get("setup");
+  assert.ok(action);
+  const previous = process.exitCode;
+  await action({ kid: ["riley"] });
+  assert.equal(process.exitCode, 1);
+  process.exitCode = previous;
+  assert.deepEqual(calls, ["auth doctor --json --no-input"]);
+  assert.match(lines[0] ?? "", /"profileId": "riley"/);
+  assert.match(lines[0] ?? "", /^Access mode: Done\nTimezone: To do\nLocation: To do\nMembers: Done\nCalendars: To do$/m);
+});

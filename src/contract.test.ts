@@ -78,7 +78,7 @@ test("registered queries are operator.read session actions and there is no comma
   ]);
   assert.equal(commands, 0);
   assert.deepEqual(cliCommands, ["family"]);
-  assert.deepEqual(cli, ["family", "gog", "access"]);
+  assert.deepEqual(cli, ["family", "gog", "access", "setup"]);
 });
 
 test("calendar-changed matches the feature event id pattern and is not registered", () => {
