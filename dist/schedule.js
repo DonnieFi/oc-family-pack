@@ -4,25 +4,20 @@ import { CLASSES_LINE_MAX, LOOKUP_DAYS_MAX, SCHEDULE_DAYS_MAX, SCHEDULE_ITEMS_MA
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.js";
 import { groupCopies, mergeGroup, normalTitle } from "./merge.js";
 import { fitsHostLimits } from "./payload.js";
+import { resolveRequester } from "./requester.js";
 import { visibleCalendarIds } from "./visibility.js";
 import { addDays, localDate } from "./week.js";
 export const ME_UNKNOWN = "I can't tell who 'me' is here. Name the person.";
 export const NOTHING_ON = "Nothing on the calendar.";
 export const NO_MATCH = "No match on the calendars you can see.";
 const GUEST = { kind: "person", username: undefined };
-/**
- * Who is asking, from the host's tool context only. A Discord sender is the roster
- * person with that exact discordId or a guest; the owner flag counts only off Discord.
- */
+/** Who is reading. A Discord sender is the roster person with that exact discordId or a guest; the owner flag counts only off Discord. */
 export function scheduleCaller(members, context) {
-    if (context.source !== "tool")
-        return { viewer: GUEST };
-    const { messageChannel, requesterSenderId, senderIsOwner } = context.tool;
-    if (messageChannel === "discord") {
-        const person = requesterSenderId === undefined ? undefined : members.find((member) => member.discordId === requesterSenderId);
-        return person ? { viewer: { kind: "person", username: person.profileId }, me: person.profileId } : { viewer: GUEST };
+    const requester = resolveRequester(members, context);
+    if (requester.from === "discord" && requester.member) {
+        return { viewer: { kind: "person", username: requester.member.profileId }, me: requester.member.profileId };
     }
-    return { viewer: senderIsOwner === true ? { kind: "owner" } : GUEST };
+    return { viewer: requester.from === "tool" && requester.senderIsOwner ? { kind: "owner" } : GUEST };
 }
 /** When copies of one event classify differently, the earliest section here wins. */
 const PRECEDENCE = ["homework", "uniforms", "not the usual", "classes", "usual"];
