@@ -15,6 +15,8 @@ import type {
 
 export type MemberRole = "parent" | "kid" | "guest";
 export type CalendarKind = "personal" | "shared" | "school";
+/** The operator's switch for calendar changes: on, every change waits for approval, or none at all. */
+export type WriteMode = "on" | "confirm" | "off";
 
 /** A device signal. MACs are already lowercase and colon-separated; they are not a person identity. */
 export type MemberDevice = {
@@ -51,6 +53,7 @@ export type Config = {
   demo: boolean;
   location?: Location;
   gogPath: string;
+  writes: WriteMode;
   members: MemberConfig[];
   calendars: CalendarConfig[];
 };

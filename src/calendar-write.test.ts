@@ -6,8 +6,23 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { FeatureInvocationContext } from "openclaw/plugin-sdk/feature-plugin";
 import type { RunGog } from "./calendar-gog.ts";
-import { baseKey, checkKey, createEvent, END_BEFORE_START, normalizeCreate, type CreateRequest, type WriteDeps, writeScope } from "./calendar-write.ts";
+import {
+  baseKey,
+  checkKey,
+  createEvent,
+  END_BEFORE_START,
+  normalizeCreate,
+  submitCreate,
+  type CreateRequest,
+  type SubmitDeps,
+  type WriteDeps,
+  writeScope,
+} from "./calendar-write.ts";
+import { parseConfig } from "./config.ts";
 import type { FamilyStore } from "./store.ts";
+import type { WriteMode } from "./types.ts";
+import { grantHolder, type Grant, type GrantHolder } from "./grant.ts";
+import { READ_ONLY, VIEW_ONLY, WRITES_OFF } from "./write-gate.ts";
 
 const DIST_STORE = new URL("../dist/store.js", import.meta.url);
 type OpenStore = (options: { stateDir: string }) => Promise<FamilyStore>;
@@ -43,7 +58,8 @@ type FakeEvent = {
   private: Record<string, string>;
 };
 
-const VALUE_FLAGS = new Set(["--send-updates", "--max"]);
+// --send-updates is not here: it must be one `--send-updates=none` element, so the two-element form fails to parse.
+const VALUE_FLAGS = new Set(["--max"]);
 const BOOL_FLAGS = new Set(["--all-day", "--all-pages", "--json", "--no-input"]);
 const REPEATED = new Set(["--private-prop"]);
 
@@ -79,8 +95,11 @@ function one(flags: Map<string, string[]>, name: string): string | undefined {
   return flags.get(name)?.[0];
 }
 
-/** `listsCancelled` stands in for a list that includes deleted events, as Google's showDeleted does. */
-function fakeGog({ listsCancelled = false } = {}) {
+/**
+ * `listsCancelled` stands in for a list that includes deleted events, as Google's showDeleted does.
+ * `ignoresFilter` stands in for a gog that drops --private-prop-filter and lists everything in the window.
+ */
+function fakeGog({ listsCancelled = false, ignoresFilter = false, failCreate }: { listsCancelled?: boolean; ignoresFilter?: boolean; failCreate?: () => Error } = {}) {
   const events: FakeEvent[] = [];
   const calls: string[][] = [];
   let onCreate: (() => Promise<void>) | undefined;
@@ -99,7 +118,7 @@ function fakeGog({ listsCancelled = false } = {}) {
         (event) =>
           event.calendarId === id &&
           (listsCancelled || event.status !== "cancelled") &&
-          event.private[filter.slice(0, eq)] === filter.slice(eq + 1) &&
+          (ignoresFilter || event.private[filter.slice(0, eq)] === filter.slice(eq + 1)) &&
           Date.parse(event.start) < to &&
           Date.parse(event.end) > from,
       );
@@ -107,6 +126,7 @@ function fakeGog({ listsCancelled = false } = {}) {
     }
     if (command === "calendar create") {
       assert.equal(one(flags, "--send-updates"), "none");
+      if (failCreate) throw failCreate();
       const props: Record<string, string> = {};
       for (const prop of flags.get("--private-prop") ?? []) {
         const eq = prop.indexOf("=");
@@ -441,8 +461,7 @@ test("each piece of user text is one argv element and -- only precedes the calen
       "--timezone=America/Halifax",
       `--location=${location}`,
       `--description=${description}`,
-      "--send-updates",
-      "none",
+      "--send-updates=none",
       `--private-prop=ocfpBase=${base}`,
       `--private-prop=ocfpKey=${base}.0`,
       "--json",
@@ -569,6 +588,225 @@ test("the retry scope is the session key for a tool and the per-submit requestId
   assert.equal(writeScope(page, { requestId: " " }), undefined);
   assert.equal(writeScope(page, { requestId: 7 }), undefined);
   assert.equal(writeScope({ source: "command" } as unknown as FeatureInvocationContext), undefined);
+});
+
+test("the write log keeps its committed-key, base and event indexes", async () => {
+  await withStore(async ({ stateDir }) => {
+    const list = sqlite(stateDir, "SELECT name, \"unique\" AS uniq, partial FROM pragma_index_list('oc_family_pack_write_log') WHERE origin = 'c' ORDER BY name");
+    assert.equal(list.status, 0, list.stderr);
+    assert.deepEqual(list.rows, [
+      { name: "oc_family_pack_write_log_base", uniq: 0, partial: 0 },
+      { name: "oc_family_pack_write_log_committed_key", uniq: 1, partial: 1 },
+      { name: "oc_family_pack_write_log_event", uniq: 0, partial: 0 },
+    ]);
+    const columns = (index: string) => {
+      const info = sqlite(stateDir, `SELECT name FROM pragma_index_info('${index}') ORDER BY seqno`);
+      assert.equal(info.status, 0, info.stderr);
+      return (info.rows as { name: string }[]).map((row) => row.name);
+    };
+    assert.deepEqual(columns("oc_family_pack_write_log_committed_key"), ["request_key"]);
+    assert.deepEqual(columns("oc_family_pack_write_log_base"), ["base_key", "status"]);
+    assert.deepEqual(columns("oc_family_pack_write_log_event"), ["calendar_id", "event_id", "at"]);
+    const partial = sqlite(stateDir, "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'oc_family_pack_write_log_committed_key'");
+    assert.equal(partial.status, 0, partial.stderr);
+    assert.match((partial.rows as { sql: string }[])[0]?.sql ?? "", /\bWHERE status = 'committed'$/);
+  });
+});
+
+test("a gog that ignores --private-prop-filter still can't pass off someone else's event as this one", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog({ ignoresFilter: true });
+    const request = dentist();
+    const other = (id: string, props: Record<string, string>): void => {
+      gog.events.push({ id, calendarId: request.calendarId, summary: "Dentist", start: "2026-10-14T13:00:00Z", end: "2026-10-14T14:00:00Z", allDay: false, status: "confirmed", private: props });
+    };
+    other("hand-made", {});
+    other("someone-else", { ocfpBase: "f".repeat(64), ocfpKey: `${"f".repeat(64)}.0` });
+    const result = await createEvent(deps(gog, store), request);
+    assert.equal(result.status, "created");
+    assert.equal(gog.calls.filter((args) => args[1] === "create").length, 1);
+    assert.notEqual(result.eventId, "hand-made");
+    assert.notEqual(result.eventId, "someone-else");
+    assert.deepEqual(logRows(stateDir).map((row) => [row.event_id, row.status]), [[result.eventId, "committed"]]);
+  });
+});
+
+const household = parseConfig({
+  timezone: "America/Halifax",
+  members: [
+    { profileId: "britta", displayName: "Britta", role: "parent" },
+    { profileId: "calla", displayName: "Calla", role: "kid" },
+  ],
+  calendars: [{ id: "family@group.calendar.google.com", label: "Family", kind: "shared", owners: ["britta", "calla"] }],
+});
+const FAMILY = household.calendars[0]!;
+const PARENT_SCOPES = ["operator.read", "operator.write", "operator.sessions.write"];
+
+function submitDeps(gog: ReturnType<typeof fakeGog>, log: WriteDeps["log"], writes: WriteMode = "on", grant: GrantHolder = grantHolder()): SubmitDeps {
+  return { config: { gogPath, timezone: "America/Halifax", writes, members: household.members }, runGog: gog.run, log, grant };
+}
+
+let submitCounter = 0;
+/** A page submit as the host hands it to a session action: `client` from the connection, `payload` from the browser. */
+function pageSubmit(client: unknown, payload: Record<string, unknown> = {}) {
+  submitCounter += 1;
+  const fullPayload = { requestId: `submit-${submitCounter}`, ...payload };
+  const action = { pluginId: "oc-family-pack", actionId: "family.calendar.create", payload: fullPayload, ...(client === undefined ? {} : { client }) };
+  return {
+    context: { source: "session-action", api: {}, action } as unknown as FeatureInvocationContext,
+    payload: fullPayload,
+    calendar: FAMILY,
+    fields: { title: "Dentist", start: "2026-10-14T13:00:00Z", end: "2026-10-14T14:00:00Z" },
+  };
+}
+
+const GUEST_CLIENTS: [string, unknown][] = [
+  ["operator.read only", { connId: "c1", scopes: ["operator.read"] }],
+  ["empty scopes", { connId: "c2", scopes: [] }],
+  ["no scopes field", { connId: "c3" }],
+  ["no client", undefined],
+];
+
+test("gate 0: a page session without a write scope gets the view-only line, no gog call and no log row, in every mode", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    for (const writes of ["on", "confirm", "off"] as const) {
+      for (const [name, client] of GUEST_CLIENTS) {
+        const gog = fakeGog();
+        const result = await submitCreate(submitDeps(gog, store, writes), pageSubmit(client));
+        assert.deepEqual(result, { status: "refused", message: VIEW_ONLY }, `${name}, writes ${writes}`);
+        assert.equal(gog.calls.length, 0, `${name}, writes ${writes}`);
+      }
+    }
+    assert.deepEqual(logRows(stateDir), []);
+  });
+});
+
+test("gate 0 ignores a role or scope the page payload claims", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const claims = { role: "parent", scopes: ["operator.write", "operator.admin"], client: { scopes: ["operator.admin"] }, requester: "page:parent" };
+    for (const [name, client] of GUEST_CLIENTS) {
+      const gog = fakeGog();
+      assert.deepEqual(await submitCreate(submitDeps(gog, store), pageSubmit(client, claims)), { status: "refused", message: VIEW_ONLY }, name);
+      assert.equal(gog.calls.length, 0, name);
+    }
+    assert.deepEqual(logRows(stateDir), []);
+  });
+});
+
+test("writes off refuses a parent's page with the off line, no gog call and no log row", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    for (const scopes of [PARENT_SCOPES, ["operator.admin"]]) {
+      const gog = fakeGog();
+      assert.deepEqual(await submitCreate(submitDeps(gog, store, "off"), pageSubmit({ connId: "p", scopes })), { status: "refused", message: WRITES_OFF });
+      assert.equal(gog.calls.length, 0);
+    }
+    assert.deepEqual(logRows(stateDir), []);
+  });
+});
+
+test("writes confirm holds a parent's page write for approval without touching gog or the log", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    assert.deepEqual(await submitCreate(submitDeps(gog, store, "confirm"), pageSubmit({ connId: "p", scopes: PARENT_SCOPES })), {
+      status: "needs-approval",
+      approvers: ["Britta"],
+    });
+    assert.equal(gog.calls.length, 0);
+    assert.deepEqual(logRows(stateDir), []);
+  });
+});
+
+test("a parent's page and an admin-only page write, and every create argv says --send-updates=none", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    const parent = await submitCreate(submitDeps(gog, store), pageSubmit({ connId: "p", scopes: PARENT_SCOPES }));
+    const admin = await submitCreate(submitDeps(gog, store), pageSubmit({ connId: "a", scopes: ["operator.admin"] }));
+    assert.equal(parent.status, "created");
+    assert.equal(admin.status, "created");
+    await createEvent(deps(gog, store), dentist({ fields: { title: "Swim", start: "2026-10-15", allDay: true } }));
+    const creates = gog.calls.filter((args) => args[1] === "create");
+    assert.equal(creates.length, 3);
+    for (const args of creates) {
+      assert.equal(args.filter((arg) => arg.startsWith("--send-updates")).length, 1, JSON.stringify(args));
+      assert.ok(args.includes("--send-updates=none"), JSON.stringify(args));
+    }
+    for (const args of gog.calls.filter((args) => args[1] !== "create")) {
+      assert.equal(args.some((arg) => arg.startsWith("--send-updates")), false, JSON.stringify(args));
+    }
+    assert.deepEqual(
+      logRows(stateDir).map((row) => [row.requester, row.status]),
+      [
+        ["page", "committed"],
+        ["page", "committed"],
+        ["discord:britta", "committed"],
+      ],
+    );
+  });
+});
+
+/** What execFile rejects with: gog's stderr on the error, and a message that repeats the argv. */
+function gogError(stderr: string, extra: Record<string, unknown> = {}): Error {
+  return Object.assign(new Error(`Command failed: gog calendar create --summary=insufficient ACCESS_TOKEN_SCOPE calendar.readonly\n${stderr}`), { code: 1, stderr, ...extra });
+}
+const READONLY_STDERR = "Error: googleapi: Error 403: Request had insufficient authentication scopes., insufficientPermissions";
+
+test("a read-only grant refuses a parent's write with the read-only line, no gog call and no log row", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    for (const scopes of [PARENT_SCOPES, ["operator.admin"]]) {
+      const result = await submitCreate(submitDeps(gog, store, "on", grantHolder("read-only")), pageSubmit({ connId: "p", scopes }));
+      assert.deepEqual(result, { status: "refused", message: READ_ONLY });
+    }
+    assert.deepEqual(await submitCreate(submitDeps(gog, store, "confirm", grantHolder("read-only")), pageSubmit({ connId: "p", scopes: PARENT_SCOPES })), { status: "refused", message: READ_ONLY });
+    assert.deepEqual(await submitCreate(submitDeps(gog, store, "off", grantHolder("read-only")), pageSubmit({ connId: "p", scopes: PARENT_SCOPES })), { status: "refused", message: WRITES_OFF });
+    assert.deepEqual(await submitCreate(submitDeps(gog, store, "on", grantHolder("read-only")), pageSubmit({ connId: "g", scopes: ["operator.read"] })), { status: "refused", message: VIEW_ONLY });
+    assert.equal(gog.calls.length, 0);
+    assert.deepEqual(logRows(stateDir), []);
+  });
+});
+
+test("an unknown grant lets a parent's write through", async () => {
+  await withStore(async ({ store }) => {
+    const gog = fakeGog();
+    const grant = grantHolder();
+    assert.equal(grant.get(), "unknown");
+    assert.equal((await submitCreate(submitDeps(gog, store, "on", grant), pageSubmit({ connId: "p", scopes: PARENT_SCOPES }))).status, "created");
+    assert.equal(grant.get(), "unknown");
+  });
+});
+
+test("a gog write that fails with the read-only grant error flips the grant, so the next write is refused before gog", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    for (const start of ["unknown", "read-write"] as Grant[]) {
+      const grant = grantHolder(start);
+      const failing = fakeGog({ failCreate: () => gogError(READONLY_STDERR) });
+      await assert.rejects(submitCreate(submitDeps(failing, store, "on", grant), pageSubmit({ connId: "p", scopes: PARENT_SCOPES })), /Command failed/);
+      assert.equal(grant.get(), "read-only", start);
+      const next = fakeGog();
+      assert.deepEqual(await submitCreate(submitDeps(next, store, "on", grant), pageSubmit({ connId: "p", scopes: PARENT_SCOPES })), { status: "refused", message: READ_ONLY });
+      assert.equal(next.calls.length, 0);
+    }
+    // Only the two failed creates left rows; the refusals left none.
+    assert.deepEqual(logRows(stateDir).map((row) => row.status), ["failed", "failed"]);
+  });
+});
+
+test("a timeout, another non-zero exit, or a 500 leaves the grant as it was", async () => {
+  await withStore(async ({ store }) => {
+    const failures: [string, () => Error][] = [
+      ["timeout", () => Object.assign(new Error("Command failed: gog calendar create --summary=insufficient"), { killed: true, signal: "SIGTERM", code: null, stderr: "" })],
+      ["other exit", () => gogError("Error: calendar not found: family@group.calendar.google.com")],
+      ["500", () => gogError("Error: googleapi: Error 500: Backend Error, backendError")],
+      ["no stderr", () => new Error("spawn gog EACCES insufficient ACCESS_TOKEN_SCOPE")],
+    ];
+    for (const start of ["unknown", "read-write"] as Grant[]) {
+      for (const [name, failCreate] of failures) {
+        const grant = grantHolder(start);
+        await assert.rejects(submitCreate(submitDeps(fakeGog({ failCreate }), store, "on", grant), pageSubmit({ connId: "p", scopes: PARENT_SCOPES })));
+        assert.equal(grant.get(), start, `${name} from ${start}`);
+      }
+    }
+  });
 });
 
 test("no real gog is reachable from the tests", () => {

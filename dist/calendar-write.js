@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { resolveRequester } from "./requester.js";
 import { addDays, parseDate } from "./week.js";
+import { gateWrite } from "./write-gate.js";
 /** ux's line for a write whose end is not after its start. */
 export const END_BEFORE_START = "The end has to be after the start. Nothing was added.";
 const KEY_MAX = 256;
@@ -177,8 +179,8 @@ function createArgs(deps, request, fields, base, key) {
         ...(fields.allDay ? ["--all-day"] : [flag("timezone", deps.config.timezone)]),
         ...(fields.location ? [flag("location", fields.location)] : []),
         ...(fields.description ? [flag("description", fields.description)] : []),
-        "--send-updates",
-        "none",
+        // gog's default is none today; saying so keeps guests from surprise Google emails if that changes.
+        flag("send-updates", "none"),
         flag("private-prop", `ocfpBase=${base}`),
         flag("private-prop", `ocfpKey=${key}`),
         "--json",
@@ -231,4 +233,26 @@ export async function createEvent(deps, request) {
         await deps.log.appendWriteLog({ ...row, requestKey: key, eventId, status: "committed" }, { ifAbsent: false });
         return { status: "created", eventId, key };
     });
+}
+/**
+ * The pipeline entry for a create. The gate runs first, so a refusal never reaches gog or
+ * the write log. A needs-approval result stops here until approvals land (s5k.34.3).
+ */
+export async function submitCreate(deps, submission) {
+    const requester = resolveRequester(deps.config.members, submission.context);
+    const gate = gateWrite({ writes: deps.config.writes, grant: deps.grant.get(), members: deps.config.members, requester, calendar: submission.calendar });
+    if (gate.decision === "refused")
+        return { status: "refused", message: gate.message };
+    if (gate.decision === "needs-approval")
+        return { status: "needs-approval", approvers: gate.approvers };
+    const scope = writeScope(submission.context, submission.payload);
+    if (scope === undefined)
+        throw new Error("oc-family-pack: a write needs a retry scope");
+    try {
+        return await createEvent(deps, { requester: requesterTag(requester), scope, calendarId: submission.calendar.id, fields: submission.fields });
+    }
+    catch (error) {
+        deps.grant.noteWriteFailure(error);
+        throw error;
+    }
 }

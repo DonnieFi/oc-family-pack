@@ -1,6 +1,7 @@
 import type { FeatureEventEmitter } from "openclaw/plugin-sdk/feature-plugin";
 import type { RunGog } from "./calendar-gog.ts";
 import type { contract } from "./contract.ts";
+import type { GrantHolder } from "./grant.ts";
 import type { CalendarConfig, Config } from "./types.ts";
 
 export const POLL_MS = 3 * 60_000;
@@ -58,7 +59,8 @@ async function readCalendar(config: Config, calendar: CalendarConfig, since: str
  * Google changed underneath them. State is in memory: a restart takes a fresh
  * baseline, and a calendar's first successful read never counts as a change.
  * gog drops the milliseconds from `--since`, so the newest event comes back on
- * every poll; only a strictly newer `updated` is a change.
+ * every poll; only a strictly newer `updated` is a change. Each poll also
+ * re-reads gog's grant into `grant`, so a fixed grant clears a read-only status.
  */
 export function watchCalendars(options: {
   config: Config;
@@ -66,8 +68,9 @@ export function watchCalendars(options: {
   events: FeatureEventEmitter<typeof contract>;
   logger: { warn: (message: string) => void };
   schedule?: Schedule;
+  grant?: GrantHolder;
 }): () => void {
-  const { config, runGog, events, logger, schedule = unrefSchedule } = options;
+  const { config, runGog, events, logger, schedule = unrefSchedule, grant } = options;
   if (config.demo || config.calendars.length === 0) return () => {};
   const marks = new Map<string, string>();
   let stopped = false;
@@ -83,9 +86,12 @@ export function watchCalendars(options: {
   };
 
   const poll = async (first: boolean) => {
-    const reads = await Promise.all(
-      config.calendars.map(async (calendar) => [calendar, await readCalendar(config, calendar, marks.get(calendar.key) ?? FIRST_SINCE, runGog)] as const),
-    );
+    const [reads] = await Promise.all([
+      Promise.all(
+        config.calendars.map(async (calendar) => [calendar, await readCalendar(config, calendar, marks.get(calendar.key) ?? FIRST_SINCE, runGog)] as const),
+      ),
+      grant?.refresh(runGog, config.gogPath),
+    ]);
     if (stopped) return;
     let changed = false;
     let ok = true;

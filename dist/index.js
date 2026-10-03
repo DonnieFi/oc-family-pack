@@ -8,6 +8,7 @@ import { registerFamilyCli } from "./gog-setup.js";
 import { familyHandlers, familyWeek } from "./handlers.js";
 import { openFamilyStore } from "./store.js";
 import { weekMethod } from "./week-method.js";
+import { familyGrant } from "./grant.js";
 function configuredGogPath(raw) {
     try {
         return parseConfig(raw).gogPath;
@@ -61,7 +62,7 @@ const plugin = defineFeaturePlugin({
                 id: "calendar-watch",
                 reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
                 start(ctx) {
-                    stopWatch = watchCalendars({ config, runGog: execGog(), events, logger: ctx.logger });
+                    stopWatch = watchCalendars({ config, runGog: execGog(), events, logger: ctx.logger, grant: familyGrant });
                 },
                 stop() {
                     stopWatch?.();

@@ -110,6 +110,23 @@
         "minLength": 1,
         "maxLength": 1024
       },
+      "writes": {
+        "anyOf": [
+          {
+            "type": "string",
+            "const": "on"
+          },
+          {
+            "type": "string",
+            "const": "confirm"
+          },
+          {
+            "type": "string",
+            "const": "off"
+          }
+        ],
+        "default": "on"
+      },
       "members": {
         "type": "array",
         "items": {

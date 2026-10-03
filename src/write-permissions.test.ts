@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseConfig } from "./config.ts";
 import { resolveRequester, type Requester } from "./requester.ts";
-import { SETUP_PERSON, writeRight } from "./write-permissions.ts";
+import { pageRole, SETUP_PERSON, writeRight } from "./write-permissions.ts";
 
 const CALLA_DISCORD = "100000000000000001";
 const DONNIE_DISCORD = "100000000000000003";
@@ -35,7 +35,11 @@ const calendar = (id: string) => {
 };
 
 const tool = (fields: Record<string, unknown>) => ({ source: "tool", api: {}, toolCallId: "call-1", tool: fields }) as never;
-const page = { source: "session-action", api: {}, action: {} } as never;
+const PARENT_SCOPES = ["operator.read", "operator.write", "operator.sessions.write"];
+const CLI_ADMIN_SCOPES = ["operator.admin", "operator.read", "operator.write", "operator.approvals", "operator.questions", "operator.pairing", "operator.talk.secrets"];
+/** A page session as the host hands it over: `client` is the connection's granted scopes, `payload` is the browser's. */
+const pageSession = (client?: unknown, payload?: unknown) =>
+  ({ source: "session-action", api: {}, action: { pluginId: "oc-family-pack", actionId: "a", ...(client === undefined ? {} : { client }), ...(payload === undefined ? {} : { payload }) } }) as never;
 const command = { source: "command", api: {}, command: {} } as never;
 
 const FROM = {
@@ -45,7 +49,10 @@ const FROM = {
   "an unknown Discord sender claiming owner": tool({ messageChannel: "discord", requesterSenderId: "199999999999999999", senderIsOwner: true }),
   "Control UI chat as owner": tool({ messageChannel: "webchat", senderIsOwner: true }),
   "Control UI chat with Calla's Discord id": tool({ requesterSenderId: CALLA_DISCORD }),
-  "the page": page,
+  "a parent's page": pageSession({ connId: "c1", scopes: PARENT_SCOPES }),
+  "an admin's page": pageSession({ connId: "c2", scopes: ["operator.admin"] }),
+  "a read-only page": pageSession({ connId: "c3", scopes: ["operator.read"] }),
+  "a page with no client": pageSession(),
   "a command": command,
 } as const;
 
@@ -74,10 +81,15 @@ const TABLE: [keyof typeof FROM, string, typeof WRITE | typeof PARENTS][] = [
   ["Control UI chat as owner", "donnie", PARENTS],
   ["Control UI chat as owner", "family", PARENTS],
   ["Control UI chat with Calla's Discord id", "calla", PARENTS],
-  ["the page", "donnie", WRITE],
-  ["the page", "calla", WRITE],
-  ["the page", "family", WRITE],
-  ["the page", "school-calla", WRITE],
+  ["a parent's page", "donnie", WRITE],
+  ["a parent's page", "calla", WRITE],
+  ["a parent's page", "family", WRITE],
+  ["a parent's page", "school-calla", WRITE],
+  ["an admin's page", "family", WRITE],
+  ["an admin's page", "calla", WRITE],
+  ["a read-only page", "family", PARENTS],
+  ["a read-only page", "calla", PARENTS],
+  ["a page with no client", "family", PARENTS],
   ["a command", "family", PARENTS],
 ];
 
@@ -109,11 +121,35 @@ test("a denied write names every roster parent, and the setup person when there 
 });
 
 test("the requester comes only from the host's source and channel", () => {
-  assert.deepEqual(resolveRequester(members, FROM["the page"]), { from: "page" });
+  assert.deepEqual(resolveRequester(members, FROM["a parent's page"]), { from: "page", client: { scopes: PARENT_SCOPES } });
+  assert.deepEqual(resolveRequester(members, FROM["a page with no client"]), { from: "page" });
   assert.deepEqual(resolveRequester(members, FROM["a command"]), { from: "other" });
   assert.deepEqual(resolveRequester(members, FROM["Calla on Discord"]), { from: "discord", member: members[2] });
   assert.deepEqual(resolveRequester(members, FROM["an unknown Discord sender claiming owner"]), { from: "discord" });
   assert.deepEqual(resolveRequester(members, tool({ messageChannel: "discord", senderIsOwner: true })), { from: "discord" });
   assert.deepEqual(resolveRequester(members, FROM["Control UI chat as owner"]), { from: "tool", senderIsOwner: true });
   assert.deepEqual(resolveRequester(members, FROM["Control UI chat with Calla's Discord id"]), { from: "tool", senderIsOwner: false });
+});
+
+test("a page session is a parent with operator.write or operator.admin and a guest otherwise", () => {
+  assert.equal(pageRole({ scopes: PARENT_SCOPES }), "parent");
+  assert.equal(pageRole({ scopes: ["operator.write"] }), "parent");
+  assert.equal(pageRole({ scopes: ["operator.admin"] }), "parent");
+  assert.equal(pageRole({ scopes: CLI_ADMIN_SCOPES }), "parent");
+  assert.equal(pageRole({ scopes: ["operator.read"] }), "guest");
+  assert.equal(pageRole({ scopes: ["operator.read", "operator.sessions.write"] }), "guest");
+  assert.equal(pageRole({ scopes: [] }), "guest");
+  assert.equal(pageRole({}), "guest");
+  assert.equal(pageRole(undefined), "guest");
+  assert.equal(pageRole({ scopes: "operator.write" as never }), "guest");
+});
+
+test("a page's role never comes from the payload", () => {
+  const claims = { role: "parent", scopes: ["operator.write", "operator.admin"], client: { scopes: ["operator.admin"] }, requester: "page:parent" };
+  for (const client of [{ connId: "c3", scopes: ["operator.read"] }, { connId: "c4", scopes: [] }, undefined]) {
+    const requester = resolveRequester(members, pageSession(client, claims));
+    assert.equal(requester.from, "page");
+    assert.equal(requester.from === "page" ? pageRole(requester.client) : undefined, "guest", JSON.stringify(client));
+    assert.deepEqual(writeRight(members, requester, calendar("family")), PARENTS, JSON.stringify(client));
+  }
 });

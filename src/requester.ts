@@ -6,16 +6,20 @@ import type { MemberConfig } from "./types.ts";
  * for a tool, its message channel. Nothing in the call's input reaches this.
  * - discord: member is the roster person with that exact discordId; no member means unmatched.
  * - tool: a tool call off Discord, where the host's owner flag is the only signal.
- * - page: a session action from the Control UI page.
+ * - page: a session action from the Control UI page. `client` is the host's copy of the
+ *   connection's granted scopes, never anything from the action's payload.
  */
 export type Requester =
   | { from: "discord"; member?: MemberConfig }
   | { from: "tool"; senderIsOwner: boolean }
-  | { from: "page" }
+  | { from: "page"; client?: { scopes: readonly string[] } }
   | { from: "other" };
 
 export function resolveRequester(members: readonly MemberConfig[], context: FeatureInvocationContext): Requester {
-  if (context.source === "session-action") return { from: "page" };
+  if (context.source === "session-action") {
+    const scopes = context.action.client?.scopes;
+    return Array.isArray(scopes) ? { from: "page", client: { scopes: [...scopes] } } : { from: "page" };
+  }
   if (context.source !== "tool") return { from: "other" };
   const { messageChannel, requesterSenderId, senderIsOwner } = context.tool;
   if (messageChannel === "discord") {

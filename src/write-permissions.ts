@@ -22,9 +22,19 @@ const TABLE: Record<MemberRole, Record<Target, WriteRight["right"]>> = {
 };
 
 /**
+ * Whether a page session may write. Only the host's granted scopes decide: operator.write,
+ * or operator.admin, which the host treats as every operator scope
+ * (operator-scope-compat operatorScopeSatisfied). No client or no scopes is a guest.
+ */
+export function pageRole(client: { scopes?: readonly unknown[] } | undefined): "parent" | "guest" {
+  const scopes = Array.isArray(client?.scopes) ? client.scopes : [];
+  return scopes.includes("operator.write") || scopes.includes("operator.admin") ? "parent" : "guest";
+}
+
+/**
  * The writer's role and roster id. Discord trusts only a roster match. Off Discord the
  * owner flag doesn't name a person, so a tool caller writes as a kid with no calendar of
- * their own. The page writes as a parent until s5k.34.6 checks operator.write.
+ * their own. The page is a parent or a guest by its connection's scopes.
  */
 function writer(requester: Requester): { role: MemberRole; profileId?: string } {
   switch (requester.from) {
@@ -33,7 +43,7 @@ function writer(requester: Requester): { role: MemberRole; profileId?: string } 
     case "tool":
       return { role: "kid" };
     case "page":
-      return { role: "parent" };
+      return { role: pageRole(requester.client) };
     case "other":
       return { role: "guest" };
   }
@@ -45,6 +55,11 @@ export function writeRight(members: readonly MemberConfig[], requester: Requeste
   const target: Target =
     calendar.kind !== "personal" ? calendar.kind : profileId !== undefined && calendar.owners.includes(profileId) ? "personal-own" : "personal-other";
   if (TABLE[role][target] === "write") return { right: "write" };
+  return { right: "needs-approval", approvers: approvers(members) };
+}
+
+/** Every roster parent, or the setup person when there are none. */
+export function approvers(members: readonly MemberConfig[]): string[] {
   const parents = members.filter((member) => member.role === "parent").map((member) => member.displayName);
-  return { right: "needs-approval", approvers: parents.length > 0 ? parents : [SETUP_PERSON] };
+  return parents.length > 0 ? parents : [SETUP_PERSON];
 }

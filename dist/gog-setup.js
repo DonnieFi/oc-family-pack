@@ -12,7 +12,8 @@ const ACCOUNT = /^[A-Za-z0-9.+_][A-Za-z0-9._+-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 const AUTH_URL = /^https?:\/\/[^\s'"`\\]+$/;
 const OAUTH_CLIENT_MISSING = /OAuth client credentials missing|No OAuth client credentials stored/;
 const AUTH_FAILURE = /missing --account|invalid_grant|\(401 authError\)|No OAuth client credentials stored/;
-const READONLY_GRANT = /insufficient|ACCESS_TOKEN_SCOPE|calendar\.readonly/i;
+/** gog's stderr when the stored grant cannot write to Calendar. */
+export const READONLY_GRANT = /insufficient|ACCESS_TOKEN_SCOPE|calendar\.readonly/i;
 function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -108,6 +109,20 @@ function accounts(stdout) {
     catch {
         return undefined;
     }
+}
+/**
+ * What `gog auth list --json` says about writing to Calendar, by the same rule setup uses:
+ * read-only when every stored account lacks the calendar scope, read-write when one has it.
+ */
+export function grantFromAuthList(stdout) {
+    const stored = accounts(stdout);
+    if (!stored || stored.length === 0)
+        return "unknown";
+    if (stored.some((account) => account.calendar === true))
+        return "read-write";
+    if (stored.every((account) => account.calendar === false))
+        return "read-only";
+    return "unknown";
 }
 function missing() {
     return {
