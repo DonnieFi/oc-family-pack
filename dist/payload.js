@@ -2,6 +2,7 @@ import { readGogCalendars } from "./calendar-gog.js";
 import { ConfigError } from "./config.js";
 import { MAX_WEEK_EVENTS } from "./contract.js";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.js";
+import { mergeCopies } from "./merge.js";
 import { visibleCalendarIds } from "./visibility.js";
 import { groupByDay, resolveMembers, resolveWeek } from "./week.js";
 /** The host's bounded-JSON limits for feature results (openclaw `host-hook-json`). Depth, key count, and string length are fixed by the schema. */
@@ -67,7 +68,9 @@ export async function buildWeekPayload(config, requestedStart, now, readWeather,
     // Hidden calendars are dropped before anything is read, so no count, warning or list entry reveals them.
     const visible = visibleCalendarIds({ members, calendars }, viewer);
     const shown = calendars.filter((entry) => visible.has(entry.id));
-    const [calendar, weather] = await Promise.all([readCalendar(config, shown, week), readWeather()]);
+    const [read, weather] = await Promise.all([readCalendar(config, shown, week), readWeather()]);
+    // Merging runs on visible calendars only, so a merged event never names a hidden one.
+    const calendar = read.status === "ok" ? { ...read, data: mergeCopies(read.data) } : read;
     return fitWeek({
         mode: config.demo ? "demo" : "live",
         range: week.range,

@@ -469,6 +469,44 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(dot?.style.getPropertyValue("--ocfp-dot"), "oklch(0.6509 0.1212 220.72)");
   });
 
+  test("a merged event is one card with every owner's dot, a neutral stripe, and any owner's chip keeps it lit", async () => {
+    const payload = week();
+    payload.calendars.push({ key: "c1", label: "Sam", kind: "personal", ownerIds: ["sam"] });
+    const alexEvent = payload.calendar.status === "ok" ? payload.calendar.data[0] : undefined;
+    assert.ok(alexEvent);
+    alexEvent.calendarKeys = ["c0", "c1"];
+    const page = mountPage({ mode: "light", result: payload });
+    await flush();
+    const card = page.container.querySelector<HTMLElement>("[data-event-id='e-alex']");
+    assert.equal(page.container.querySelectorAll("[data-event-id='e-alex']").length, 1);
+    assert.equal(card?.style.getPropertyValue("--ocfp-event"), "var(--family-neutral)");
+    assert.equal(card?.querySelector(".ocfp-owner-name")?.textContent, "Alex, Sam");
+    assert.equal(card?.querySelectorAll(".ocfp-owner-dot").length, 2);
+    assert.match(card?.getAttribute("aria-label") ?? "", /Alex, Sam$/);
+    const sam = [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-chip")].find((chip) => chip.textContent?.startsWith("Sam"));
+    sam?.click();
+    assert.equal(page.container.querySelector("[data-event-id='e-alex']")?.classList.contains("is-dimmed"), false);
+    page.container.querySelector<HTMLElement>("[data-event-id='e-alex']")?.click();
+    const dialog = page.dialogs[0]?.content;
+    assert.deepEqual([...(dialog?.querySelectorAll<HTMLElement>(".ocfp-owner-dot") ?? [])].map((dot) => dot.style.getPropertyValue("--ocfp-dot")), [
+      "oklch(0.6509 0.1212 220.72)",
+      card?.querySelectorAll<HTMLElement>(".ocfp-owner-dot")[1]?.style.getPropertyValue("--ocfp-dot"),
+    ]);
+  });
+
+  test("a copy from a shared calendar turns a one-owner merged card neutral", async () => {
+    const payload = week();
+    const alexEvent = payload.calendar.status === "ok" ? payload.calendar.data[0] : undefined;
+    assert.ok(alexEvent);
+    payload.calendars[1] = { key: "c4", label: "Family", kind: "shared", ownerIds: [] };
+    alexEvent.calendarKeys = ["c0", "c4"];
+    const page = mountPage({ mode: "light", result: payload });
+    await flush();
+    const card = page.container.querySelector<HTMLElement>("[data-event-id='e-alex']");
+    assert.equal(card?.style.getPropertyValue("--ocfp-event"), "var(--family-neutral)");
+    assert.equal(card?.querySelector(".ocfp-owner-name")?.textContent, "Alex");
+  });
+
   test("a named colour still paints the week in light mode", async () => {
     const payload = week();
     const alexMember = payload.members[0];

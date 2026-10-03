@@ -2,6 +2,7 @@ import { readGogCalendars } from "./calendar-gog.ts";
 import { ConfigError } from "./config.ts";
 import { MAX_WEEK_EVENTS } from "./contract.ts";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.ts";
+import { mergeCopies } from "./merge.ts";
 import type { CalendarConfig, CalendarRef, CalendarState, Config, SourceState, WeatherCard, WeekPayload } from "./types.ts";
 import { visibleCalendarIds, type Viewer } from "./visibility.ts";
 import { groupByDay, resolveMembers, resolveWeek, type Week } from "./week.ts";
@@ -80,7 +81,9 @@ export async function buildWeekPayload(
   // Hidden calendars are dropped before anything is read, so no count, warning or list entry reveals them.
   const visible = visibleCalendarIds({ members, calendars }, viewer);
   const shown = calendars.filter((entry) => visible.has(entry.id));
-  const [calendar, weather] = await Promise.all([readCalendar(config, shown, week), readWeather()]);
+  const [read, weather] = await Promise.all([readCalendar(config, shown, week), readWeather()]);
+  // Merging runs on visible calendars only, so a merged event never names a hidden one.
+  const calendar = read.status === "ok" ? { ...read, data: mergeCopies(read.data) } : read;
   return fitWeek({
     mode: config.demo ? "demo" : "live",
     range: week.range,

@@ -88,6 +88,15 @@ const noon = (date: string) => new Date(`${date}T12:00:00Z`);
 
 const isWeekend = (date: string) => [0, 6].includes(noon(date).getUTCDay());
 
+/** Only shared calendars fed this event, so it belongs to the whole family. */
+const isFamilyOnly = (sources: readonly CalendarRef[]) => sources.length > 0 && sources.every((calendar) => calendar.kind === "shared");
+
+/** Owners of every source calendar, once each, in roster order. */
+const rosterOwners = (week: WeekPayload, sources: readonly CalendarRef[]) => {
+  const ids = new Set(sources.flatMap((calendar) => calendar.ownerIds));
+  return week.members.flatMap((member) => (ids.has(member.profileId) ? [member.profileId] : []));
+};
+
 /**
  * Runs `load` now and again on every reconnect. An answer that a newer load or
  * the returned stop overtook is dropped.
@@ -245,12 +254,20 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     }
 
     const calendars = new Map<string, CalendarRef>(week.calendars.map((calendar) => [calendar.key, calendar]));
-    const calendarOf = (event: FamilyEvent) => calendars.get(event.calendarKey);
-    const isShared = (event: FamilyEvent) => calendarOf(event)?.kind === "shared";
-    const ownerIds = (event: FamilyEvent) => calendarOf(event)?.ownerIds ?? [];
+    // A merged event lists every visible calendar it came from; a single copy has only calendarKey.
+    const sourcesOf = (event: FamilyEvent) =>
+      (event.calendarKeys ?? [event.calendarKey]).flatMap((key) => {
+        const calendar = calendars.get(key);
+        return calendar ? [calendar] : [];
+      });
+    const anyShared = (event: FamilyEvent) => sourcesOf(event).some((calendar) => calendar.kind === "shared");
+    const familyOnly = (event: FamilyEvent) => isFamilyOnly(sourcesOf(event));
+    const ownerIds = (event: FamilyEvent) => rosterOwners(week, sourcesOf(event));
     const eventColor = (event: FamilyEvent) =>
-      isShared(event) ? "var(--family-neutral)" : accentOnCard(members.get(ownerIds(event)[0] ?? "")?.color ?? "var(--family-neutral)");
-    const matches = (event: FamilyEvent) => !person || isShared(event) || ownerIds(event).includes(person);
+      anyShared(event) || ownerIds(event).length > 1
+        ? "var(--family-neutral)"
+        : accentOnCard(members.get(ownerIds(event)[0] ?? "")?.color ?? "var(--family-neutral)");
+    const matches = (event: FamilyEvent) => !person || anyShared(event) || ownerIds(event).includes(person);
 
     const start = noon(week.range.start);
     const end = noon(week.range.end);
@@ -354,7 +371,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       return startsToday ? fmt.time.format(new Date(event.start)) : `until ${fmt.time.format(new Date(event.end))}`;
     };
     const ownerLabel = (event: FamilyEvent) =>
-      isShared(event)
+      familyOnly(event)
         ? "Family"
         : ownerIds(event)
             .flatMap((id) => {
@@ -364,7 +381,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
             .join(", ");
     const ownerDots = (event: FamilyEvent) => {
       const label = ownerLabel(event);
-      if (isShared(event)) return h("span", { class: "ocfp-chip-role" }, label);
+      if (familyOnly(event)) return h("span", { class: "ocfp-chip-role" }, label);
       return h(
         "span",
         { class: "ocfp-owner-dots" },
@@ -394,7 +411,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
             event.location ? h("span", { class: "ocfp-event-location" }, event.location) : null,
           ),
           "click",
-          (click) => openEvent(week, event, calendarOf(event), eventColor(event), click.currentTarget instanceof HTMLElement ? click.currentTarget : null),
+          (click) => openEvent(week, event, sourcesOf(event), eventColor(event), click.currentTarget instanceof HTMLElement ? click.currentTarget : null),
         ),
         { "--ocfp-event": eventColor(event) },
       );
@@ -528,7 +545,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     dialog = undefined;
   }
 
-  function openEvent(week: WeekPayload, event: FamilyEvent, calendar: CalendarRef | undefined, color: string, trigger: HTMLElement | null) {
+  function openEvent(week: WeekPayload, event: FamilyEvent, sources: CalendarRef[], color: string, trigger: HTMLElement | null) {
     const timezone = week.range.timezone;
     const fmt = formats(timezone, host.locale);
     const members = new Map(week.members.map((member) => [member.profileId, member]));
@@ -542,13 +559,12 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       const sameDay = localDate(Date.parse(event.start), timezone) === localDate(Date.parse(event.end), timezone);
       return `${fmt.when.format(new Date(event.start))} – ${(sameDay ? fmt.time : fmt.when).format(new Date(event.end))}`;
     };
-    const who =
-      calendar?.kind === "shared"
-        ? "Everyone"
+    const who = isFamilyOnly(sources)
+      ? "Everyone"
         : h(
             "span",
             { class: "ocfp-who-list" },
-            ...(calendar?.ownerIds ?? []).flatMap((id) => {
+            ...rosterOwners(week, sources).flatMap((id) => {
               const member = members.get(id);
               return member
                 ? [h("span", { class: "ocfp-who" }, paint(h("span", { class: "ocfp-owner-dot" }), { "--ocfp-dot": accentOnCard(member.color) }), member.displayName)]
@@ -559,7 +575,9 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       ["When", describeWhen()],
       ...(event.location ? [["Where", event.location] satisfies [string, Child]] : []),
       ["Who", who],
-      ...(calendar ? [["Calendar", `${calendar.label} · ${calendar.kind}`] satisfies [string, Child]] : []),
+      ...(sources.length > 0
+        ? [[sources.length > 1 ? "Calendars" : "Calendar", sources.map((calendar) => `${calendar.label} · ${calendar.kind}`).join(", ")] satisfies [string, Child]]
+        : []),
     ];
     const details = paint(
       h(

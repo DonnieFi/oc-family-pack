@@ -59,6 +59,8 @@ export const FamilyEventSchema = Type.Object({
   allDay: Type.Boolean(),
   location: Type.Optional(Text(LOCATION_MAX)),
   calendarKey: Text(8),
+  /** Every visible calendar a merged event was read from, earliest first; absent for a single source. */
+  calendarKeys: Type.Optional(Type.Array(Text(8), { minItems: 2, maxItems: MAX_CALENDARS })),
   htmlLink: Type.Optional(Text(LINK_MAX)),
 });
 
