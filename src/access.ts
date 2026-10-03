@@ -35,8 +35,8 @@ const PROXY_RULES =
   "Any proxy works if it's the only way to reach the Gateway, signs each person in, sends their username in `X-Forwarded-User`, and replaces any `X-Forwarded-User` or `X-Forwarded-For` the browser sends.";
 const NO_SIGN_OUT =
   "There's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.";
-const LOOPBACK_WARNING = "Anything else running on this machine can sign in as any family member. Run only Caddy and the Gateway here.";
-const LAN_ADDRESS_STEP = "Replace `LAN_ADDRESS` with this machine's address on your home network, like `192.168.1.20`.";
+const LOOPBACK_WARNING = "Anything else running on this machine can sign in as any family member. Run only the proxy and the Gateway here.";
+const LAN_ADDRESS_STEP = "Replace `LAN_ADDRESS` with this machine's address on your home network, like `192.168.1.20`. Use the same address in the Caddyfile and in `allowedOrigins`. If you add a port to the Caddyfile, add it to the origin too.";
 const OUTSIDE =
   "This Gateway lets people sign in from outside your home network. Family Pack is local only, so it doesn't set that up. Use `openclaw family access lan` instead.";
 const HASH_STEP = "Run `caddy hash-password` once for each person and paste each hash in place of its placeholder.";
@@ -75,6 +75,9 @@ export function outsideSignIn(gateway: unknown): boolean {
 }
 
 /** Which local mode the Gateway is in, and each step still missing for it. */
+/** `https://host` or `https://host:port`: no wildcard, no path, no query, no credentials. */
+const BARE_HTTPS = /^https:\/\/[^/\s*?#@]+$/;
+
 export function detectAccess(gateway: unknown): AccessDetection {
   const g = record(gateway);
   const auth = record(g.auth);
@@ -91,12 +94,17 @@ export function detectAccess(gateway: unknown): AccessDetection {
     if (!Array.isArray(proxy.allowUsers) || proxy.allowUsers.length === 0) {
       missing.push("List the family usernames in `gateway.auth.trustedProxy.allowUsers`.");
     }
-    if (proxy.allowLoopback !== true) missing.push("Set `gateway.auth.trustedProxy.allowLoopback` to `true`, because Caddy runs on this machine.");
+    if (proxy.allowLoopback !== true) missing.push("Set `gateway.auth.trustedProxy.allowLoopback` to `true`, because the proxy runs on this machine.");
+    // publicOrigin alone doesn't count: it describes a Gateway reachable from outside.
+    const origins = record(g.controlUi).allowedOrigins;
+    if (!Array.isArray(origins) || origins.length === 0 || !origins.every((origin) => typeof origin === "string" && BARE_HTTPS.test(origin))) {
+      missing.push("Set `gateway.controlUi.allowedOrigins` to the one address the family opens, like `https://192.168.1.20`. It has to start with `https://`, with no `*` and no path.");
+    }
     // Exactly loopback: any wider entry lets another LAN machine pose as the proxy.
     if (!Array.isArray(g.trustedProxies) || g.trustedProxies.length !== 1 || g.trustedProxies[0] !== "127.0.0.1") {
       missing.push("Set `gateway.trustedProxies` to only `127.0.0.1`, so nothing else on your network can pretend to be the proxy.");
     }
-    if (!loopback) missing.push(`${needLoopback} Caddy should be the only way in.`);
+    if (!loopback) missing.push(`${needLoopback} The proxy should be the only way in.`);
     if (!present(auth.password)) missing.push("Set a `gateway.auth.password`, because `users.setRole` uses it.");
     return { mode: "lan", missing };
   }
@@ -168,9 +176,11 @@ function setRoleLines(list: Person[]): string[] {
 
 const CUSTOM_PLUGINS = { experimental: { customPlugins: true } };
 
+const SITE = "LAN_ADDRESS";
+
 function caddyfile(list: Person[], port: number): string {
   return [
-    "LAN_ADDRESS {",
+    `${SITE} {`,
     "\ttls internal",
     "\tbasic_auth {",
     ...list.map((person) => `\t\t${person.name} HASH_${person.name}`),
@@ -226,7 +236,7 @@ export function planAccess(
         json({
           gateway: {
             bind: "loopback",
-            controlUi: CUSTOM_PLUGINS,
+            controlUi: { ...CUSTOM_PLUGINS, allowedOrigins: [`https://${SITE}`] },
             trustedProxies: ["127.0.0.1"],
             auth: {
               mode: "trusted-proxy",

@@ -142,7 +142,7 @@ Each family operation is defined once and shared by the page and the agent tools
 Family Pack is local only. `openclaw family access` says which mode the Gateway is in and what's left to set up. It changes nothing.
 
 - **Solo.** Everyone who opens the Control UI is the owner. Family members use Discord, where the bot knows who's talking. Nothing extra to install.
-- **LAN.** Needs a proxy on the Gateway machine that serves HTTPS and signs each person in. Caddy is the worked example, and any proxy that follows the printed rules works. Each person signs in with their own username and password. `openclaw family access lan --parent alex --kid riley` prints the Caddyfile, the Gateway config, the roles and the `users.setRole` steps. Passwords are never asked for or stored.
+- **LAN.** Needs a proxy on the Gateway machine that serves HTTPS and signs each person in. Caddy is the worked example, and any proxy that follows the printed rules works. Each person signs in with their own username and password. `openclaw family access lan --parent alex --kid riley` prints the Caddyfile, the Gateway config, the roles and the `users.setRole` steps. Passwords are never asked for or stored. [HOUSEHOLD-LAN.md](HOUSEHOLD-LAN.md) walks through the switch in order, including how to undo it.
 
 In LAN mode there's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.
 

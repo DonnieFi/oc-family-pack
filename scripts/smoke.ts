@@ -22,6 +22,7 @@ import { Value } from "typebox/value";
 import { parseConfig } from "../src/config.ts";
 import { MAX_WEEK_EVENTS, contract } from "../src/contract.ts";
 import { buildWeekPayload, fitsHostLimits, jsonNodeCount } from "../src/payload.ts";
+import { planAccess } from "../src/access.ts";
 import { isolatedGatewayEnv } from "./isolated-env.ts";
 
 const ROOT = dirname(dirname(new URL(import.meta.url).pathname));
@@ -71,7 +72,8 @@ type Step =
   | "service scheduler"
   | "sqlite store"
   | "host json limits"
-  | "update path";
+  | "update path"
+  | "household sign-in";
 
 let workDir: string | undefined;
 let gateway: ChildProcess | undefined;
@@ -383,7 +385,7 @@ async function freePort(): Promise<number> {
 }
 
 /** The files a git install would have, so the smoke exercises the shipped shape. */
-const SHIPPED = ["package.json", "package-lock.json", "openclaw.plugin.json", "dist", "src", "README.md", "FAQ.md", "LICENSE"];
+const SHIPPED = ["package.json", "package-lock.json", "openclaw.plugin.json", "dist", "src", "README.md", "FAQ.md", "HOUSEHOLD-LAN.md", "LICENSE"];
 
 /**
  * Copies the shipping files into a fresh directory and installs the one runtime
@@ -1037,6 +1039,145 @@ async function main(): Promise<void> {
   const record = inspectRecord.plugin ?? (inspectRecord as { source?: string });
   if (!record.source) fail("update path", "the installed plugin has no recorded source, so updates cannot be resolved");
   note(`install source recorded as ${record.source}`, "update path");
+
+  await householdSignIn(env, configPath, port, logPath);
+}
+
+/** Stand-ins for what a real household fills in, used only on this isolated Gateway. */
+const HOUSEHOLD_ADDRESS = "192.168.1.20";
+const HOUSEHOLD_CLIENT = "192.168.1.50";
+const HOUSEHOLD_PASSWORD = "ocfp-smoke-password";
+
+type Frame = { method: string; ok: boolean; payload?: Record<string, unknown> | undefined; error?: { code?: string; message?: string; details?: { code?: string } } | undefined };
+
+/**
+ * Connects the way a browser behind the household proxy does: from loopback,
+ * with the proxy's identity and client-address headers and the page's origin,
+ * then runs `calls` in order and stops at the first failure. Node's built-in
+ * WebSocket takes request headers as a non-standard `headers` option.
+ */
+function proxiedSession(port: number, user: string, calls: [string, unknown][]): Promise<Frame[]> {
+  const step: Step = "household sign-in";
+  return new Promise((resolve, reject) => {
+    const headers = { origin: `https://${HOUSEHOLD_ADDRESS}`, "x-forwarded-for": HOUSEHOLD_CLIENT, "x-forwarded-user": user };
+    const ws = new WebSocket(`ws://127.0.0.1:${port}`, { headers } as unknown as string[]);
+    const frames: Frame[] = [];
+    const methods = new Map<string, string>();
+    const queue = [...calls];
+    let id = 0;
+    const timer = setTimeout(() => {
+      ws.close();
+      reject(new Error(`smoke: ${step} failed: ${user}'s session timed out after ${JSON.stringify(frames)}`));
+    }, 30_000);
+    const send = (method: string, params: unknown) => {
+      const key = String(++id);
+      methods.set(key, method);
+      ws.send(JSON.stringify({ type: "req", id: key, method, params }));
+    };
+    ws.onmessage = (event) => {
+      const frame = JSON.parse(String(event.data)) as { type: string; event?: string; id?: string; ok?: boolean; payload?: Record<string, unknown>; error?: Frame["error"] };
+      if (frame.type === "event" && frame.event === "connect.challenge") {
+        send("connect", {
+          minProtocol: 4,
+          maxProtocol: 4,
+          client: { id: "openclaw-control-ui", version: "ocfp-smoke", platform: process.platform, mode: "ui" },
+          role: "operator",
+          scopes: ["operator.read", "operator.write", "operator.sessions.write"],
+          caps: [],
+        });
+        return;
+      }
+      if (frame.type !== "res" || frame.id === undefined) return;
+      frames.push({ method: methods.get(frame.id) ?? "?", ok: frame.ok === true, payload: frame.payload, error: frame.error });
+      const next = queue.shift();
+      if (frame.ok === true && next) send(next[0], next[1]);
+      else ws.close();
+    };
+    ws.onerror = () => {};
+    ws.onclose = () => {
+      clearTimeout(timer);
+      resolve(frames);
+    };
+  });
+}
+
+/**
+ * 11. Per-person sign-in, configured exactly as `openclaw family access lan`
+ * prints it, with the placeholders filled in. No proxy is installed: this
+ * process plays the proxy from loopback, which the printed config trusts.
+ * Runs last because it switches the isolated Gateway off token auth.
+ */
+async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port: number, logPath: string): Promise<void> {
+  const step: Step = "household sign-in";
+  const printed = planAccess("lan", { parent: ["alex"], kid: ["riley"] }, { port }).text.replaceAll("LAN_ADDRESS", HOUSEHOLD_ADDRESS);
+  const [access, roles] = [...printed.matchAll(/^\{\n[\s\S]*?^\}$/gm)].map(
+    (match) => (JSON.parse(match[0]) as { gateway: Record<string, unknown> & { auth: Record<string, unknown> } }).gateway,
+  );
+  if (!access || !roles) fail(step, "access lan did not print the Gateway config and roles blocks");
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as { gateway: Record<string, unknown> };
+  config.gateway = {
+    mode: "local",
+    port,
+    ...access,
+    auth: { ...access.auth, ...roles.auth, password: HOUSEHOLD_PASSWORD },
+    roles: roles.roles,
+  };
+  writeFileSync(configPath, JSON.stringify(config, null, 2));
+  await bootGateway(env, port, logPath);
+  note(`isolated Gateway restarted with the printed LAN config, signing in through ${HOUSEHOLD_ADDRESS}`, step);
+
+  const connected = (frames: Frame[], who: string): Frame => {
+    const hello = frames[0];
+    if (!hello?.ok) fail(step, `${who} could not sign in: ${JSON.stringify(hello?.error ?? frames)}`);
+    return hello;
+  };
+  const scopesOf = (hello: Frame) => (((hello.payload?.auth as { scopes?: string[] } | undefined)?.scopes ?? []) as string[]).slice().sort();
+  const week = ["plugins.sessionAction", { pluginId: PLUGIN_ID, actionId: "family.week", payload: {} }] as [string, unknown];
+
+  const alex = await proxiedSession(port, "alex", [["users.self", {}]]);
+  const riley = await proxiedSession(port, "riley", [["users.self", {}], week]);
+  connected(alex, "alex");
+  const rileyHello = connected(riley, "riley");
+  const profileOf = (frames: Frame[], who: string) => {
+    const profile = (frames[1]?.payload?.profile ?? {}) as { id?: string; displayName?: string };
+    if (!frames[1]?.ok || profile.displayName !== who || !profile.id) fail(step, `users.self for ${who} returned ${JSON.stringify(frames[1] ?? frames)}`);
+    return profile.id;
+  };
+  const alexId = profileOf(alex, "alex");
+  const rileyId = profileOf(riley, "riley");
+  if (alexId === rileyId) fail(step, `alex and riley share profile ${alexId}`);
+  note("alex and riley each signed in to their own profile", step);
+
+  if (JSON.stringify(scopesOf(rileyHello)) !== JSON.stringify(["operator.read"])) {
+    fail(step, `a new member should be a read-only guest, got ${JSON.stringify(scopesOf(rileyHello))}`);
+  }
+  const weekFrame = riley[2];
+  const weekResult = weekFrame?.payload as { ok?: boolean; result?: { days?: unknown[] } } | undefined;
+  if (!weekFrame?.ok || weekResult?.ok !== true || weekResult.result?.days?.length !== 7) {
+    fail(step, `a guest's family.week did not get through on operator.read: ${JSON.stringify(weekFrame ?? riley)}`);
+  }
+  note("riley as a guest has only operator.read and still gets family.week", step);
+
+  const cli = async (method: string, params: unknown) =>
+    parseHostJson(
+      await oc(["gateway", "call", method, "--port", String(port), "--json", "--params", JSON.stringify(params)], env, step),
+      step,
+      `the ${method} gateway call`,
+    ) as { profiles?: { id: string; displayName: string }[]; profile?: { role?: string } };
+  const listed = (await cli("users.list", {})).profiles ?? [];
+  const listedAlex = listed.find((profile) => profile.displayName === "alex")?.id;
+  if (listedAlex !== alexId) fail(step, `users.list does not show alex as ${alexId}: ${JSON.stringify(listed)}`);
+  const set = await cli("users.setRole", { profileId: alexId, role: "parent" });
+  if (set.profile?.role !== "parent") fail(step, `users.setRole did not make alex a parent: ${JSON.stringify(set)}`);
+  const alexAgain = connected(await proxiedSession(port, "alex", []), "alex after setRole");
+  if (!scopesOf(alexAgain).includes("operator.write")) {
+    fail(step, `alex has no operator.write after users.setRole parent: ${JSON.stringify(scopesOf(alexAgain))}`);
+  }
+  note(`users.setRole made alex a parent: ${scopesOf(alexAgain).join(", ")}`, step);
+
+  const stranger = (await proxiedSession(port, "mallory", []))[0];
+  if (stranger?.ok !== false) fail(step, `mallory is not in allowUsers but signed in: ${JSON.stringify(stranger)}`);
+  note(`mallory, not in allowUsers, was turned away (${stranger.error?.details?.code ?? stranger.error?.code})`, step);
 }
 
 try {
@@ -1044,7 +1185,7 @@ try {
   // A cancelled run must never report success. Every step boundary already
   // refuses to continue, so reaching here with a pending interrupt means the
   // signal landed in the last step; still fail, naming what was interrupted.
-  if (interrupted) throw new Error(`smoke: update path failed: interrupted by ${interrupted} after the last step`);
+  if (interrupted) throw new Error(`smoke: household sign-in failed: interrupted by ${interrupted} after the last step`);
   process.stdout.write("smoke: all steps passed\n");
 } catch (error) {
   process.stderr.write(`${(error as Error).message}\n`);

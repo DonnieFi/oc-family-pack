@@ -5,7 +5,7 @@ import { detectAccess, formatDetection, planAccess, runAccess } from "./access.t
 
 const lanReady = {
   bind: "loopback",
-  controlUi: { experimental: { customPlugins: true } },
+  controlUi: { experimental: { customPlugins: true }, allowedOrigins: ["https://192.168.1.20"] },
   trustedProxies: ["127.0.0.1"],
   auth: {
     mode: "trusted-proxy",
@@ -36,15 +36,30 @@ test("a complete LAN Gateway has no steps left and exits 0", () => {
 
 test("each missing LAN item is one named step", () => {
   const cases: [string, (g: typeof lanReady) => unknown, RegExp][] = [
-    ["custom plugins", (g) => ({ ...g, controlUi: {} }), /customPlugins/],
+    ["custom plugins", (g) => ({ ...g, controlUi: { allowedOrigins: g.controlUi.allowedOrigins } }), /customPlugins/],
     ["user header", (g) => ({ ...g, auth: { ...g.auth, trustedProxy: { ...g.auth.trustedProxy, userHeader: "remote-user" } } }), /userHeader/],
     ["allow users", (g) => ({ ...g, auth: { ...g.auth, trustedProxy: { ...g.auth.trustedProxy, allowUsers: [] } } }), /allowUsers/],
-    ["allow loopback", (g) => ({ ...g, auth: { ...g.auth, trustedProxy: { ...g.auth.trustedProxy, allowLoopback: false } } }), /allowLoopback/],
+    ["allow loopback", (g) => ({ ...g, auth: { ...g.auth, trustedProxy: { ...g.auth.trustedProxy, allowLoopback: false } } }), /allowLoopback` to `true`, because the proxy runs on this machine\.$/],
     ["trusted proxies", (g) => ({ ...g, trustedProxies: [] }), /trustedProxies/],
     ["trusted proxies unset", (g) => ({ ...g, trustedProxies: undefined }), /trustedProxies/],
     ["trusted proxies with a LAN range", (g) => ({ ...g, trustedProxies: ["127.0.0.1", "192.168.1.0/24"] }), /trustedProxies/],
     ["trusted proxies with ::1", (g) => ({ ...g, trustedProxies: ["127.0.0.1", "::1"] }), /trustedProxies/],
     ["bind", (g) => ({ ...g, bind: "lan" }), /gateway\.bind/],
+    ...(
+      [
+        ["origin unset", undefined],
+        ["origin empty", []],
+        ["origin wildcard", ["*"]],
+        ["origin wildcard beside a good one", ["https://192.168.1.20", "*"]],
+        ["origin over http", ["http://192.168.1.20"]],
+        ["origin with a path", ["https://192.168.1.20/family"]],
+      ] as [string, unknown][]
+    ).map(([name, allowedOrigins]): [string, (g: typeof lanReady) => unknown, RegExp] => [
+      name,
+      (g) => ({ ...g, controlUi: { ...g.controlUi, allowedOrigins } }),
+      /^Set `gateway\.controlUi\.allowedOrigins` to the one address the family opens, like `https:\/\/192\.168\.1\.20`\. It has to start with `https:\/\/`, with no `\*` and no path\.$/,
+    ]),
+    ["publicOrigin instead of allowedOrigins", (g) => ({ ...g, publicOrigin: "https://192.168.1.20", controlUi: { experimental: { customPlugins: true } } }), /allowedOrigins/],
     ["password", (g) => ({ ...g, auth: { ...g.auth, password: undefined } }), /gateway\.auth\.password/],
   ];
   for (const [name, change, step] of cases) {
@@ -126,11 +141,11 @@ test("LAN for alex and riley prints placeholders, no password, the blocks in ord
   const order = [
     "LAN mode needs a proxy on this machine that serves HTTPS and signs each person in.",
     "This uses Caddy's own certificate.",
-    "Anything else running on this machine can sign in as any family member. Run only Caddy and the Gateway here.",
+    "Anything else running on this machine can sign in as any family member. Run only the proxy and the Gateway here.",
     "There's no sign-out and no way to switch accounts.",
     "Any proxy works if it's the only way to reach the Gateway,",
     "Caddyfile:",
-    "Replace `LAN_ADDRESS` with this machine's address on your home network, like `192.168.1.20`.",
+    "Replace `LAN_ADDRESS` with this machine's address on your home network, like `192.168.1.20`. Use the same address in the Caddyfile and in `allowedOrigins`. If you add a port to the Caddyfile, add it to the origin too.",
     "Run `caddy hash-password` once for each person and paste each hash in place of its placeholder.",
     "Gateway config:",
     "Everyone starts as a guest who can only read.",
@@ -155,7 +170,7 @@ test("the LAN blocks are config openclaw accepts", () => {
   const [config, roles] = blocks;
   assert.deepEqual(config?.gateway, {
     bind: "loopback",
-    controlUi: { experimental: { customPlugins: true } },
+    controlUi: { experimental: { customPlugins: true }, allowedOrigins: ["https://LAN_ADDRESS"] },
     trustedProxies: ["127.0.0.1"],
     auth: {
       mode: "trusted-proxy",
@@ -185,7 +200,7 @@ test("the LAN blocks are config openclaw accepts", () => {
 });
 
 test("every LAN run warns that local programs can sign in as anyone, even when complete", () => {
-  const warning = "Anything else running on this machine can sign in as any family member. Run only Caddy and the Gateway here.";
+  const warning = "Anything else running on this machine can sign in as any family member. Run only the proxy and the Gateway here.";
   const complete = formatDetection(detectAccess(lanReady));
   assert.equal(complete.ok, true);
   assert.ok(complete.text.includes(warning));
@@ -229,6 +244,20 @@ test("the Caddyfile always uses its own certificate on LAN_ADDRESS", () => {
     ),
   );
   assert.equal(/domain|DNS-01/i.test(text), false);
+});
+
+test("a bare https origin with a port is a finished step", () => {
+  assert.deepEqual(detectAccess({ ...lanReady, controlUi: { ...lanReady.controlUi, allowedOrigins: ["https://192.168.1.20:8443"] } }).missing, []);
+});
+
+test("the printed origin is the Caddyfile's site address over https", () => {
+  const text = planAccess("lan", { parent: ["alex"] }, {}).text;
+  const site = /^Caddyfile:\n(\S+) \{$/m.exec(text)?.[1];
+  const config = [...text.matchAll(/^\{\n[\s\S]*?^\}$/gm)].map((match) => JSON.parse(match[0]))[0] as {
+    gateway: { controlUi: { allowedOrigins: string[] } };
+  };
+  assert.ok(site);
+  assert.deepEqual(config.gateway.controlUi.allowedOrigins, [`https://${site}`]);
 });
 
 test("names without a role are guests", () => {
