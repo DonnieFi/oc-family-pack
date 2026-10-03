@@ -25,9 +25,27 @@ export type StoreStatus = {
   unknown: string[];
 };
 
+export type WriteStatus = "committed" | "failed" | "denied" | "timed-out" | "reverted";
+
+/** One write-log row as the caller sends it; the worker stamps `at`. `beforeJson` and `afterJson` are JSON text. */
+export type WriteLogRow = {
+  requestKey: string;
+  baseKey: string;
+  requester: string;
+  op: "create" | "update" | "move" | "delete";
+  calendarId: string;
+  eventId?: string;
+  beforeJson?: string;
+  afterJson?: string;
+  status: WriteStatus;
+};
+
 export type FamilyStore = {
   ready: StoreReady;
   status: () => Promise<StoreStatus>;
+  countCommittedWrites: (baseKey: string) => Promise<number>;
+  /** `ifAbsent` is INSERT OR IGNORE, for the live-match path only; otherwise a plain INSERT. */
+  appendWriteLog: (row: WriteLogRow, options: { ifAbsent: boolean }) => Promise<{ inserted: boolean }>;
   stop: () => Promise<void>;
   spawned: () => number;
 };
@@ -41,7 +59,7 @@ type Logger = {
 type Schedule = (fn: () => void, ms: number) => { cancel: () => void };
 
 type Pending = {
-  resolve: (status: StoreStatus) => void;
+  resolve: (value: unknown) => void;
   reject: (error: Error) => void;
 };
 
@@ -141,7 +159,7 @@ async function openSession(options: {
       const entry = pending.get(record.id);
       if (!entry) return;
       pending.delete(record.id);
-      if (record.ok === true) entry.resolve(record.result as StoreStatus);
+      if (record.ok === true) entry.resolve(record.result);
       else entry.reject(new Error(typeof record.error === "string" ? record.error : "store worker call failed"));
     }
   }
@@ -205,14 +223,14 @@ async function openSession(options: {
     return spawnWorker();
   }
 
-  function postStatus(): Promise<StoreStatus> {
+  function post(op: string, input: unknown): Promise<unknown> {
     const worker = current;
     if (!worker || phase !== "ready") return Promise.reject(new Error("oc-family-pack: family store is not ready"));
     const id = ++nextId;
     return new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject });
       try {
-        worker.postMessage({ id, op: "store.status", input: {} });
+        worker.postMessage({ id, op, input });
       } catch (error) {
         pending.delete(id);
         reject(asError(error));
@@ -227,7 +245,15 @@ async function openSession(options: {
     },
     async status() {
       await ensureOpen();
-      return postStatus();
+      return (await post("store.status", {})) as StoreStatus;
+    },
+    async countCommittedWrites(baseKey) {
+      await ensureOpen();
+      return (await post("writeLog.countCommitted", { baseKey })) as number;
+    },
+    async appendWriteLog(row, { ifAbsent }) {
+      await ensureOpen();
+      return (await post("writeLog.append", { row, ifAbsent })) as { inserted: boolean };
     },
     stop() {
       if (stopPromise) return stopPromise;

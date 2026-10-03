@@ -75,7 +75,39 @@ const handlers = {
             unknown: applied.filter((id) => !known.has(id)),
         };
     },
+    "writeLog.countCommitted": (input) => {
+        const baseKey = field(input, "baseKey");
+        const row = db
+            .prepare("SELECT COUNT(*) AS n FROM oc_family_pack_write_log WHERE base_key = ? AND status = 'committed'")
+            .get(baseKey);
+        return typeof row?.n === "number" ? row.n : 0;
+    },
+    // A path that wrote uses a plain INSERT, so a second committed row for one key fails
+    // loudly. Only the live-match path, which found the event already in Google, ignores
+    // a row that is already there.
+    "writeLog.append": (input) => {
+        const ifAbsent = isRecord(input) && input.ifAbsent === true;
+        const row = isRecord(input) ? input.row : undefined;
+        const verb = ifAbsent ? "INSERT OR IGNORE" : "INSERT";
+        const result = db
+            .prepare(`${verb} INTO oc_family_pack_write_log (request_key, base_key, requester, op, calendar_id, event_id, before_json, after_json, status, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(field(row, "requestKey"), field(row, "baseKey"), field(row, "requester"), field(row, "op"), field(row, "calendarId"), optional(row, "eventId"), optional(row, "beforeJson"), optional(row, "afterJson"), field(row, "status"), Date.now());
+        return { inserted: Number(result.changes) === 1 };
+    },
 };
+function isRecord(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function field(input, name) {
+    const value = isRecord(input) ? input[name] : undefined;
+    if (typeof value !== "string" || value.length === 0)
+        throw new Error(`oc-family-pack: write log needs ${name}`);
+    return value;
+}
+function optional(input, name) {
+    const value = isRecord(input) ? input[name] : undefined;
+    return typeof value === "string" ? value : null;
+}
 port.on("message", (message) => {
     if (!message || typeof message !== "object")
         return;
@@ -103,7 +135,7 @@ port.on("message", (message) => {
         return;
     }
     try {
-        port.postMessage({ type: "result", id: record.id, ok: true, result: handler() });
+        port.postMessage({ type: "result", id: record.id, ok: true, result: handler(record.input) });
     }
     catch (error) {
         port.postMessage({

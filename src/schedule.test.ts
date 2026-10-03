@@ -218,11 +218,11 @@ test("days: 7 without a query, 90 with one", async () => {
 });
 
 test("a query with no days looks 90 days ahead, and an explicit days still wins", async () => {
-  const events = { ...EVENTS, donnie: [...(EVENTS.donnie ?? []), timed("dentist-nov", "Dentist", "2026-11-08", "09:30", "10:30"), timed("dentist-jan", "Dentist", "2027-01-07", "09:30", "10:30")] };
+  const events = { ...EVENTS, donnie: [...(EVENTS.donnie ?? []), timed("dentist-nov", "Dentist", "2026-11-08", "09:30", "10:30"), timed("dentist-day-90", "Dentist", "2027-01-06", "09:30", "10:30"), timed("dentist-day-91", "Dentist", "2027-01-07", "09:30", "10:30")] };
   const { output } = await schedule({ query: "dentist" }, OWNER, events);
   assert.deepEqual(
     "sections" in output ? output.sections[0]?.items.map((item) => item.date) : output,
-    ["Fri Oct 9", "Sun Nov 8"],
+    ["Fri Oct 9", "Sun Nov 8", "Wed Jan 6"],
   );
   assert.deepEqual(titles((await schedule({ query: "dentist", days: 1 }, OWNER, events)).output), ["Dentist"]);
 });

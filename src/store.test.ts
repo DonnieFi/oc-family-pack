@@ -84,14 +84,14 @@ test("the built store module is the one production loads", () => {
   for (const sourceFile of mainFiles) assert.equal(sourceFile.includes("node:sqlite"), false);
 });
 
-test("a first start applies 0001 and a second start applies nothing", async () => {
+test("a first start applies 0001 and 0002 and a second start applies nothing", async () => {
   const stateDir = tempState();
   const previous = process.umask(0o022);
   const { openFamilyStore } = await loadStore();
   try {
     const first = await openFamilyStore({ stateDir });
-    assert.deepEqual(first.ready.appliedNow, ["0001-initial"]);
-    assert.deepEqual(first.ready.applied, ["0001-initial"]);
+    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log"]);
+    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log"]);
     assert.deepEqual(first.ready.unknown, []);
     assert.equal(first.ready.journalMode, "wal");
     assert.equal(first.ready.isMainThread, false);
@@ -101,14 +101,13 @@ test("a first start applies 0001 and a second start applies nothing", async () =
     assert.equal(status.scriptUrl.endsWith("/dist/store-worker.js"), true);
     assertPermissions(dbPath(stateDir));
     const rows = migrationRows(dbPath(stateDir));
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0]?.id, "0001-initial");
+    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log"]);
     const appliedAt = rows[0]?.applied_at;
     await first.stop();
 
     const second = await openFamilyStore({ stateDir });
     assert.deepEqual(second.ready.appliedNow, []);
-    assert.deepEqual(second.ready.applied, ["0001-initial"]);
+    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log"]);
     assert.equal(second.ready.journalMode, "wal");
     assertPermissions(dbPath(stateDir));
     const again = migrationRows(dbPath(stateDir));

@@ -24,6 +24,7 @@ const config = parseConfig({
     { id: "house", label: "House", kind: "personal", owners: [] },
     { id: "family", label: "Family", kind: "shared", owners: ["donnie", "britta", "calla", "penny"] },
     { id: "school-calla", label: "Calla school", kind: "school", owners: ["calla"] },
+    { id: "nana", label: "Nana", kind: "personal", owners: ["nana"] },
   ],
 });
 const members = config.members;
@@ -66,6 +67,8 @@ const TABLE: [keyof typeof FROM, string, typeof WRITE | typeof PARENTS][] = [
   ["Donnie on Discord", "school-calla", WRITE],
   ["Nana on Discord", "family", PARENTS],
   ["Nana on Discord", "calla", PARENTS],
+  ["Nana on Discord", "nana", PARENTS],
+  ["Calla on Discord", "nana", PARENTS],
   ["an unknown Discord sender claiming owner", "family", PARENTS],
   ["an unknown Discord sender claiming owner", "donnie", PARENTS],
   ["Control UI chat as owner", "donnie", PARENTS],
@@ -86,8 +89,10 @@ for (const [from, id, expected] of TABLE) {
 
 test("an unknown requester in Control UI chat gets the rights of a kid with no calendar of their own", () => {
   const kidWithNoProfile: Requester = { from: "tool", senderIsOwner: false };
+  const unmatchedGuest = resolveRequester(members, FROM["an unknown Discord sender claiming owner"]);
   for (const entry of config.calendars) {
-    assert.deepEqual(writeRight(members, kidWithNoProfile, entry), writeRight(members, resolveRequester(members, FROM["Control UI chat as owner"]), entry));
+    // Kid and guest differ only on their own personal calendar, which a caller with no profile never has.
+    assert.deepEqual(writeRight(members, kidWithNoProfile, entry), writeRight(members, unmatchedGuest, entry), entry.id);
     assert.notDeepEqual(writeRight(members, kidWithNoProfile, entry), WRITE, entry.id);
   }
 });
