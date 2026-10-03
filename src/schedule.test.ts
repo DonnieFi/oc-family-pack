@@ -217,6 +217,16 @@ test("days: 7 without a query, 90 with one", async () => {
   assert.ok("error" in (await schedule({ start: "2026-10-09", days: 91, query: "swim" })).output);
 });
 
+test("a query with no days looks 90 days ahead, and an explicit days still wins", async () => {
+  const events = { ...EVENTS, donnie: [...(EVENTS.donnie ?? []), timed("dentist-nov", "Dentist", "2026-11-08", "09:30", "10:30"), timed("dentist-jan", "Dentist", "2027-01-07", "09:30", "10:30")] };
+  const { output } = await schedule({ query: "dentist" }, OWNER, events);
+  assert.deepEqual(
+    "sections" in output ? output.sections[0]?.items.map((item) => item.date) : output,
+    ["Fri Oct 9", "Sun Nov 8"],
+  );
+  assert.deepEqual(titles((await schedule({ query: "dentist", days: 1 }, OWNER, events)).output), ["Dentist"]);
+});
+
 test("a query that normalizes to empty is no query and keeps the week cap", async () => {
   assert.ok("error" in (await schedule({ start: "2026-10-09", days: 8, query: "   " })).output);
   assert.ok("error" in (await schedule({ start: "2026-10-09", days: 8, query: " - " })).output);

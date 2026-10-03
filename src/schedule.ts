@@ -94,7 +94,8 @@ export async function buildSchedule(
   const query = input.query === undefined ? [] : words(input.query);
   // A query with no words would match everything, so it reads as no query and keeps the week cap.
   const lookup = query.length > 0;
-  const days = input.days ?? 1;
+  // "When's the dentist?" means the coming months, not today, so a lookup defaults to its whole range.
+  const days = input.days ?? (lookup ? LOOKUP_DAYS_MAX : 1);
   if (days > (lookup ? LOOKUP_DAYS_MAX : SCHEDULE_DAYS_MAX)) {
     return { error: lookup ? `days must be ${LOOKUP_DAYS_MAX} or fewer.` : `days must be ${SCHEDULE_DAYS_MAX} or fewer without a query.` };
   }

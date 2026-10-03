@@ -201,7 +201,7 @@ export const USUAL_MAX = 2000;
 export const CLASSES_LINE_MAX = 500;
 export const ScheduleInputSchema = Type.Object({
     start: Type.Optional(Type.String({ pattern: ISO_DATE, description: "First day, YYYY-MM-DD in the family's timezone. Defaults to today." })),
-    days: Type.Optional(Type.Integer({ minimum: 1, maximum: LOOKUP_DAYS_MAX, description: "How many days from start. Defaults to 1. At most 7, or 90 with a query." })),
+    days: Type.Optional(Type.Integer({ minimum: 1, maximum: LOOKUP_DAYS_MAX, description: "How many days from start. Defaults to 1, or 90 with a query. At most 7, or 90 with a query." })),
     member: Type.Optional(Type.String({
         minLength: 1,
         maxLength: LABEL_MAX,
