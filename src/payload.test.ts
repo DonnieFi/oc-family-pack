@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { Value } from "typebox/value";
 import { parseConfig } from "./config.ts";
@@ -7,6 +10,8 @@ import { buildWeekPayload, fitWeek, jsonNodeCount } from "./payload.ts";
 import type { FamilyEvent, WeekPayload } from "./types.ts";
 
 const noWeather = async () => ({ status: "unconfigured" as const, hint: "no weather" });
+const OWNER = { kind: "owner" } as const;
+const NOW = Date.parse("2026-09-30T16:00:00Z");
 
 test("discord ids and device MACs stay off the week payload", async () => {
   const config = parseConfig({
@@ -24,7 +29,7 @@ test("discord ids and device MACs stay off the week payload", async () => {
     ],
     calendars: [{ id: "school-feed@group.calendar.google.com", label: "School", kind: "school", owners: ["Riley"] }],
   });
-  const payload = await buildWeekPayload(config, "2026-10-01", Date.parse("2026-09-30T16:00:00Z"), noWeather);
+  const payload = await buildWeekPayload(config, "2026-10-01", Date.parse("2026-09-30T16:00:00Z"), noWeather, OWNER);
   assert.deepEqual(payload.members, [
     { profileId: "riley", displayName: "Riley", role: "kid", color: "oklch(0.72 0.14 245)" },
     { profileId: "alex", displayName: "Alex", role: "parent", color: "oklch(0.72 0.16 55)" },
@@ -41,7 +46,7 @@ test("discord ids and device MACs stay off the week payload", async () => {
 
 test("demo mode renders a synthetic week with a roster, calendars, colors, and day buckets", async () => {
   const config = parseConfig({ demo: true, timezone: "America/Toronto" });
-  const payload = await buildWeekPayload(config, "2026-10-01", Date.parse("2026-09-30T16:00:00Z"), noWeather);
+  const payload = await buildWeekPayload(config, "2026-10-01", Date.parse("2026-09-30T16:00:00Z"), noWeather, OWNER);
   assert.equal(payload.mode, "demo");
   assert.deepEqual(payload.range, { start: "2026-09-28", end: "2026-10-04", timezone: "America/Toronto" });
   assert.equal(payload.today, "2026-09-30");
@@ -84,7 +89,7 @@ test("demo mode renders a synthetic week with a roster, calendars, colors, and d
 
 test("demo events keep their wall-clock times in a week where DST ends", async () => {
   const config = parseConfig({ demo: true, timezone: "America/Toronto" });
-  const payload = await buildWeekPayload(config, "2026-11-01", Date.parse("2026-10-28T16:00:00Z"), noWeather);
+  const payload = await buildWeekPayload(config, "2026-11-01", Date.parse("2026-10-28T16:00:00Z"), noWeather, OWNER);
   const times = (id: string) => {
     const event = payload.calendar.status === "ok" ? payload.calendar.data.find((entry) => entry.id === id) : undefined;
     return event && [event.start, event.end];
@@ -158,8 +163,85 @@ test("a week over the event cap or the host's size limit becomes a calendar erro
 
 test("a family.week start of 9999-12-31 is a config error instead of a range crash", async () => {
   const config = parseConfig({ demo: true, timezone: "UTC" });
-  await assert.rejects(() => buildWeekPayload(config, "9999-12-31", Date.parse("2026-09-30T16:00:00Z"), noWeather), {
+  await assert.rejects(() => buildWeekPayload(config, "9999-12-31", Date.parse("2026-09-30T16:00:00Z"), noWeather, OWNER), {
     name: "ConfigError",
     message: "oc-family-pack config: start must be a week Family can show",
   });
+});
+
+test("a kid's demo week holds only shared, school and their own calendars and events", async () => {
+  const config = parseConfig({ demo: true, timezone: "America/Toronto" });
+  const everything = await buildWeekPayload(config, "2026-10-01", NOW, noWeather, OWNER);
+  const riley = await buildWeekPayload(config, "2026-10-01", NOW, noWeather, { kind: "person", username: "riley" });
+  assert.deepEqual(riley.calendars.map((calendar) => calendar.label).sort(), ["Family", "Riley", "School"]);
+  assert.ok(riley.calendar.status === "ok" && everything.calendar.status === "ok");
+  const keys = new Set(riley.calendars.map((calendar) => calendar.key));
+  const kept = everything.calendar.data.filter((event) => keys.has(event.calendarKey));
+  assert.ok(kept.length > 0 && kept.length < everything.calendar.data.length, "the demo week should have events on both sides");
+  assert.deepEqual(riley.calendar.data, kept);
+  assert.deepEqual([...new Set(riley.days.flatMap((day) => day.eventIds))].sort(), kept.map((event) => event.id).sort());
+  assert.deepEqual(riley.members, everything.members);
+});
+
+test("a viewer with no calendars of theirs gets the hidden state without reading any calendar", async () => {
+  const config = parseConfig({
+    timezone: "America/Toronto",
+    gogPath: "/nonexistent/gog-must-not-run",
+    members: [{ profileId: "alex", displayName: "Alex", role: "parent" }, { profileId: "riley", displayName: "Riley", role: "kid" }],
+    calendars: [{ id: "alex-work@example.com", label: "Work", kind: "personal", owners: ["alex"] }],
+  });
+  const riley = await buildWeekPayload(config, "2026-10-01", NOW, noWeather, { kind: "person", username: "riley" });
+  assert.deepEqual(riley.calendars, []);
+  assert.deepEqual(riley.calendar, { status: "hidden" });
+  assert.ok(riley.days.every((day) => day.eventIds.length === 0));
+});
+
+test("copies merge after the visibility filter, so a kid never sees a hidden calendar's copy", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ocfp-merge-"));
+  const gogPath = join(dir, "gog");
+  const copy = (id: string, summary: string, at: string, link = "") =>
+    JSON.stringify([{ id, summary, start: { dateTime: at }, end: { dateTime: "2026-10-01T23:00:00Z" }, ...(link ? { htmlLink: link } : {}) }]);
+  writeFileSync(
+    gogPath,
+    [
+      "#!/bin/sh",
+      "for last; do :; done",
+      'case "$last" in',
+      `  family) echo '${copy("f", "Soccer", "2026-10-01T21:00:00Z")}' ;;`,
+      `  alex) echo '${copy("a", "soccer ", "2026-10-01T21:05:00Z", "https://calendar.google.com/calendar/event?eid=YWxleC1zb2NjZXI")}' ;;`,
+      `  riley) echo '${copy("r", "SOCCER", "2026-10-01T21:10:00Z")}' ;;`,
+      "esac",
+      "",
+    ].join("\n"),
+  );
+  chmodSync(gogPath, 0o755);
+  const config = parseConfig({
+    timezone: "America/Toronto",
+    gogPath,
+    members: [{ profileId: "alex", displayName: "Alex", role: "parent" }, { profileId: "riley", displayName: "Riley", role: "kid" }],
+    calendars: [
+      { id: "family", label: "Family", kind: "shared", owners: [] },
+      { id: "alex", label: "Alex", kind: "personal", owners: ["alex"] },
+      { id: "riley", label: "Riley", kind: "personal", owners: ["riley"] },
+    ],
+  });
+  try {
+    const owner = await buildWeekPayload(config, "2026-10-01", NOW, noWeather, OWNER);
+    const riley = await buildWeekPayload(config, "2026-10-01", NOW, noWeather, { kind: "person", username: "riley" });
+    const events = (payload: WeekPayload) => (payload.calendar.status === "ok" ? payload.calendar.data : []);
+    assert.deepEqual(
+      events(owner).map(({ id, title, calendarKey, calendarKeys, htmlLink }) => ({ id, title, calendarKey, calendarKeys, htmlLink })),
+      [{ id: "c0/f", title: "Soccer", calendarKey: "c0", calendarKeys: ["c0", "c1", "c2"], htmlLink: "https://calendar.google.com/calendar/event?eid=YWxleC1zb2NjZXI" }],
+    );
+    assert.deepEqual(
+      events(riley).map(({ id, calendarKeys, htmlLink }) => ({ id, calendarKeys, htmlLink })),
+      [{ id: "c0/f", calendarKeys: ["c0", "c2"], htmlLink: undefined }],
+    );
+    const wire = JSON.stringify(riley);
+    assert.equal(wire.includes('"c1"'), false);
+    assert.equal(wire.includes("YWxleC1zb2NjZXI"), false);
+    assert.deepEqual(riley.days.flatMap((day) => day.eventIds), ["c0/f"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

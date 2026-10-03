@@ -5,7 +5,7 @@ const KINDS = ["personal", "shared", "school"];
 // Colors land in CSS custom properties, so only accept plain color syntax.
 const CSS_COLOR = /^(?:#[0-9a-fA-F]{3,8}|(?:rgb|rgba|hsl|hsla|oklch|oklab)\([0-9.,%\s/-]+\)|[a-zA-Z]+)$/;
 /** Discord user ids are snowflakes. A mention like `<@…>` is not an id. */
-const DISCORD_ID = /^\d{17,20}$/;
+export const DISCORD_ID = /^\d{17,20}$/;
 const MAX_DEVICES = 32;
 const MAX_ALIAS_MACS = 32;
 const Name = Type.String({ minLength: 1, maxLength: 200 });

@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { runAccess } from "./access.js";
+import { planSetup } from "./setup.js";
 const execFileAsync = promisify(execFile);
 export function execGogSetup(timeoutMs = 20_000) {
     return (file, args) => execFileAsync(file, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 });
@@ -219,12 +221,19 @@ export async function diagnoseGog(run, options = {}) {
 export function formatGogSetup(plan) {
     return `${plan.message}\nNext: ${plan.command}`;
 }
-/** `openclaw family gog` prints the one command that moves setup forward. */
+function gatewayPort(gateway) {
+    const port = typeof gateway === "object" && gateway !== null ? gateway.port : undefined;
+    return typeof port === "number" ? port : undefined;
+}
+/**
+ * `openclaw family gog` prints the one command that moves gog setup forward.
+ * `openclaw family access` reports the household sign-in mode, or prints the setup for one.
+ * `openclaw family setup` lists what's done and prints the one next step.
+ */
 export function registerFamilyCli(program, deps) {
     const write = deps.write ?? ((text) => console.log(text));
-    program
-        .command("family")
-        .description("Family Pack setup")
+    const family = program.command("family").description("Family Pack setup");
+    family
         .command("gog")
         .description("Print the next gog command for this host")
         .option("--account <email>", "Google account to authorize", PLACEHOLDER_EMAIL)
@@ -239,5 +248,42 @@ export function registerFamilyCli(program, deps) {
         });
         write(formatGogSetup(plan));
         process.exitCode = plan.status === "ready" ? 0 : 1;
+    });
+    family
+        .command("access")
+        .description("Report the household sign-in mode, or print the setup for one")
+        .argument("[mode]", "solo or lan")
+        .argument("[names...]", "People with no role flag, set up as guests")
+        .option("--parent <name...>", "Parents: full access and every session")
+        .option("--kid <name...>", "Kids: read, and write their own sessions")
+        .option("--guest <name...>", "Guests: read only")
+        .action((mode, names, opts) => {
+        const port = gatewayPort(deps.gateway);
+        const result = runAccess(deps.gateway, mode, {
+            ...(opts.parent ? { parent: opts.parent } : {}),
+            ...(opts.kid ? { kid: opts.kid } : {}),
+            ...(opts.guest ? { guest: opts.guest } : {}),
+            ...(names ? { names } : {}),
+        }, port !== undefined ? { port } : {});
+        write(result.text);
+        process.exitCode = result.ok ? 0 : 1;
+    });
+    family
+        .command("setup")
+        .description("List what the Family page still needs and print the one next step")
+        .option("--parent <name...>", "Parents to add to the family")
+        .option("--kid <name...>", "Kids to add to the family")
+        .option("--guest <name...>", "Guests to add to the family")
+        .option("--discord <name=id...>", "Discord user IDs, like alex=123456789012345678")
+        .action(async (opts) => {
+        const gog = await diagnoseGog(deps.run, deps.gogPath ? { gogPath: deps.gogPath } : {});
+        const result = planSetup(deps.host, {
+            ...(opts.parent ? { parent: opts.parent } : {}),
+            ...(opts.kid ? { kid: opts.kid } : {}),
+            ...(opts.guest ? { guest: opts.guest } : {}),
+            ...(opts.discord ? { discord: opts.discord } : {}),
+        }, gog, deps.hostZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+        write(result.text);
+        process.exitCode = result.ok ? 0 : 1;
     });
 }

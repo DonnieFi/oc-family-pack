@@ -1,11 +1,12 @@
 import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { ConfigSchema, parseConfig } from "./config.js";
-import { contract } from "./contract.js";
+import { contract, WEEK_METHOD } from "./contract.js";
 import { execGog } from "./calendar-gog.js";
 import { registerFamilyCli } from "./gog-setup.js";
-import { familyHandlers } from "./handlers.js";
+import { familyHandlers, familyWeek } from "./handlers.js";
 import { openFamilyStore } from "./store.js";
+import { weekMethod } from "./week-method.js";
 function configuredGogPath(raw) {
     try {
         return parseConfig(raw).gogPath;
@@ -22,8 +23,8 @@ const plugin = defineFeaturePlugin({
     // Family commands are not registered here. The contract commands adapter always
     // sets requiredScopes, which the shipped command gate then limits to the owner.
     setup(api) {
-        api.registerCli(({ program }) => {
-            registerFamilyCli(program, { run: execGog(), gogPath: configuredGogPath(api.pluginConfig) });
+        api.registerCli(({ program, config }) => {
+            registerFamilyCli(program, { run: execGog(), gogPath: configuredGogPath(api.pluginConfig), gateway: config.gateway, host: config });
         }, {
             commands: ["family"],
             descriptors: [{ name: "family", description: "Family Pack setup", hasSubcommands: true }],
@@ -51,7 +52,11 @@ const plugin = defineFeaturePlugin({
                 },
             });
         }
-        return familyHandlers(parseConfig(api.pluginConfig));
+        const config = parseConfig(api.pluginConfig);
+        // The week is a Gateway method, not a feature query, because only a Gateway
+        // method sees who signed in. Same operator.read scope the queries get.
+        api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config)), { scope: "operator.read" });
+        return familyHandlers(config);
     },
 });
 // defineFeaturePlugin (openclaw 2026.9.7) takes no configSchema option, and the

@@ -54,6 +54,8 @@ export const FamilyEventSchema = Type.Object({
     allDay: Type.Boolean(),
     location: Type.Optional(Text(LOCATION_MAX)),
     calendarKey: Text(8),
+    /** Every visible calendar a merged event was read from, earliest first; absent for a single source. */
+    calendarKeys: Type.Optional(Type.Array(Text(8), { minItems: 2, maxItems: MAX_CALENDARS })),
     htmlLink: Type.Optional(Text(LINK_MAX)),
 });
 export const WeatherCardSchema = Type.Object({
@@ -159,27 +161,32 @@ export const WeekPayloadSchema = Type.Object({
     days: Type.Array(Type.Object({ date: IsoDate, isToday: Type.Boolean(), eventIds: Type.Array(Text(EVENT_ID_MAX), { maxItems: MAX_WEEK_EVENTS }) }), { minItems: 7, maxItems: 7 }),
     members: Type.Array(MemberSchema, { maxItems: MAX_MEMBERS }),
     calendars: Type.Array(CalendarRefSchema, { maxItems: MAX_CALENDARS }),
-    /** `warnings` names calendars that failed to load while the rest still show. */
+    /**
+     * `warnings` names calendars that failed to load while the rest still show.
+     * `hidden` means the household has calendars and none are this viewer's.
+     */
     calendar: Type.Union([
         Type.Object({
             status: Type.Literal("ok"),
             data: Type.Array(FamilyEventSchema, { maxItems: MAX_WEEK_EVENTS }),
             warnings: Type.Array(Text(MESSAGE_MAX), { maxItems: MAX_CALENDARS }),
         }),
+        Type.Object({ status: Type.Literal("hidden") }),
         Unconfigured,
         Failed,
     ]),
     weather: WeatherStateSchema,
 });
+/**
+ * Input to the `family.week` Gateway method. It is not a feature query: a
+ * session action carries no caller identity, so the week is served by a plugin
+ * Gateway method that filters by who signed in.
+ */
+export const WEEK_METHOD = "family.week";
+export const WeekInputSchema = Type.Object({ start: Type.Optional(IsoDate) }, { additionalProperties: false });
 export const contract = defineFeatureContract({
     pluginId: "oc-family-pack",
     operations: {
-        "family.week": {
-            kind: "query",
-            description: "Read one Monday-to-Sunday family week: calendar events grouped by local day, the calendars and member roster with colors, and local weather.",
-            input: Type.Object({ start: Type.Optional(IsoDate) }, { additionalProperties: false }),
-            output: WeekPayloadSchema,
-        },
         "family.members": {
             kind: "query",
             description: "Read the roster a picker shows: profile id, display name, color, and role for each person.",
