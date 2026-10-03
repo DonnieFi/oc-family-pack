@@ -279,7 +279,8 @@
   },
   "contracts": {
     "tools": [
-      "family_schedule"
+      "family_schedule",
+      "calendar_create"
     ]
   }
 }

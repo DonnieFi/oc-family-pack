@@ -88,3 +88,16 @@ test("an unknown or read-write grant lets the write through to the table", () =>
     assert.deepEqual(gate("confirm", adminPage, family, grant), { decision: "needs-approval", approvers: ["Donnie"] }, grant);
   }
 });
+
+test("a table decision from the hook skips the table and confirm, but never gate 0, off or read-only", () => {
+  const kid: Requester = { from: "discord", member: calla! };
+  for (const table of ["write", "approved"] as const) {
+    const run = (writes: WriteMode, requester: Requester, grant: Grant = "unknown") =>
+      gateWrite({ writes, grant, members: config.members, requester, calendar: family, table });
+    assert.deepEqual(run("on", kid), { decision: "write" });
+    assert.deepEqual(run("confirm", kid), { decision: "write" });
+    assert.deepEqual(run("off", kid), { decision: "refused", message: WRITES_OFF });
+    assert.deepEqual(run("on", kid, "read-only"), { decision: "refused", message: READ_ONLY });
+    assert.deepEqual(run("on", { from: "page", client: { scopes: ["operator.read"] } }), { decision: "refused", message: VIEW_ONLY });
+  }
+});

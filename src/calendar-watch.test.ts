@@ -272,3 +272,17 @@ test("a poll that sees read-write clears a read-only status a failed write set",
   await h.settle();
   assert.equal(grant.get(), "read-write");
 });
+
+test("a failed or unclear poll leaves a read-only grant read-only", async () => {
+  const grant = grantHolder("read-only");
+  const h = harness(["cal-a"], { grant });
+  h.queue("cal-a", one(T0), one(T0), one(T0));
+  h.queue(AUTH_LIST, new Error("gog timed out"), JSON.stringify({ accounts: [] }), "not json");
+  h.start();
+  await h.settle();
+  assert.equal(grant.get(), "read-only");
+  await h.tick();
+  assert.equal(grant.get(), "read-only");
+  await h.tick();
+  assert.equal(grant.get(), "read-only");
+});

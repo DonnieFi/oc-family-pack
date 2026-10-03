@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { diagnoseGog, formatGogSetup, gogAccount, registerFamilyCli, type RunGog } from "./gog-setup.ts";
+import { diagnoseGog, formatGogSetup, gogAccount, grantFromAuthList, READONLY_GRANT, registerFamilyCli, type RunGog } from "./gog-setup.ts";
+import { grantHolder } from "./grant.ts";
 
 function scripted(steps: Record<string, { stdout?: string; stderr?: string; code?: string | number }>): RunGog {
   return async (_file, args) => {
@@ -229,4 +230,21 @@ test("openclaw family setup reads the host config, runs the gog checks, and fail
   assert.deepEqual(calls, ["auth doctor --json --no-input"]);
   assert.match(lines[0] ?? "", /"profileId": "riley"/);
   assert.match(lines[0] ?? "", /^Access mode: Done\nTimezone: To do\nLocation: To do\nMembers: Done\nCalendars: To do$/m);
+});
+
+test("an account with services but no scopes: calendar is unknown, anything else can't write to Calendar", () => {
+  const list = (services: string[]) => JSON.stringify({ accounts: [{ email: "person@example.com", services, scopes: [] }] });
+  assert.equal(grantFromAuthList(list(["calendar"])), "unknown");
+  assert.equal(grantFromAuthList(list(["calendar", "gmail"])), "unknown");
+  assert.equal(grantFromAuthList(list(["gmail"])), "read-only");
+  assert.equal(grantFromAuthList(JSON.stringify({ accounts: [{ email: "person@example.com", services: ["calendar"] }] })), "unknown");
+  assert.equal(grantFromAuthList(list([])), "unknown");
+});
+
+test("stderr that says only ACCESS_TOKEN_SCOPE is the read-only grant error", () => {
+  assert.equal(READONLY_GRANT.test("ACCESS_TOKEN_SCOPE"), true);
+  assert.equal(READONLY_GRANT.test("reason: ACCESS_TOKEN_SCOPE"), true);
+  const grant = grantHolder("read-write");
+  grant.noteWriteFailure(Object.assign(new Error("Command failed"), { stderr: "ACCESS_TOKEN_SCOPE" }));
+  assert.equal(grant.get(), "read-only");
 });

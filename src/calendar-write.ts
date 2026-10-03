@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import type { FeatureInvocationContext } from "openclaw/plugin-sdk/feature-plugin";
 import type { RunGog } from "./calendar-gog.ts";
-import { resolveRequester, type Requester } from "./requester.ts";
+import { resolveWriteRequester, type Requester } from "./requester.ts";
 import type { FamilyStore, WriteLogRow } from "./store.ts";
 import type { CalendarConfig, Config } from "./types.ts";
 import { addDays, parseDate } from "./week.ts";
 import type { GrantHolder } from "./grant.ts";
-import { gateWrite } from "./write-gate.ts";
+import { gateWrite, type TableDecision } from "./write-gate.ts";
 
 /** The two write-log calls a write needs. The family store is the real one. */
 export type WriteLog = Pick<FamilyStore, "countCommittedWrites" | "appendWriteLog">;
@@ -15,6 +15,8 @@ export type WriteDeps = {
   config: Pick<Config, "gogPath" | "timezone">;
   runGog: RunGog;
   log: WriteLog;
+  /** The shared grant. A gog write that fails with the read-only grant error flips it. */
+  grant: GrantHolder;
 };
 
 export type CreateFields = {
@@ -38,7 +40,20 @@ export type CreateRequest = {
 };
 
 /** Gateway-only: the reply layer strips `eventId` and `key` before anything reaches the page or the model. */
-export type CreateResult = { status: "created" | "existing"; eventId: string; key: string };
+/**
+ * Why a write gog refused did not happen: gog's read-only grant error (the grant is now
+ * read-only) or anything else. The failed row is already written.
+ */
+export type WriteFailure = "readonly" | "unreachable";
+
+export type CreateResult = { status: "created" | "existing"; eventId: string; key: string } | { status: "failed"; reason: WriteFailure };
+
+/** The verb ux's lines use for each write op. */
+export const OP_VERB = { create: "add" } as const;
+
+/** ux's line for a write gog could not make for any reason but the read-only grant. Nothing of gog's own text. */
+export const unreachableLine = (op: keyof typeof OP_VERB, name: string) =>
+  `I couldn't reach the calendar just now, so I didn't ${OP_VERB[op]} **${name}**. Try again in a bit.`;
 
 /** ux's line for a write whose end is not after its start. */
 export const END_BEFORE_START = "The end has to be after the start. Nothing was added.";
@@ -60,7 +75,8 @@ export function requesterTag(requester: Requester): string {
     case "discord":
       return requester.member ? `discord:${requester.member.profileId}` : "discord:unmatched";
     case "tool":
-      return requester.senderIsOwner ? "tool:owner" : "tool";
+      // Off Discord the owner flag names no person, and the hook can't see it on tools.invoke.
+      return "tool";
     case "page":
       return "page";
     case "other":
@@ -160,7 +176,7 @@ function privateProps(item: Record<string, unknown>): Record<string, unknown> {
 }
 
 /** What the log keeps of a create: the lock's fields only, never the description. */
-function loggedFields(fields: ReturnType<typeof normalizeCreate>): string {
+export function loggedFields(fields: ReturnType<typeof normalizeCreate>): string {
   return JSON.stringify({
     summary: fields.title,
     start: fields.start,
@@ -256,14 +272,22 @@ export async function createEvent(deps: WriteDeps, request: CreateRequest): Prom
   const row = { baseKey: base, requester: request.requester, op: "create" as const, calendarId: request.calendarId, afterJson: loggedFields(fields) };
   return withKeyLock(base, async () => {
     const key = requestKey(base, await deps.log.countCommittedWrites(base));
-    // A failed row is history only. If writing it fails too, the gog error is the one to surface.
+    // A failed row is history only. If writing it fails too, the gog outcome still stands.
     const logFailure = () => deps.log.appendWriteLog({ ...row, requestKey: key, status: "failed" }, { ifAbsent: false }).catch(() => undefined);
+    // gog failed. The grant flips first (the holder's one setter, the shared READONLY_GRANT
+    // matcher), so it never waits on the failed row; then the row; then an outcome with none
+    // of gog's text. A store failure is not gog's and still throws.
+    const gogFailed = async (error: unknown): Promise<CreateResult> => {
+      const readonly = deps.grant.noteWriteFailure(error);
+      await logFailure();
+      if (readonly) return { status: "failed", reason: "readonly" };
+      return { status: "failed", reason: "unreachable" };
+    };
     let live: Awaited<ReturnType<typeof findLive>>;
     try {
       live = await findLive(deps, request.calendarId, base, fields);
     } catch (error) {
-      await logFailure();
-      throw error;
+      return gogFailed(error);
     }
     if (live) {
       const liveKey = live.key?.startsWith(`${base}.`) ? checkKey(live.key) : key;
@@ -274,15 +298,14 @@ export async function createEvent(deps: WriteDeps, request: CreateRequest): Prom
     try {
       eventId = createdId((await deps.runGog(deps.config.gogPath, createArgs(deps, request, fields, base, key))).stdout);
     } catch (error) {
-      await logFailure();
-      throw error;
+      return gogFailed(error);
     }
     await deps.log.appendWriteLog({ ...row, requestKey: key, eventId, status: "committed" }, { ifAbsent: false });
     return { status: "created", eventId, key };
   });
 }
 
-export type SubmitDeps = Omit<WriteDeps, "config"> & { config: Pick<Config, "gogPath" | "timezone" | "writes" | "members">; grant: GrantHolder };
+export type SubmitDeps = Omit<WriteDeps, "config"> & { config: Pick<Config, "gogPath" | "timezone" | "writes" | "members"> };
 
 export type CreateSubmission = {
   /** The host's context. The requester comes only from here; the payload only supplies the page's requestId. */
@@ -290,25 +313,34 @@ export type CreateSubmission = {
   payload?: unknown;
   calendar: Pick<CalendarConfig, "id" | "kind" | "owners">;
   fields: CreateFields;
+  /**
+   * The permission table's answer, from code only: the calendar_create tool passes what its
+   * verified stamp says the before_tool_call hook decided. With it, only gate 0, off and
+   * read-only run again; without it, the whole gate runs.
+   */
+  table?: TableDecision;
 };
 
 export type SubmitResult = { status: "refused"; message: string } | { status: "needs-approval"; approvers: string[] } | CreateResult;
 
 /**
  * The pipeline entry for a create. The gate runs first, so a refusal never reaches gog or
- * the write log. A needs-approval result stops here until approvals land (s5k.34.3).
+ * the write log. A needs-approval result stops here; tool calls get their approval from the
+ * before_tool_call hook (calendar-create.ts) and come back with `table`.
  */
 export async function submitCreate(deps: SubmitDeps, submission: CreateSubmission): Promise<SubmitResult> {
-  const requester = resolveRequester(deps.config.members, submission.context);
-  const gate = gateWrite({ writes: deps.config.writes, grant: deps.grant.get(), members: deps.config.members, requester, calendar: submission.calendar });
+  const requester = resolveWriteRequester(deps.config.members, submission.context);
+  const gate = gateWrite({
+    writes: deps.config.writes,
+    grant: deps.grant.get(),
+    members: deps.config.members,
+    requester,
+    calendar: submission.calendar,
+    ...(submission.table ? { table: submission.table } : {}),
+  });
   if (gate.decision === "refused") return { status: "refused", message: gate.message };
   if (gate.decision === "needs-approval") return { status: "needs-approval", approvers: gate.approvers };
   const scope = writeScope(submission.context, submission.payload);
   if (scope === undefined) throw new Error("oc-family-pack: a write needs a retry scope");
-  try {
-    return await createEvent(deps, { requester: requesterTag(requester), scope, calendarId: submission.calendar.id, fields: submission.fields });
-  } catch (error) {
-    deps.grant.noteWriteFailure(error);
-    throw error;
-  }
+  return createEvent(deps, { requester: requesterTag(requester), scope, calendarId: submission.calendar.id, fields: submission.fields });
 }

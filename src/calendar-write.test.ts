@@ -12,8 +12,10 @@ import {
   createEvent,
   END_BEFORE_START,
   normalizeCreate,
+  requesterTag,
   submitCreate,
   type CreateRequest,
+  type CreateResult,
   type SubmitDeps,
   type WriteDeps,
   writeScope,
@@ -21,6 +23,7 @@ import {
 import { parseConfig } from "./config.ts";
 import type { FamilyStore } from "./store.ts";
 import type { WriteMode } from "./types.ts";
+import { READONLY_GRANT } from "./gog-setup.ts";
 import { grantHolder, type Grant, type GrantHolder } from "./grant.ts";
 import { READ_ONLY, VIEW_ONLY, WRITES_OFF } from "./write-gate.ts";
 
@@ -219,8 +222,14 @@ async function withStore(run: (ctx: { stateDir: string; store: FamilyStore; open
   }
 }
 
-function deps(gog: ReturnType<typeof fakeGog>, log: WriteDeps["log"]): WriteDeps {
-  return { config: { gogPath, timezone: "America/Halifax" }, runGog: gog.run, log };
+function deps(gog: ReturnType<typeof fakeGog>, log: WriteDeps["log"], grant: GrantHolder = grantHolder()): WriteDeps {
+  return { config: { gogPath, timezone: "America/Halifax" }, runGog: gog.run, log, grant };
+}
+
+/** A create that reached Google: its event id, or the test fails. */
+function made(result: CreateResult): Extract<CreateResult, { eventId: string }> {
+  assert.notEqual(result.status, "failed", JSON.stringify(result));
+  return result as Extract<CreateResult, { eventId: string }>;
 }
 
 let scopeCounter = 0;
@@ -288,9 +297,9 @@ test("add, delete in Google, add again makes a second event under the next reque
   await withStore(async ({ stateDir, store }) => {
     const gog = fakeGog();
     const request = dentist();
-    const first = await createEvent(deps(gog, store), request);
+    const first = made(await createEvent(deps(gog, store), request));
     gog.remove(first.eventId);
-    const again = await createEvent(deps(gog, store), request);
+    const again = made(await createEvent(deps(gog, store), request));
     assert.equal(again.status, "created");
     assert.notEqual(again.eventId, first.eventId);
     assert.equal(gog.live().length, 1);
@@ -310,9 +319,9 @@ test("a deleted event that still comes back in the list is not treated as live",
   await withStore(async ({ store }) => {
     const gog = fakeGog({ listsCancelled: true });
     const request = dentist();
-    const first = await createEvent(deps(gog, store), request);
+    const first = made(await createEvent(deps(gog, store), request));
     gog.remove(first.eventId);
-    const again = await createEvent(deps(gog, store), request);
+    const again = made(await createEvent(deps(gog, store), request));
     assert.equal(again.status, "created");
     assert.equal(gog.live().length, 1);
   });
@@ -408,7 +417,7 @@ test("two identical creates at once make one event and one committed row", async
   await withStore(async ({ stateDir, store }) => {
     const gog = fakeGog();
     const request = dentist();
-    const results = await Promise.all([createEvent(deps(gog, store), request), createEvent(deps(gog, store), request)]);
+    const results = (await Promise.all([createEvent(deps(gog, store), request), createEvent(deps(gog, store), request)])).map(made);
     assert.deepEqual(results.map((result) => result.status).sort(), ["created", "existing"]);
     assert.equal(results[0]?.eventId, results[1]?.eventId);
     assert.equal(gog.events.length, 1);
@@ -505,7 +514,7 @@ test("an all-day create with no end is one day long and the same request as an e
   });
 });
 
-test("a gog failure logs a failed row and the retry still uses request key .0", async () => {
+test("a gog failure logs a failed row, returns `unreachable` without throwing, and the retry still uses request key .0", async () => {
   await withStore(async ({ stateDir, store }) => {
     const gog = fakeGog();
     let fail = true;
@@ -517,7 +526,7 @@ test("a gog failure logs a failed row and the retry still uses request key .0", 
       return gog.run(file, args);
     };
     const request = dentist();
-    await assert.rejects(createEvent({ ...deps(gog, store), runGog: flaky }, request), /gog exited 1/);
+    assert.deepEqual(await createEvent({ ...deps(gog, store), runGog: flaky }, request), { status: "failed", reason: "unreachable" });
     const result = await createEvent({ ...deps(gog, store), runGog: flaky }, request);
     assert.equal(result.status, "created");
     const rows = logRows(stateDir);
@@ -780,8 +789,9 @@ test("a gog write that fails with the read-only grant error flips the grant, so 
     for (const start of ["unknown", "read-write"] as Grant[]) {
       const grant = grantHolder(start);
       const failing = fakeGog({ failCreate: () => gogError(READONLY_STDERR) });
-      await assert.rejects(submitCreate(submitDeps(failing, store, "on", grant), pageSubmit({ connId: "p", scopes: PARENT_SCOPES })), /Command failed/);
+      assert.deepEqual(await submitCreate(submitDeps(failing, store, "on", grant), pageSubmit({ connId: "p", scopes: PARENT_SCOPES })), { status: "failed", reason: "readonly" });
       assert.equal(grant.get(), "read-only", start);
+      assert.equal(grant.source(), "write-failure", "flipped through the holder's setter");
       const next = fakeGog();
       assert.deepEqual(await submitCreate(submitDeps(next, store, "on", grant), pageSubmit({ connId: "p", scopes: PARENT_SCOPES })), { status: "refused", message: READ_ONLY });
       assert.equal(next.calls.length, 0);
@@ -802,14 +812,74 @@ test("a timeout, another non-zero exit, or a 500 leaves the grant as it was", as
     for (const start of ["unknown", "read-write"] as Grant[]) {
       for (const [name, failCreate] of failures) {
         const grant = grantHolder(start);
-        await assert.rejects(submitCreate(submitDeps(fakeGog({ failCreate }), store, "on", grant), pageSubmit({ connId: "p", scopes: PARENT_SCOPES })));
+        const result = await submitCreate(submitDeps(fakeGog({ failCreate }), store, "on", grant), pageSubmit({ connId: "p", scopes: PARENT_SCOPES }));
+        assert.deepEqual(result, { status: "failed", reason: "unreachable" }, name);
         assert.equal(grant.get(), start, `${name} from ${start}`);
+        assert.equal(grant.source(), "initial", name);
       }
     }
   });
 });
 
+/** A write log whose `failed` rows can't be written: the store went away after the gog call. */
+function failedRowsThrow() {
+  const committed: string[] = [];
+  return {
+    committed,
+    countCommittedWrites: async () => 0,
+    appendWriteLog: async (row: { status: string; requestKey: string }) => {
+      if (row.status === "failed") throw new Error("oc-family-pack: the family store stopped");
+      committed.push(row.requestKey);
+      return { inserted: true };
+    },
+  };
+}
+
+test("the grant flips even when the failed row can't be written, and the outcome still comes back", async () => {
+  const grant = grantHolder("read-write");
+  const log = failedRowsThrow();
+  const readonly = await createEvent(deps(fakeGog({ failCreate: () => gogError(READONLY_STDERR) }), log, grant), dentist());
+  assert.deepEqual(readonly, { status: "failed", reason: "readonly" });
+  assert.equal(grant.get(), "read-only");
+  assert.equal(grant.source(), "write-failure");
+  const other = grantHolder("read-write");
+  const unreachable = await createEvent(deps(fakeGog({ failCreate: () => gogError("Error: googleapi: Error 500: Backend Error") }), failedRowsThrow(), other), dentist());
+  assert.deepEqual(unreachable, { status: "failed", reason: "unreachable" });
+  assert.equal(other.get(), "read-write");
+  assert.equal(other.source(), "initial");
+  assert.deepEqual(log.committed, []);
+});
+
+test("the write path classifies with the one shared READONLY_GRANT matcher: a phrase added to it is read-only at write time too", async () => {
+  const PHRASE = "ocfp-test-new-readonly-phrase";
+  const { source, flags } = READONLY_GRANT;
+  assert.equal(READONLY_GRANT.test(PHRASE), false);
+  // Extend the shared matcher in place, the way a gog wording change would extend it in gog-setup.ts.
+  READONLY_GRANT.compile(`${source}|${PHRASE}`, flags);
+  try {
+    const grant = grantHolder("read-write");
+    const result = await createEvent(deps(fakeGog({ failCreate: () => gogError(`Error: ${PHRASE}`) }), failedRowsThrow(), grant), dentist());
+    assert.deepEqual(result, { status: "failed", reason: "readonly" });
+    assert.equal(grant.get(), "read-only");
+    // And narrowed: without the phrase the same failure is `unreachable`.
+    READONLY_GRANT.compile(source, flags);
+    const other = grantHolder("read-write");
+    assert.deepEqual(await createEvent(deps(fakeGog({ failCreate: () => gogError(`Error: ${PHRASE}`) }), failedRowsThrow(), other), dentist()), { status: "failed", reason: "unreachable" });
+    assert.equal(other.get(), "read-write");
+  } finally {
+    READONLY_GRANT.compile(source, flags);
+  }
+  assert.equal(READONLY_GRANT.test(PHRASE), false);
+});
+
 test("no real gog is reachable from the tests", () => {
   assert.equal(existsSync(gogPath), false);
   assert.equal(process.env.HOME, home);
+});
+
+test("every off-Discord tool caller is `tool` in the key's requester tag, owner or not", () => {
+  assert.equal(requesterTag({ from: "tool", senderIsOwner: true }), "tool");
+  assert.equal(requesterTag({ from: "tool", senderIsOwner: false }), "tool");
+  assert.equal(requesterTag({ from: "discord", member: household.members[1]! }), "discord:calla");
+  assert.equal(requesterTag({ from: "discord" }), "discord:unmatched");
 });

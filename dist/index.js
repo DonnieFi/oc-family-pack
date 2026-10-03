@@ -9,6 +9,7 @@ import { familyHandlers, familyWeek } from "./handlers.js";
 import { openFamilyStore } from "./store.js";
 import { weekMethod } from "./week-method.js";
 import { familyGrant } from "./grant.js";
+import { CALENDAR_CREATE_TOOL, CalendarCreateInputSchema, registerCalendarWrite } from "./calendar-create.js";
 function configuredGogPath(raw) {
     try {
         return parseConfig(raw).gogPath;
@@ -33,8 +34,8 @@ const plugin = defineFeaturePlugin({
         });
         // Discovery loads the plugin without starting it. The worker belongs to the
         // service start, which the host only calls in a live Gateway.
+        let store;
         if (api.registrationMode === "full") {
-            let store;
             api.registerService({
                 id: "family-store",
                 reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
@@ -70,6 +71,12 @@ const plugin = defineFeaturePlugin({
                 },
             });
         }
+        // calendar_create and its before_tool_call approval hook, registered together.
+        const writeApi = {
+            on: (hookName, handler, opts) => api.on(hookName, handler, opts),
+            registerTool: (factory, opts) => api.registerTool(factory, opts),
+        };
+        registerCalendarWrite(writeApi, { config, runGog: execGog(), grant: familyGrant, log: () => store });
         // The week is a Gateway method, not a feature query, because only a Gateway
         // method sees who signed in. Same operator.read scope the queries get.
         api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config)), { scope: "operator.read" });
@@ -86,4 +93,12 @@ if (!metadata) {
     throw new Error("oc-family-pack: feature plugin metadata is missing");
 }
 metadata.configSchema = { ...ConfigSchema };
+// calendar_create is registered with api.registerTool, not through the feature contract, so it
+// gets no page session action. `openclaw plugins build` reads contracts.tools from this list.
+metadata.tools.push({
+    name: CALENDAR_CREATE_TOOL,
+    label: "Add to calendar",
+    description: "Add one event to a family calendar; some additions wait for a parent to approve them.",
+    parameters: { ...CalendarCreateInputSchema },
+});
 export default plugin;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Value } from "typebox/value";
 import plugin from "./index.ts";
+import { CALENDAR_HOOK_PRIORITY } from "./calendar-create.ts";
 import {
   CALENDAR_CHANGED_EVENT,
   CALENDAR_CHECKED_EVENT,
@@ -41,10 +42,11 @@ test("the contract registers exactly the three read queries, and the week is not
   assert.equal(Object.hasOwn(contract.operations, "family.today"), false);
 });
 
-test("registered queries are operator.read session actions, the schedule is the one agent tool, the week is an operator.read Gateway method, and there is no command adapter", () => {
+test("registered queries are operator.read session actions, the agent tools are the schedule and calendar_create with its first-running approval hook, the week is an operator.read Gateway method, and there is no command adapter", () => {
   const actions: { id: string; requiredScopes: string[] }[] = [];
   const tools: { name: string; optional?: boolean }[] = [];
   const methods: { method: string; scope?: string }[] = [];
+  const hooks: { name: string; priority?: number; matcher?: readonly string[] }[] = [];
   const cli: string[] = [];
   let commands = 0;
   let cliCommands: readonly string[] = [];
@@ -60,6 +62,9 @@ test("registered queries are operator.read session actions, the schedule is the 
     },
     registerTool(_factory: unknown, opts: { name: string; optional?: boolean }) {
       tools.push(opts);
+    },
+    on(name: string, _handler: unknown, opts?: { priority?: number; matcher?: readonly string[] }) {
+      hooks.push({ name, ...opts });
     },
     registerGatewayMethod(method: string, _handler: unknown, opts?: { scope?: string }) {
       methods.push({ method, ...(opts?.scope ? { scope: opts.scope } : {}) });
@@ -90,7 +95,8 @@ test("registered queries are operator.read session actions, the schedule is the 
     { id: "family.schedule", requiredScopes: ["operator.read"] },
     { id: "family.weather", requiredScopes: ["operator.read"] },
   ]);
-  assert.deepEqual(tools, [{ name: "family_schedule" }]);
+  assert.deepEqual(tools, [{ name: "calendar_create" }, { name: "family_schedule" }]);
+  assert.deepEqual(hooks, [{ name: "before_tool_call", priority: CALENDAR_HOOK_PRIORITY, matcher: ["calendar_create"] }]);
   assert.deepEqual(methods, [{ method: "family.week", scope: "operator.read" }]);
   assert.equal(commands, 0);
   assert.deepEqual(cliCommands, ["family"]);

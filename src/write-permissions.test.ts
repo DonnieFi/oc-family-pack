@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parseConfig } from "./config.ts";
-import { resolveRequester, type Requester } from "./requester.ts";
+import { resolveRequester, resolveWriteRequester, type Requester } from "./requester.ts";
 import { pageRole, SETUP_PERSON, writeRight } from "./write-permissions.ts";
 
 const CALLA_DISCORD = "100000000000000001";
@@ -129,6 +129,38 @@ test("the requester comes only from the host's source and channel", () => {
   assert.deepEqual(resolveRequester(members, tool({ messageChannel: "discord", senderIsOwner: true })), { from: "discord" });
   assert.deepEqual(resolveRequester(members, FROM["Control UI chat as owner"]), { from: "tool", senderIsOwner: true });
   assert.deepEqual(resolveRequester(members, FROM["Control UI chat with Calla's Discord id"]), { from: "tool", senderIsOwner: false });
+});
+
+test("a write from HTTP /tools/invoke is `tool` whatever its channel header says; a Discord channel needs the host's sender; an agent run's Discord sender still counts", () => {
+  // tools-invoke-http marks the call direct-operator and copies x-openclaw-message-channel and
+  // x-openclaw-account-id into the tool context; it never sets requesterSenderId, but even if a
+  // sender were there it would not count.
+  const http = (fields: Record<string, unknown>) => tool({ conversationReadOrigin: "direct-operator", ...fields });
+  for (const owner of [true, false]) {
+    for (const fields of [
+      { messageChannel: "discord", senderIsOwner: owner },
+      { messageChannel: "discord", agentAccountId: DONNIE_DISCORD, senderIsOwner: owner },
+      { messageChannel: "Discord ", requesterSenderId: DONNIE_DISCORD, senderIsOwner: owner },
+    ]) {
+      assert.deepEqual(resolveWriteRequester(members, http(fields)), { from: "tool", senderIsOwner: owner });
+    }
+  }
+  // An agent run: unset or "delegated", the host's channel and sender decide.
+  assert.deepEqual(resolveWriteRequester(members, FROM["Donnie on Discord"]), { from: "discord", member: members[0] });
+  assert.deepEqual(resolveWriteRequester(members, tool({ messageChannel: "discord", requesterSenderId: CALLA_DISCORD, conversationReadOrigin: "delegated" })), { from: "discord", member: members[2] });
+  assert.deepEqual(resolveWriteRequester(members, tool({ messageChannel: "discord", requesterSenderId: "199999999999999999" })), { from: "discord" });
+  // The agent RPC `channel` param and the OpenAI-compatible and MCP channel headers set the channel
+  // with no sender: a write needs the host's sender id too, so these are `tool`.
+  for (const owner of [true, false]) {
+    for (const senderId of [undefined, "", "  "]) {
+      const fields = senderId === undefined ? { messageChannel: "discord", senderIsOwner: owner } : { messageChannel: "discord", requesterSenderId: senderId, senderIsOwner: owner };
+      assert.deepEqual(resolveWriteRequester(members, tool(fields)), { from: "tool", senderIsOwner: owner }, JSON.stringify(senderId));
+    }
+  }
+  assert.deepEqual(resolveWriteRequester(members, FROM["a parent's page"]), { from: "page", client: { scopes: PARENT_SCOPES } });
+  assert.deepEqual(resolveWriteRequester(members, FROM["a command"]), { from: "other" });
+  // Reads keep the old reading, where a Discord header can only make the caller a guest.
+  assert.deepEqual(resolveRequester(members, http({ messageChannel: "discord", senderIsOwner: true })), { from: "discord" });
 });
 
 test("a page session is a parent with operator.write or operator.admin and a guest otherwise", () => {

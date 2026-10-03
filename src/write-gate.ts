@@ -10,6 +10,9 @@ export const WRITES_OFF = "Calendar changes are turned off right now, so I didn'
 /** gog's Google grant can't write to Calendar. */
 export const READ_ONLY = "I can only read the calendars right now, so I didn't change anything.";
 
+/** What the permission table decided for a tool call: a write, or a write a parent approved. */
+export type TableDecision = "write" | "approved";
+
 export type GateDecision = { decision: "refused"; message: string } | { decision: "needs-approval"; approvers: string[] } | { decision: "write" };
 
 /**
@@ -19,6 +22,8 @@ export type GateDecision = { decision: "refused"; message: string } | { decision
  * 1. `writes: "off"` refuses everything.
  * 2. a read-only gog grant refuses everything; `unknown` lets the write through.
  * 3. the permission table, and `writes: "confirm"` sends every write for approval.
+ * A `table` decision from the before_tool_call hook replaces step 3, so an approved write
+ * isn't sent for approval again; steps 0-2 always run.
  */
 export function gateWrite(input: {
   writes: WriteMode;
@@ -26,10 +31,12 @@ export function gateWrite(input: {
   members: readonly MemberConfig[];
   requester: Requester;
   calendar: Pick<CalendarConfig, "kind" | "owners">;
+  table?: TableDecision;
 }): GateDecision {
   if (input.requester.from === "page" && pageRole(input.requester.client) !== "parent") return { decision: "refused", message: VIEW_ONLY };
   if (input.writes === "off") return { decision: "refused", message: WRITES_OFF };
   if (input.grant === "read-only") return { decision: "refused", message: READ_ONLY };
+  if (input.table !== undefined) return { decision: "write" };
   const right = writeRight(input.members, input.requester, input.calendar);
   if (right.right === "needs-approval") return { decision: "needs-approval", approvers: right.approvers };
   if (input.writes === "confirm") return { decision: "needs-approval", approvers: approvers(input.members) };
