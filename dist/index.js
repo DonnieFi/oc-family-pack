@@ -3,6 +3,7 @@ import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { ConfigSchema, parseConfig } from "./config.js";
 import { contract, WEEK_METHOD } from "./contract.js";
 import { execGog } from "./calendar-gog.js";
+import { watchCalendars } from "./calendar-watch.js";
 import { registerFamilyCli } from "./gog-setup.js";
 import { familyHandlers, familyWeek } from "./handlers.js";
 import { openFamilyStore } from "./store.js";
@@ -22,7 +23,7 @@ const plugin = defineFeaturePlugin({
     // Queries are operator.read; defineFeaturePlugin sets that scope on every query.
     // Family commands are not registered here. The contract commands adapter always
     // sets requiredScopes, which the shipped command gate then limits to the owner.
-    setup(api) {
+    setup(api, events) {
         api.registerCli(({ program, config }) => {
             registerFamilyCli(program, { run: execGog(), gogPath: configuredGogPath(api.pluginConfig), gateway: config.gateway, host: config });
         }, {
@@ -53,6 +54,21 @@ const plugin = defineFeaturePlugin({
             });
         }
         const config = parseConfig(api.pluginConfig);
+        if (api.registrationMode === "full") {
+            // Polls Google for edits made outside the page; like the store, it runs only in a live Gateway.
+            let stopWatch;
+            api.registerService({
+                id: "calendar-watch",
+                reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
+                start(ctx) {
+                    stopWatch = watchCalendars({ config, runGog: execGog(), events, logger: ctx.logger });
+                },
+                stop() {
+                    stopWatch?.();
+                    stopWatch = undefined;
+                },
+            });
+        }
         // The week is a Gateway method, not a feature query, because only a Gateway
         // method sees who signed in. Same operator.read scope the queries get.
         api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config)), { scope: "operator.read" });

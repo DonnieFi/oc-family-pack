@@ -7,6 +7,7 @@ import {
   type ControlUiSessionListSubscription,
   type ControlUiViewContext,
 } from "openclaw/plugin-sdk/control-ui";
+import { createFeatureClient } from "openclaw/plugin-sdk/feature-contract";
 import { contract, WEEK_METHOD } from "./contract.ts";
 import { mixTowardInk } from "./contrast.ts";
 import type { CalendarRef, FamilyEvent, Member, WeekPayload } from "./types.ts";
@@ -14,6 +15,9 @@ import { addDays, boundWeekStart, localDate, pageWeekStart } from "./week.ts";
 import "./control-ui.css";
 
 const PAGE_ID = "family";
+/** ux: say nothing while the week is fresh; after this long without a good read, one quiet line. */
+const STALE_AFTER_MS = 6 * 60_000;
+const STALE_TICK_MS = 30_000;
 
 type Load =
   | { kind: "loading" }
@@ -97,11 +101,44 @@ const rosterOwners = (week: WeekPayload, sources: readonly CalendarRef[]) => {
   return week.members.flatMap((member) => (ids.has(member.profileId) ? [member.profileId] : []));
 };
 
+/** Attributes that name the same control across a re-render, most specific first. */
+const FOCUS_KEYS = ["data-event-id", "data-member", "data-date", "aria-label", "class"];
+
 /**
- * Runs `load` now and again on every reconnect. An answer that a newer load or
- * the returned stop overtook is dropped.
+ * Remembers which control inside `root` has focus, by an attribute that survives
+ * a re-render, and returns a function that focuses its replacement. A control
+ * that is gone (a deleted event) leaves focus where the browser puts it.
  */
-function watchRequest<T>(host: ControlUiHost, load: () => Promise<T>, onChange: (value: T) => void, onError: (error: Error) => void): () => void {
+function focusTarget(root: HTMLElement): ((root: HTMLElement) => void) | undefined {
+  const active = root.ownerDocument.activeElement;
+  if (!(active instanceof HTMLElement) || active === root || !root.contains(active)) return undefined;
+  const name = FOCUS_KEYS.find((key) => active.hasAttribute(key));
+  if (!name) return undefined;
+  const value = active.getAttribute(name);
+  return (next) => {
+    const match = [...next.querySelectorAll<HTMLElement>(`[${name}]`)].find((node) => node.getAttribute(name) === value);
+    match?.focus({ preventScroll: true });
+  };
+}
+
+/** "Last updated 12 min ago", then the clock time once it is an hour old; nothing while fresh. */
+export function staleText(lastGood: number, now: number, time: Intl.DateTimeFormat): string {
+  const age = now - lastGood;
+  if (age <= STALE_AFTER_MS) return "";
+  if (age < 60 * 60_000) return `Last updated ${Math.floor(age / 60_000)} min ago`;
+  return `Last updated at ${time.format(new Date(lastGood))}`;
+}
+
+/**
+ * Runs `load` now, again on every reconnect, and whenever `refresh` is called.
+ * An answer that a newer load or the returned stop overtook is dropped.
+ */
+function watchRequest<T>(
+  host: ControlUiHost,
+  load: () => Promise<T>,
+  onChange: (value: T) => void,
+  onError: (error: Error) => void,
+): { stop: () => void; refresh: () => void } {
   let stopped = false;
   let generation = 0;
   let connected = host.connection.connected;
@@ -123,9 +160,12 @@ function watchRequest<T>(host: ControlUiHost, load: () => Promise<T>, onChange: 
     refresh();
   });
   refresh();
-  return () => {
-    stopped = true;
-    stopHost();
+  return {
+    stop: () => {
+      stopped = true;
+      stopHost();
+    },
+    refresh,
   };
 }
 
@@ -164,13 +204,42 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   let selectedDay = "";
   let dialog: ControlUiComponentHandle<ControlUiDialogProps> | undefined;
   let stopWatching: () => void = () => {};
+  let refreshWeek: () => void = () => {};
+  /** The page's own clock at the last good read: a family.week answer or a calendar-checked. */
+  let lastGood: number | undefined;
+  let staleClock: Intl.DateTimeFormat | undefined;
+  let shownStart = "";
+  const staleLine = h("p", { class: "ocfp-stale", hidden: true });
+  const updateStale = () => {
+    const text = lastGood === undefined || !staleClock ? "" : staleText(lastGood, Date.now(), staleClock);
+    if (staleLine.textContent !== text) staleLine.textContent = text;
+    staleLine.hidden = text === "";
+  };
   let agentHandles: ControlUiComponentHandle<{ agentId: string; label: string }>[] = [];
   let agentSignature = "";
   let disposed = false;
   const pageAbort = new AbortController();
   const lifetime = AbortSignal.any([initial.signal, pageAbort.signal]);
   const alive = () => !disposed && !initial.signal.aborted;
-  lifetime.addEventListener("abort", () => stopWatching(), { once: true });
+  const feature = createFeatureClient(contract, host);
+  const stopEvents = [
+    // Guests get these too, so they carry no calendar keys: refetch the whole week.
+    feature.on("calendar-changed", () => refreshWeek()),
+    feature.on("calendar-checked", () => {
+      lastGood = Date.now();
+      updateStale();
+    }),
+  ];
+  const staleTimer = setInterval(updateStale, STALE_TICK_MS);
+  lifetime.addEventListener(
+    "abort",
+    () => {
+      stopWatching();
+      for (const stop of stopEvents) stop();
+      clearInterval(staleTimer);
+    },
+    { once: true },
+  );
 
   function watchWeek() {
     stopWatching();
@@ -181,12 +250,17 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     }
     root.setAttribute("aria-busy", "true");
     if (!content.hasChildNodes()) render({ kind: "loading" });
-    stopWatching = watchRequest(
+    const watch = watchRequest(
       host,
       () => host.request<WeekPayload>(WEEK_METHOD, start ? { start } : {}),
-      (week) => render({ kind: "ready", week }),
+      (week) => {
+        lastGood = Date.now();
+        render({ kind: "ready", week });
+      },
       (error) => render({ kind: "failed", message: error.message }),
     );
+    stopWatching = watch.stop;
+    refreshWeek = watch.refresh;
   }
 
   function weekHref(target: string | undefined) {
@@ -246,6 +320,10 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       return;
     }
     const fmt = formats(week.range.timezone, host.locale);
+    staleClock = fmt.time;
+    updateStale();
+    const entering = week.range.start !== shownStart;
+    shownStart = week.range.start;
     const members = new Map<string, Member>(week.members.map((member) => [member.profileId, member]));
     const events = new Map<string, FamilyEvent>(week.calendar.status === "ok" ? week.calendar.data.map((event) => [event.id, event]) : []);
     const inWeek = week.days.some((day) => day.isToday);
@@ -301,6 +379,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
               ? ""
               : " · Calendar not connected",
         ),
+        staleLine,
       ),
       h(
         "nav",
@@ -418,7 +497,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
 
     const grid = h(
       "div",
-      { class: "ocfp-week-grid ocfp-panel is-entering" },
+      { class: `ocfp-week-grid ocfp-panel${entering ? " is-entering" : ""}` },
       ...week.days.map((day) => {
         const date = noon(day.date);
         const cards = day.eventIds.flatMap((id) => {
@@ -493,11 +572,13 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     syncFilters();
     applyFilter();
 
+    const focused = focusTarget(content);
     content.replaceChildren(
       masthead,
       filters,
       h("div", { class: weather ? "ocfp-layout" : "ocfp-layout is-single" }, weather, h("section", { class: "ocfp-week-area", "aria-label": title }, notice, tabs, grid)),
     );
+    focused?.(content);
   }
 
   function weatherContent(week: WeekPayload, fmt: ReturnType<typeof formats>): Child[] {

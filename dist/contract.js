@@ -37,6 +37,7 @@ export const MAX_HIGHLIGHTS = 3;
  */
 export const FEATURE_EVENT_ID_PATTERN = "^[a-z][a-z0-9_-]{0,127}$";
 export const CALENDAR_CHANGED_EVENT = "calendar-changed";
+export const CALENDAR_CHECKED_EVENT = "calendar-checked";
 const IsoDate = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 const Text = (maxLength) => Type.String({ maxLength });
 const CalendarKind = Type.Union([Type.Literal("personal"), Type.Literal("shared"), Type.Literal("school")]);
@@ -149,13 +150,15 @@ export const TodayPayloadSchema = Type.Object({
         ownerIds: Type.Array(Text(LABEL_MAX), { maxItems: MAX_MEMBERS }),
     }, { additionalProperties: false }), { maxItems: MAX_WEEK_EVENTS }),
 }, { additionalProperties: false });
-/** Payload for `calendar-changed`, emitted after a write or an external calendar change. Exported only. */
+/** Payload for `calendar-changed`, emitted after a write or an external calendar change. Guests receive it too, so the poller always sends no keys. */
 export const CalendarChangedSchema = Type.Object({
     reason: Type.Union([Type.Literal("write"), Type.Literal("external")]),
     /** Wire keys of calendars that changed. Empty means every open view should refresh. */
     calendarKeys: Type.Array(NonEmpty(8), { maxItems: MAX_CALENDARS }),
     at: NonEmpty(32),
 }, { additionalProperties: false });
+/** `calendar-checked` carries nothing: it means every calendar read cleanly just now, and the page dates it by its own clock. */
+export const CalendarCheckedSchema = Type.Object({}, { additionalProperties: false });
 export const WeekPayloadSchema = Type.Object({
     mode: Type.Union([Type.Literal("demo"), Type.Literal("live")]),
     /** Local dates in `timezone`; `end` is the last day of the week, inclusive. */
@@ -203,5 +206,8 @@ export const contract = defineFeatureContract({
             output: WeatherStateSchema,
         },
     },
-    events: {},
+    events: {
+        [CALENDAR_CHANGED_EVENT]: CalendarChangedSchema,
+        [CALENDAR_CHECKED_EVENT]: CalendarCheckedSchema,
+    },
 });

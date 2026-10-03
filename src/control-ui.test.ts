@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { describe, mock, test } from "node:test";
+import { afterEach, describe, mock, test } from "node:test";
 import { parseHTML } from "linkedom";
 import type { ControlUiHost, ControlUiSessionListSnapshot, ControlUiViewContext } from "openclaw/plugin-sdk/control-ui";
 import { mountFamilyPage } from "./control-ui.ts";
@@ -55,6 +55,12 @@ function week(): WeekPayload {
 
 type Listen = (snapshot: ControlUiSessionListSnapshot) => void;
 
+/** Every page a test mounts is disposed afterwards, so its clock never outlives the test. */
+const mounted: AbortController[] = [];
+afterEach(() => {
+  for (const controller of mounted.splice(0)) controller.abort();
+});
+
 function installDom(mode: "light" | "dark") {
   const window = parseHTML("<!doctype html><html><body></body></html>");
   const { document, HTMLButtonElement, HTMLElement, Event } = window;
@@ -92,6 +98,8 @@ function mountPage(options: {
   const container = document.createElement("div");
   document.body.append(container);
   const signal = new AbortController();
+  mounted.push(signal);
+  const listeners = new Map<string, (payload: unknown) => void>();
   let requests = 0;
   let creates = 0;
   let opens: string[] = [];
@@ -127,7 +135,10 @@ function mountPage(options: {
       const result = options.result ?? week();
       return result instanceof Error ? Promise.reject(result) : Promise.resolve(result);
     },
-    onEvent: () => () => {},
+    onEvent: (event: string, listener: (payload: unknown) => void) => {
+      listeners.set(event, listener);
+      return () => listeners.delete(event);
+    },
     subscribe: () => () => {},
     sessions: {
       rows: [],
@@ -183,6 +194,13 @@ function mountPage(options: {
     counts: () => ({ requests, creates, opens, sessionDisposes }),
     calls,
     dialogs,
+    listeners,
+    /** Delivers a Gateway event the way the host does, by its full wire name. */
+    fire: (event: string, payload: unknown = {}) => {
+      const listener = listeners.get(event);
+      assert.ok(listener, `the page should listen for ${event}`);
+      listener(payload);
+    },
   };
 }
 
@@ -602,3 +620,63 @@ test("someone with no calendars of their own gets one notice and blank days", as
 function browserToday(now = new Date()) {
   return `${String(now.getFullYear()).padStart(4, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
+
+describe("calendar freshness", { concurrency: 1 }, () => {
+  const CHANGED = "plugin.oc-family-pack.calendar-changed";
+  const CHECKED = "plugin.oc-family-pack.calendar-checked";
+
+  test("calendar-changed refetches the week in place and keeps focus on the same event", async () => {
+    let answer = week();
+    const page = mountPage({ request: () => Promise.resolve(answer) });
+    await flush();
+    let active: Element | null = null;
+    Object.defineProperty(page.document, "activeElement", { get: () => active, configurable: true });
+    const focus = Object.getOwnPropertyDescriptor(globalThis.HTMLElement.prototype, "focus");
+    globalThis.HTMLElement.prototype.focus = function (this: HTMLElement) {
+      active = this;
+    };
+    try {
+      page.container.querySelector<HTMLElement>("[data-event-id='e-alex']")?.focus();
+      answer = week();
+      if (answer.calendar.status === "ok") answer.calendar.data[0]!.title = "Dentist (moved)";
+      page.fire(CHANGED, { reason: "external", calendarKeys: [], at: "2026-09-30T14:00:00.000Z" });
+      await flush();
+      assert.equal(page.counts().requests, 2);
+      const card = page.container.querySelector<HTMLElement>("[data-event-id='e-alex']");
+      assert.equal(card?.querySelector(".ocfp-event-title")?.textContent, "Dentist (moved)");
+      assert.ok(active !== null && active === card, "focus moves to the re-rendered card");
+      assert.equal(page.container.querySelector(".ocfp-week-grid")?.classList.contains("is-entering"), false);
+    } finally {
+      if (focus) Object.defineProperty(globalThis.HTMLElement.prototype, "focus", focus);
+    }
+  });
+
+  test("the stale line stays hidden while fresh, counts minutes after 6, and shows the clock after an hour", async (t) => {
+    mock.timers.enable({ apis: ["setInterval", "Date"], now: Date.parse("2026-09-30T13:40:00.000Z") });
+    t.after(() => mock.timers.reset());
+    const page = mountPage({});
+    await flush();
+    const line = () => page.container.querySelector<HTMLElement>(".ocfp-stale");
+    const shown = () => (line()?.hidden ? "" : (line()?.textContent ?? ""));
+    assert.equal(shown(), "");
+    mock.timers.tick(6 * 60_000);
+    assert.equal(shown(), "", "exactly six minutes is still fresh");
+    mock.timers.tick(30_000);
+    assert.equal(shown(), "Last updated 6 min ago");
+    mock.timers.tick(6 * 60_000);
+    assert.equal(shown(), "Last updated 12 min ago");
+    page.fire(CHECKED);
+    assert.equal(shown(), "", "a successful poll makes the week fresh again");
+    mock.timers.tick(60 * 60_000);
+    assert.equal(shown(), "Last updated at 1:52 PM");
+    assert.doesNotMatch(page.container.textContent ?? "", /error|failed/i);
+  });
+
+  test("leaving the page drops both event listeners", async () => {
+    const page = mountPage({});
+    await flush();
+    assert.deepEqual([...page.listeners.keys()].sort(), [CHANGED, CHECKED]);
+    page.signal.abort();
+    assert.equal(page.listeners.size, 0);
+  });
+});

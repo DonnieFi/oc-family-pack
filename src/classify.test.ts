@@ -69,6 +69,18 @@ test("the usual line lists routine timed family events by start, in the family's
   assert.equal(line, "Usual: Bus 8:05 AM · Lunch walk 12:00 PM · Swim 6:30 PM · Late call 12:00 AM");
 });
 
+test("the usual line uses the family's timezone, not the machine's", () => {
+  const bus = timed("Bus", "personal", { ...series, start: "2026-09-30T11:05:00.000Z" });
+  assert.equal(usualLine([bus], "Asia/Tokyo"), "Usual: Bus 8:05 PM");
+  assert.equal(usualLine([bus], "Pacific/Honolulu"), "Usual: Bus 1:05 AM");
+});
+
+test("the usual line classifies with the vocabulary it is given", () => {
+  const events = [timed("Bus", "personal", { ...series, start: "2026-09-30T11:05:00.000Z" }), timed("Swim", "shared", { ...series, start: "2026-09-30T21:30:00.000Z" })];
+  const swimMeets = { ...DEFAULT_VOCABULARY, alwaysSignal: /\bswim\b/i };
+  assert.equal(usualLine(events, "America/Halifax", swimMeets), "Usual: Bus 8:05 AM");
+});
+
 test("no routine timed family event means no usual line", () => {
   assert.equal(usualLine([timed("Grade 4 French", "school"), timed("Soccer practice", "personal")], "America/Halifax"), undefined);
 });
