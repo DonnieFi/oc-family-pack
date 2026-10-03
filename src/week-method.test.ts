@@ -20,6 +20,8 @@ test("the shared secret with no signed-in user is the owner; an attested user is
   assert.deepEqual(viewerOf(client({ usesSharedGatewayAuth: false, authenticatedUserId: "alex" })), { kind: "person", username: "alex" });
   for (const other of [
     client({ usesSharedGatewayAuth: false, authPolicy: { generation: "g" } }),
+    // A CLI-paired device token is not shared auth, so it is a guest.
+    client({ usesSharedGatewayAuth: false, isDeviceTokenAuth: true, authPolicy: { generation: "g" } }),
     client({ usesSharedGatewayAuth: true, authenticatedUserId: "" }),
     client({ usesSharedGatewayAuth: true, authenticatedUserId: "  " }),
     // An authMethod is not part of the published client; it never makes an owner.

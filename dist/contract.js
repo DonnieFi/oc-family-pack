@@ -7,8 +7,11 @@ export const MAX_CALENDARS = 16;
  * maximum, the fixed part costs 845 nodes: root 1, mode 1, range 4, today 1, days 29 (7 x 4 + 1),
  * members 161 (32 x 5 + 1), calendars 593 (16 x (5 + 32 owners) + 1), calendar state 20
  * (object, status, data, warnings, 16 warnings), weather 35 (with 8 forecast periods).
- * An event costs 9 nodes (object plus 8 fields) and up to 7 more as a day reference on every
- * day it spans, so (4096 - 845) / 16 = 203 events fit; 200 leaves a margin.
+ * A single-source event costs 9 nodes (object plus 8 fields) and up to 7 more as a day reference
+ * on every day it spans, so (4096 - 845) / 16 = 203 such events fit; 200 leaves a margin.
+ * A merged event adds calendarKeys, 3 to 17 more nodes (the array plus 2 to 16 keys), so a week
+ * heavy with merges can pass 4096 under this cap. fitWeek checks the real payload against the
+ * host's limits and sends a calendar error instead of a week the host would reject.
  */
 export const MAX_WEEK_EVENTS = 200;
 export const EVENT_ID_MAX = 1040;
