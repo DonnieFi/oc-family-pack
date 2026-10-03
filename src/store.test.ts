@@ -317,6 +317,7 @@ test("the family-store service opens the database, and discovery does not regist
       discovery.push(service);
     },
     registerSessionAction() {},
+    registerTool() {},
     registerGatewayMethod() {},
     registerCli() {},
   });
@@ -337,6 +338,7 @@ test("the family-store service opens the database, and discovery does not regist
       services.push(service);
     },
     registerSessionAction() {},
+    registerTool() {},
     registerGatewayMethod() {},
     registerCli() {},
   });

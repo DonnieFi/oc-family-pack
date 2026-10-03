@@ -45,7 +45,7 @@ const ALL_DAY: AllDay[] = [
   [4, 3, "Grandparents visiting", "family"],
 ];
 
-export function demoEvents(week: Week): FamilyEvent[] {
+export function demoEvents(week: Pick<Week, "range">): FamilyEvent[] {
   const { start, timezone } = week.range;
   const at = (day: number, hours: number) => new Date(localTime(addDays(start, day), hours, timezone)).toISOString();
   const timed = TIMED.map(([day, from, to, title, calendar, location], index): FamilyEvent => ({

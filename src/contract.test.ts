@@ -24,20 +24,26 @@ type _CalendarWriteOps = Assert<
     : false
 >;
 
-test("the contract registers exactly the two read queries, and the week is not one", () => {
+test("the contract registers exactly the three read queries, and the week is not one", () => {
   assert.deepEqual(
     Object.entries(contract.operations).map(([name, operation]) => [name, operation.kind]),
     [
       ["family.members", "query"],
       ["family.weather", "query"],
+      ["family.schedule", "query"],
     ],
+  );
+  assert.deepEqual(
+    Object.entries(contract.operations).flatMap(([name, operation]) => ("tool" in operation ? [[name, operation.tool]] : [])),
+    [["family.schedule", { name: "family_schedule", label: "Family schedule" }]],
   );
   assert.deepEqual(Object.keys(contract.events), ["calendar-changed", "calendar-checked"]);
   assert.equal(Object.hasOwn(contract.operations, "family.today"), false);
 });
 
-test("registered queries are operator.read session actions, the week is an operator.read Gateway method, and there is no command adapter", () => {
+test("registered queries are operator.read session actions, the schedule is the one agent tool, the week is an operator.read Gateway method, and there is no command adapter", () => {
   const actions: { id: string; requiredScopes: string[] }[] = [];
+  const tools: { name: string; optional?: boolean }[] = [];
   const methods: { method: string; scope?: string }[] = [];
   const cli: string[] = [];
   let commands = 0;
@@ -51,6 +57,9 @@ test("registered queries are operator.read session actions, the week is an opera
     },
     registerCommand() {
       commands += 1;
+    },
+    registerTool(_factory: unknown, opts: { name: string; optional?: boolean }) {
+      tools.push(opts);
     },
     registerGatewayMethod(method: string, _handler: unknown, opts?: { scope?: string }) {
       methods.push({ method, ...(opts?.scope ? { scope: opts.scope } : {}) });
@@ -78,8 +87,10 @@ test("registered queries are operator.read session actions, the week is an opera
   } as unknown as Parameters<typeof plugin.register>[0]);
   assert.deepEqual(actions, [
     { id: "family.members", requiredScopes: ["operator.read"] },
+    { id: "family.schedule", requiredScopes: ["operator.read"] },
     { id: "family.weather", requiredScopes: ["operator.read"] },
   ]);
+  assert.deepEqual(tools, [{ name: "family_schedule" }]);
   assert.deepEqual(methods, [{ method: "family.week", scope: "operator.read" }]);
   assert.equal(commands, 0);
   assert.deepEqual(cliCommands, ["family"]);

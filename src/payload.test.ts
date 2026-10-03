@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -241,6 +241,45 @@ test("copies merge after the visibility filter, so a kid never sees a hidden cal
     assert.equal(wire.includes('"c1"'), false);
     assert.equal(wire.includes("YWxleC1zb2NjZXI"), false);
     assert.deepEqual(riley.days.flatMap((day) => day.eventIds), ["c0/f"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("family.week is byte-identical to the 00a3483 build for a week with a merged copy and Google fields", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ocfp-golden-"));
+  const gogPath = join(dir, "gog");
+  const fixtures = join(import.meta.dirname, "fixtures");
+  const copy = JSON.stringify([
+    {
+      id: "f1",
+      summary: "late swim",
+      start: { dateTime: "2026-10-01T01:10:00Z" },
+      end: { dateTime: "2026-10-01T02:00:00Z" },
+      htmlLink: "https://calendar.google.com/calendar/event?eid=ZmFtaWx5LWYx",
+      recurringEventId: "s",
+      originalStartTime: { dateTime: "2026-10-01T01:10:00Z" },
+      updated: "2026-09-21T10:00:00.000Z",
+    },
+  ]);
+  writeFileSync(
+    gogPath,
+    ["#!/bin/sh", "for last; do :; done", 'case "$last" in', `  kid) cat '${join(fixtures, "gog-events.json")}' ;;`, `  family) echo '${copy}' ;;`, "esac", ""].join("\n"),
+  );
+  chmodSync(gogPath, 0o755);
+  const config = parseConfig({
+    timezone: "America/Toronto",
+    gogPath,
+    members: [{ profileId: "alex", displayName: "Alex", role: "parent" }, { profileId: "riley", displayName: "Riley", role: "kid" }],
+    calendars: [
+      { id: "family", label: "Family", kind: "shared", owners: [] },
+      { id: "kid", label: "Riley", kind: "personal", owners: ["riley"] },
+    ],
+  });
+  try {
+    const payload = await buildWeekPayload(config, "2026-09-28", NOW, noWeather, OWNER);
+    // Printed by the same setup at 00a3483, before reads kept Google fields for the classifier.
+    assert.equal(JSON.stringify(payload), readFileSync(join(fixtures, "week-00a3483.json"), "utf8"));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

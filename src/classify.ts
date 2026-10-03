@@ -64,13 +64,16 @@ export function classifyEvent(event: ClassifyInput, vocabulary: Vocabulary = DEF
   return { routine: !signal && onTimeRepeat };
 }
 
+/** "8:05 AM" in `timezone`, with a plain space whatever the ICU version puts before the day period. */
+export function clockTime(start: string, timezone: string): string {
+  const clock = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", minute: "2-digit", hour12: true });
+  const parts = Object.fromEntries(clock.formatToParts(Date.parse(start)).map((part) => [part.type, part.value]));
+  return `${parts.hour}:${parts.minute} ${parts.dayPeriod}`;
+}
+
 /** One plain-text line of routine timed family events; school rows are left out. The renderer adds any styling. */
 export function usualLine(events: readonly ClassifyInput[], timezone: string, vocabulary: Vocabulary = DEFAULT_VOCABULARY): string | undefined {
-  const clock = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", minute: "2-digit", hour12: true });
-  const time = (start: string) => {
-    const parts = Object.fromEntries(clock.formatToParts(Date.parse(start)).map((part) => [part.type, part.value]));
-    return `${parts.hour}:${parts.minute} ${parts.dayPeriod}`;
-  };
+  const time = (start: string) => clockTime(start, timezone);
   const bits = events
     .filter((event) => !event.allDay && event.calendarKind !== "school" && classifyEvent(event, vocabulary).routine)
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))

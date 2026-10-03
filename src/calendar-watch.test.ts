@@ -126,6 +126,16 @@ test("an empty poll keeps gog's since, and the first event after it is a change"
   assert.deepEqual(h.names(), ["calendar-checked", "calendar-changed", "calendar-checked"]);
 });
 
+test("an edit with milliseconds after a fractionless mark from gog's since is a change", async () => {
+  const h = harness(["cal-a"]);
+  // gog's since has no fraction, and "." sorts before "Z", so only a time compare sees the edit as newer.
+  h.queue("cal-a", { events: [], since: "2026-10-03T14:00:00Z" }, one("2026-10-03T14:00:00.123Z"));
+  h.start();
+  await h.settle();
+  await h.tick();
+  assert.deepEqual(h.names(), ["calendar-changed", "calendar-checked"]);
+});
+
 test("a failed poll sends nothing and doubles the wait up to 30 minutes; a success resets it", async () => {
   const h = harness(["cal-a"]);
   const down = Object.assign(new Error("Command failed"), { code: 1, stderr: "boom" });

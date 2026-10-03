@@ -84,6 +84,7 @@ function formats(timezone: string, locale: string) {
     long: utc({ weekday: "long", month: "long", day: "numeric" }),
     year: utc({ year: "numeric" }),
     time: new Intl.DateTimeFormat(locale, { timeZone: timezone, hour: "numeric", minute: "2-digit" }),
+    localWeekday: new Intl.DateTimeFormat(locale, { timeZone: timezone, weekday: "short" }),
     when: new Intl.DateTimeFormat(locale, { timeZone: timezone, weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }),
   };
 }
@@ -121,12 +122,21 @@ function focusTarget(root: HTMLElement): ((root: HTMLElement) => void) | undefin
   };
 }
 
-/** "Last updated 12 min ago", then the clock time once it is an hour old; nothing while fresh. */
-export function staleText(lastGood: number, now: number, time: Intl.DateTimeFormat): string {
+export type StaleClock = { time: Intl.DateTimeFormat; weekday: Intl.DateTimeFormat; timezone: string };
+
+/**
+ * "Last updated 12 min ago", then the clock time once it is an hour old, with
+ * the weekday once the read was on an earlier local day; nothing while fresh.
+ */
+export function staleText(lastGood: number, now: number, clock: StaleClock): string {
   const age = now - lastGood;
   if (age <= STALE_AFTER_MS) return "";
   if (age < 60 * 60_000) return `Last updated ${Math.floor(age / 60_000)} min ago`;
-  return `Last updated at ${time.format(new Date(lastGood))}`;
+  const at = new Date(lastGood);
+  if (localDate(lastGood, clock.timezone) !== localDate(now, clock.timezone)) {
+    return `Last updated ${clock.weekday.format(at)} ${clock.time.format(at)}`;
+  }
+  return `Last updated at ${clock.time.format(at)}`;
 }
 
 /**
@@ -207,7 +217,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   let refreshWeek: () => void = () => {};
   /** The page's own clock at the last good read: a family.week answer or a calendar-checked. */
   let lastGood: number | undefined;
-  let staleClock: Intl.DateTimeFormat | undefined;
+  let staleClock: StaleClock | undefined;
   let shownStart = "";
   const staleLine = h("p", { class: "ocfp-stale", hidden: true });
   const updateStale = () => {
@@ -320,7 +330,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       return;
     }
     const fmt = formats(week.range.timezone, host.locale);
-    staleClock = fmt.time;
+    staleClock = { time: fmt.time, weekday: fmt.localWeekday, timezone: week.range.timezone };
     updateStale();
     const entering = week.range.start !== shownStart;
     shownStart = week.range.start;

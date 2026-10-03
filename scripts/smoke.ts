@@ -77,7 +77,8 @@ type Step =
   | "host json limits"
   | "update path"
   | "household sign-in"
-  | "calendar watch";
+  | "calendar watch"
+  | "family_schedule tool";
 
 let workDir: string | undefined;
 let gateway: ChildProcess | undefined;
@@ -1034,6 +1035,7 @@ async function main(): Promise<void> {
   await deviceTokenOwner(port, TOKEN);
   await householdSignIn(env, configPath, port, logPath);
   await calendarWatch(env, configPath, port, logPath);
+  await scheduleTool(configPath, port);
 }
 
 /** Stand-ins for what a real household fills in, used only on this isolated Gateway. */
@@ -1362,6 +1364,7 @@ async function calendarWatch(env: NodeJS.ProcessEnv, configPath: string, port: n
       '  "calendar changed")',
       `    if [ -e '${edited}' ]; then updated=2026-10-03T12:05:00.123Z; else updated=2026-10-03T12:00:00.000Z; fi`,
       `    printf '{"events":[{"id":"ocfp-smoke","updated":"%s"}],"since":"2026-09-03T12:00:00Z"}\\n' "$updated" ;;`,
+      `  "calendar events") if [ -e '${dir}/events.json' ]; then cat '${dir}/events.json'; else printf '{"events":[]}\\n'; fi ;;`,
       `  *) printf '{"events":[]}\\n' ;;`,
       "esac",
       "",
@@ -1406,6 +1409,48 @@ async function calendarWatch(env: NodeJS.ProcessEnv, configPath: string, port: n
     fail(step, `gog was called as ${JSON.stringify([first, second])}`);
   }
   note(`a signed-in page got calendar-changed and calendar-checked ${Math.round((Date.now() - started) / 1000)}s after start; the second poll asked gog for edits since the baseline`, step);
+}
+
+/**
+ * 13. The agent tool on the real host, still on the calendar-watch Gateway and
+ * its stand-in gog: today's one-off lands under "not the usual" and the
+ * on-time repeat in the usual line. The shared password is the owner. A caller
+ * claiming Discord carries no roster sender id, so "me" is refused.
+ */
+async function scheduleTool(configPath: string, port: number): Promise<void> {
+  const step: Step = "family_schedule tool";
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(Date.now());
+  const swim = `${today}T21:00:00Z`;
+  writeFileSync(
+    join(dirname(configPath), "gog", "events.json"),
+    JSON.stringify({
+      events: [
+        { id: "dentist", summary: "Dentist", start: { dateTime: `${today}T16:00:00Z` }, end: { dateTime: `${today}T17:00:00Z` } },
+        { id: "swim_1", summary: "Swim", start: { dateTime: swim }, end: { dateTime: `${today}T22:00:00Z` }, recurringEventId: "swim", originalStartTime: { dateTime: swim } },
+      ],
+    }),
+  );
+  const invoke = async (args: Record<string, unknown>, headers: Record<string, string> = {}) => {
+    const response = await fetch(`http://127.0.0.1:${port}/tools/invoke`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${HOUSEHOLD_PASSWORD}`, "content-type": "application/json", ...headers },
+      body: JSON.stringify({ tool: "family_schedule", args }),
+    });
+    const text = await response.text();
+    if (!response.ok) fail(step, `/tools/invoke answered ${response.status}: ${text.slice(0, 500)}`);
+    const body = JSON.parse(text) as { ok?: boolean; result?: { details?: unknown; content?: { type: string; text?: string }[] } };
+    const result = body.result?.details ?? JSON.parse(body.result?.content?.find((part) => part.type === "text")?.text ?? "null");
+    return result as Record<string, unknown>;
+  };
+  const owner = await invoke({});
+  const expected = { sections: [{ name: "not the usual", items: [{ title: "Dentist", time: "12:00 PM", owners: [] }] }], usual: "Usual: Swim 5:00 PM" };
+  if (JSON.stringify(owner) !== JSON.stringify(expected)) fail(step, `family_schedule returned ${JSON.stringify(owner)}, expected ${JSON.stringify(expected)}`);
+  note("the agent tool, called with the shared password, put Dentist under not the usual and Swim in the usual line", step);
+  const claimed = await invoke({ member: "me" }, { "x-openclaw-message-channel": "discord" });
+  if (JSON.stringify(claimed) !== JSON.stringify({ error: "I can't tell who 'me' is here. Name the person." })) {
+    fail(step, `a Discord caller with no roster sender id asked for "me" and got ${JSON.stringify(claimed)}`);
+  }
+  note('a caller claiming Discord with no roster sender id asking for "me" got the refusal and no events', step);
 }
 
 try {

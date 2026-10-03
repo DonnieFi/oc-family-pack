@@ -38,7 +38,8 @@ export const MAX_HIGHLIGHTS = 3;
 export const FEATURE_EVENT_ID_PATTERN = "^[a-z][a-z0-9_-]{0,127}$";
 export const CALENDAR_CHANGED_EVENT = "calendar-changed";
 export const CALENDAR_CHECKED_EVENT = "calendar-checked";
-const IsoDate = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
+const ISO_DATE = "^\\d{4}-\\d{2}-\\d{2}$";
+const IsoDate = Type.String({ pattern: ISO_DATE });
 const Text = (maxLength) => Type.String({ maxLength });
 const CalendarKind = Type.Union([Type.Literal("personal"), Type.Literal("shared"), Type.Literal("school")]);
 const MemberRole = Type.Union([Type.Literal("parent"), Type.Literal("kid"), Type.Literal("guest")]);
@@ -190,6 +191,61 @@ export const WeekPayloadSchema = Type.Object({
  */
 export const WEEK_METHOD = "family.week";
 export const WeekInputSchema = Type.Object({ start: Type.Optional(IsoDate) }, { additionalProperties: false });
+/** `family_schedule` reads at most a week, or 90 days for a title lookup, and lists 40 items before "+N more". */
+export const SCHEDULE_DAYS_MAX = 7;
+export const LOOKUP_DAYS_MAX = 90;
+export const SCHEDULE_ITEMS_MAX = 40;
+export const QUERY_MAX = 100;
+/** The usual and classes lines are cut at an item boundary to fit, ending "+N more". */
+export const USUAL_MAX = 2000;
+export const CLASSES_LINE_MAX = 500;
+export const ScheduleInputSchema = Type.Object({
+    start: Type.Optional(Type.String({ pattern: ISO_DATE, description: "First day, YYYY-MM-DD in the family's timezone. Defaults to today." })),
+    days: Type.Optional(Type.Integer({ minimum: 1, maximum: LOOKUP_DAYS_MAX, description: "How many days from start. Defaults to 1. At most 7, or 90 with a query." })),
+    member: Type.Optional(Type.String({
+        minLength: 1,
+        maxLength: LABEL_MAX,
+        description: 'Only calendars this person owns: a roster profileId, or "me" for the person asking on Discord.',
+    })),
+    query: Type.Optional(Type.String({
+        minLength: 1,
+        maxLength: QUERY_MAX,
+        description: 'Find events whose title has every one of these words, such as "dentist". Lists matches instead of sections.',
+    })),
+}, { additionalProperties: false });
+const ScheduleItemSchema = Type.Object({
+    title: Text(TITLE_MAX),
+    /** "8:05 AM" for a timed event; all-day events carry `allDay` instead. */
+    time: Type.Optional(Text(16)),
+    allDay: Type.Optional(Type.Literal(true)),
+    /** "Fri Oct 9", only when the range is longer than one day. */
+    date: Type.Optional(Text(16)),
+    /** "Fri Oct 9" for homework and uniforms. */
+    due: Type.Optional(Text(16)),
+    /** Display names of the calendar owners, never profileIds. */
+    owners: Type.Array(Text(LABEL_MAX), { maxItems: MAX_MEMBERS }),
+}, { additionalProperties: false });
+export const SCHEDULE_SECTIONS = ["not the usual", "homework", "uniforms"];
+const ScheduleWarnings = Type.Optional(Type.Array(Text(MESSAGE_MAX), { maxItems: MAX_CALENDARS }));
+/** One of: an error and nothing else, one line when nothing is on, or the sections. */
+export const ScheduleOutputSchema = Type.Union([
+    Type.Object({ error: Text(MESSAGE_MAX) }, { additionalProperties: false }),
+    Type.Object({ note: Text(MESSAGE_MAX), warnings: ScheduleWarnings }, { additionalProperties: false }),
+    Type.Object({
+        sections: Type.Array(Type.Object({
+            name: Type.Union([Type.Literal("not the usual"), Type.Literal("homework"), Type.Literal("uniforms"), Type.Literal("matches")]),
+            items: Type.Array(ScheduleItemSchema, { minItems: 1, maxItems: SCHEDULE_ITEMS_MAX }),
+        }, { additionalProperties: false }), { maxItems: SCHEDULE_SECTIONS.length }),
+        /** One plain-text line per day, and per student when no member is named: "Calla: Math 8:30 AM · Gym 10:15 AM". */
+        classes: Type.Optional(Type.Array(Type.Object({ date: Type.Optional(Text(16)), line: Text(CLASSES_LINE_MAX) }, { additionalProperties: false }), {
+            minItems: 1,
+            maxItems: SCHEDULE_DAYS_MAX * MAX_CALENDARS,
+        })),
+        usual: Type.Optional(Text(USUAL_MAX)),
+        more: Type.Optional(Text(16)),
+        warnings: ScheduleWarnings,
+    }, { additionalProperties: false }),
+]);
 export const contract = defineFeatureContract({
     pluginId: "oc-family-pack",
     operations: {
@@ -204,6 +260,15 @@ export const contract = defineFeatureContract({
             description: "Read the local Environment Canada weather card, or why it is not available.",
             input: EmptyInput,
             output: WeatherStateSchema,
+        },
+        "family.schedule": {
+            kind: "query",
+            description: "Read the family calendar for a day range, sorted the way a parent scans it: not the usual, homework (with due dates), uniforms, " +
+                "a classes line per day, then one line of the usual routine. Empty sections are left out. With query, lists matching events instead. " +
+                "Shows only the calendars the person asking may see. Write the reply yourself from these fields; never add events.",
+            input: ScheduleInputSchema,
+            output: ScheduleOutputSchema,
+            tool: { name: "family_schedule", label: "Family schedule" },
         },
     },
     events: {

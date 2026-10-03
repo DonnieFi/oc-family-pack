@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, mock, test } from "node:test";
 import { parseHTML } from "linkedom";
 import type { ControlUiHost, ControlUiSessionListSnapshot, ControlUiViewContext } from "openclaw/plugin-sdk/control-ui";
-import { mountFamilyPage } from "./control-ui.ts";
+import { mountFamilyPage, staleText } from "./control-ui.ts";
 import type { WeekPayload } from "./types.ts";
 import { boundWeekStart } from "./week.ts";
 
@@ -621,6 +621,18 @@ function browserToday(now = new Date()) {
   return `${String(now.getFullYear()).padStart(4, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
+test("the stale line names the day by the family's midnight, not UTC's", () => {
+  const timezone = "America/Halifax";
+  const clock = {
+    time: new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", minute: "2-digit" }),
+    weekday: new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }),
+    timezone,
+  };
+  const lastGood = Date.parse("2026-10-02T23:30:00.000Z"); // Fri 8:30 PM in Halifax
+  assert.equal(staleText(lastGood, Date.parse("2026-10-03T02:59:00.000Z"), clock), "Last updated at 8:30 PM", "a new UTC day, still Friday at home");
+  assert.equal(staleText(lastGood, Date.parse("2026-10-03T03:01:00.000Z"), clock), "Last updated Fri 8:30 PM");
+});
+
 describe("calendar freshness", { concurrency: 1 }, () => {
   const CHANGED = "plugin.oc-family-pack.calendar-changed";
   const CHECKED = "plugin.oc-family-pack.calendar-checked";
@@ -669,6 +681,10 @@ describe("calendar freshness", { concurrency: 1 }, () => {
     assert.equal(shown(), "", "a successful poll makes the week fresh again");
     mock.timers.tick(60 * 60_000);
     assert.equal(shown(), "Last updated at 1:52 PM");
+    mock.timers.tick(9 * 60 * 60_000 + 7 * 60_000);
+    assert.equal(shown(), "Last updated at 1:52 PM", "11:59 PM is still the same day");
+    mock.timers.tick(60_000);
+    assert.equal(shown(), "Last updated Wed 1:52 PM", "after midnight the line names the day");
     assert.doesNotMatch(page.container.textContent ?? "", /error|failed/i);
   });
 

@@ -5,6 +5,8 @@ import type {
   CalendarWriteSchema,
   FamilyEventSchema,
   MembersPayloadSchema,
+  ScheduleInputSchema,
+  ScheduleOutputSchema,
   TodayPayloadSchema,
   WeatherCardSchema,
   WeatherStateSchema,
@@ -67,7 +69,11 @@ export type MembersPayload = Static<typeof MembersPayloadSchema>;
 export type CalendarWrite = Static<typeof CalendarWriteSchema>;
 export type TodayPayload = Static<typeof TodayPayloadSchema>;
 export type CalendarChanged = Static<typeof CalendarChangedSchema>;
+export type ScheduleInput = Static<typeof ScheduleInputSchema>;
+export type ScheduleOutput = Static<typeof ScheduleOutputSchema>;
 export type CalendarState = WeekPayload["calendar"];
+/** A calendar read whose events carry more than the wire fields, such as gog's Google fields. */
+export type CalendarStateOf<E extends FamilyEvent> = Exclude<CalendarState, { status: "ok" }> | { status: "ok"; data: E[]; warnings: string[] };
 export type Member = WeekPayload["members"][number];
 export type WeekDay = WeekPayload["days"][number];
 export type WeekRange = WeekPayload["range"];
