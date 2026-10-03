@@ -341,7 +341,7 @@ for (const column of COLUMNS) {
     button.style.borderLeftColor = column.accent;
     const idRow = el("span", "id");
     idRow.append(el("span", "", bead.short.replace("oc-family-pack-", "")));
-    const flag = bead.status === "closed" ? "done" : bead.status === "in_progress" ? "working" : bead.blockers.some((id) => byShort[id] && byShort[id].status !== "closed") ? "waiting" : "P" + bead.priority;
+    const flag = bead.status === "closed" ? "done" : bead.status === "in_progress" ? "In progress" : bead.blockers.some((id) => byShort[id] && byShort[id].status !== "closed") ? "waiting" : "P" + bead.priority;
     idRow.append(el("span", "", flag));
     button.append(idRow, el("span", "name", bead.title));
     button.addEventListener("mouseenter", () => show(bead.short, false));
