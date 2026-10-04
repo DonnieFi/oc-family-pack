@@ -65,10 +65,23 @@ export const FamilyEventSchema = Type.Object({
   htmlLink: Type.Optional(Text(LINK_MAX)),
 });
 
+/** Bernie's weather cache (weather_cache_ttl_s, 1800 s): one Environment Canada read is reused for 30 minutes. Not configurable. */
+export const WEATHER_CACHE_MINUTES = 30;
+
+/** Bernie's recommendation_engine output for the card: one summary line, what to bring, at most one alert. */
+export const WeatherRecommendationSchema = Type.Object({
+  summary: Text(500),
+  clothing: Type.Array(Text(100), { maxItems: 8 }),
+  alerts: Type.Array(Text(200), { maxItems: 1 }),
+  severity: Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]),
+});
+
 export const WeatherCardSchema = Type.Object({
   stationName: Text(200),
   observedAt: Type.Optional(Text(32)),
   tempC: Type.Optional(Type.Number()),
+  windKmh: Type.Optional(Type.Number()),
+  recommendation: Type.Optional(WeatherRecommendationSchema),
   condition: Type.Optional(Text(200)),
   highC: Type.Optional(Type.Number()),
   lowC: Type.Optional(Type.Number()),

@@ -304,6 +304,12 @@
   font-size: 12px;
 }
 
+.ocfp-weather-advice {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
 .ocfp-weather-range b {
   color: var(--text-strong);
   font-weight: 600;

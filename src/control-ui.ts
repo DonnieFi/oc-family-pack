@@ -10,6 +10,7 @@ import {
 import { createFeatureClient } from "openclaw/plugin-sdk/feature-contract";
 import { CALENDAR_WRITE_ACTION, contract, WEEK_METHOD } from "./contract.ts";
 import { mixTowardInk } from "./contrast.ts";
+import { roundHalfEven } from "./recommendation.ts";
 import type { CalendarRef, FamilyEvent, Member, WeekPayload } from "./types.ts";
 import { addDays, boundWeekStart, localDate, pageWeekStart } from "./week.ts";
 import { somethingWrongLine } from "./write-lines.ts";
@@ -141,6 +142,19 @@ export type StaleClock = { time: Intl.DateTimeFormat; weekday: Intl.DateTimeForm
  * "Last updated 12 min ago", then the clock time once it is an hour old, with
  * the weekday once the read was on an earlier local day; nothing while fresh.
  */
+/**
+ * How old the station's reading is, for the card's source line. The card can come from a cache up to
+ * 30 minutes old, so the time of the reading alone would not say how stale it is.
+ */
+export function observedText(observedAt: string | undefined, now: number): string {
+  const time = observedAt === undefined ? Number.NaN : Date.parse(observedAt);
+  if (Number.isNaN(time)) return "";
+  const minutes = Math.max(0, Math.floor((now - time) / 60_000));
+  if (minutes < 1) return "observed just now";
+  if (minutes < 60) return `observed ${minutes} min ago`;
+  return `observed ${Math.floor(minutes / 60)} h ${minutes % 60} min ago`;
+}
+
 export function staleText(lastGood: number, now: number, clock: StaleClock): string {
   const age = now - lastGood;
   if (age <= STALE_AFTER_MS) return "";
@@ -614,13 +628,14 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       ];
     }
     const card = weather.data;
-    const observed = card.observedAt ? ` · updated ${fmt.time.format(new Date(card.observedAt))}` : "";
+    const observed = observedText(card.observedAt, Date.now());
+    const advice = card.recommendation;
     return [
       h("div", { class: "ocfp-weather-head" }, kicker, h("span", { class: "ocfp-weather-place" }, card.stationName)),
       h(
         "div",
         { class: "ocfp-weather-now" },
-        card.tempC === undefined ? null : h("span", { class: "ocfp-weather-temp" }, `${Math.round(card.tempC)}°`),
+        card.tempC === undefined ? null : h("span", { class: "ocfp-weather-temp" }, `${roundHalfEven(card.tempC)}°`),
         card.condition ? h("span", { class: "ocfp-weather-condition" }, card.condition) : null,
       ),
       card.highC === undefined && card.lowC === undefined
@@ -628,9 +643,11 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
         : h(
             "div",
             { class: "ocfp-weather-range" },
-            card.highC === undefined ? null : h("span", {}, "High ", h("b", {}, `${Math.round(card.highC)}°`)),
-            card.lowC === undefined ? null : h("span", {}, "Low ", h("b", {}, `${Math.round(card.lowC)}°`)),
+            card.highC === undefined ? null : h("span", {}, "High ", h("b", {}, `${roundHalfEven(card.highC)}°`)),
+            card.lowC === undefined ? null : h("span", {}, "Low ", h("b", {}, `${roundHalfEven(card.lowC)}°`)),
           ),
+      advice ? h("p", { class: "ocfp-weather-advice" }, advice.summary) : null,
+      advice?.alerts[0] ? h("p", { class: "ocfp-weather-advice" }, advice.alerts[0]) : null,
       card.forecast.length
         ? h(
             "ul",
@@ -640,7 +657,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
             ),
           )
         : null,
-      h("p", { class: "ocfp-source-note" }, `Environment Canada${observed}`),
+      h("p", { class: "ocfp-source-note" }, observed ? `Environment Canada · ${observed}` : "Environment Canada"),
     ];
   }
 

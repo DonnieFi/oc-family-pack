@@ -10,6 +10,7 @@ import type {
   ScheduleOutputSchema,
   TodayPayloadSchema,
   WeatherCardSchema,
+  WeatherRecommendationSchema,
   WeatherStateSchema,
   WeekPayloadSchema,
 } from "./contract.ts";
@@ -69,6 +70,7 @@ export type SourceState<T> =
 export type FamilyEvent = Static<typeof FamilyEventSchema>;
 export type CalendarRef = Static<typeof CalendarRefSchema>;
 export type WeatherCard = Static<typeof WeatherCardSchema>;
+export type WeatherRecommendation = Static<typeof WeatherRecommendationSchema>;
 export type WeatherState = Static<typeof WeatherStateSchema>;
 export type WeekPayload = Static<typeof WeekPayloadSchema>;
 export type MembersPayload = Static<typeof MembersPayloadSchema>;

@@ -25,11 +25,17 @@ export type FamilyHandlerDeps = {
   log?: (line: string) => void;
 };
 
+/** The Environment Canada card for the configured location, in the household's zone, cached for the configured minutes. */
+function weatherReader(config: Config, deps: FamilyHandlerDeps, now: () => number) {
+  return () => readEcWeather(config.location, deps.fetchWeather, now(), { timezone: config.timezone });
+}
+
 /** The week `viewer` may see, for the `family.week` Gateway method. */
 export function familyWeek(config: Config, deps: FamilyHandlerDeps = {}) {
   const now = deps.now ?? Date.now;
+  const readWeather = weatherReader(config, deps, now);
   return ({ start }: { start?: string }, viewer: Viewer, canEdit = false): Promise<WeekPayload> =>
-    buildWeekPayload(config, start, now(), () => readEcWeather(config.location, deps.fetchWeather), viewer, {
+    buildWeekPayload(config, start, now(), readWeather, viewer, {
       canEdit,
       grantReadOnly: deps.grant?.get() === "read-only",
     });
@@ -37,9 +43,9 @@ export function familyWeek(config: Config, deps: FamilyHandlerDeps = {}) {
 
 /** Handlers for the registered queries. `family.schedule` and `family.garbage` are also the agent's `family_schedule` and `garbage_schedule` tools. */
 export function familyHandlers(config: Config, deps: FamilyHandlerDeps = {}) {
-  const readWeather = () => readEcWeather(config.location, deps.fetchWeather);
   const now = deps.now ?? Date.now;
   const garbage = createGarbageFeed(deps.fetchGarbage, deps.log ? { log: deps.log } : {});
+  const readWeather = weatherReader(config, deps, now);
   return {
     "family.members": (): MembersPayload => ({
       members: resolveMembers(config.demo ? DEMO_MEMBERS : config.members),

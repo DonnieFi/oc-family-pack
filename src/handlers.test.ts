@@ -112,7 +112,7 @@ test("family.members handler returns the picker roster and omits discord ids and
 test("family.weather handler returns the Environment Canada card from the fixture", async () => {
   const ottawa = JSON.parse(readFileSync(new URL("./fixtures/ec-ottawa.json", import.meta.url), "utf8")) as unknown;
   const config = parseConfig({ timezone: "UTC", location: { lat: 45.42, lon: -75.7 } });
-  const weather = await familyHandlers(config, { fetchWeather: async () => Response.json(ottawa) })["family.weather"]();
+  const weather = await familyHandlers(config, { now: () => Date.parse("2026-09-30T18:30:00Z"), fetchWeather: async () => Response.json(ottawa) })["family.weather"]();
   assert.deepEqual(weather, {
     status: "ok",
     data: {
@@ -128,7 +128,8 @@ test("family.weather handler returns the Environment Canada card from the fixtur
         { period: "Thursday", summary: "Chance of showers · High 21°" },
         { period: "Thursday night", summary: "Chance of showers · Low 14°" },
       ],
-      sourceUrl: "https://weather.gc.ca/en/location/index.html?coords=45.4,-75.69",
+      sourceUrl: "https://weather.gc.ca/",
+      recommendation: { summary: "Mostly Cloudy · 16°C.", clothing: [], alerts: ["Dry day expected — good for being outside"], severity: "low" },
     },
   });
   assert.equal(Value.Check(WeatherStateSchema, weather), true);
@@ -168,4 +169,21 @@ test("family.garbage reports a failed read to the plugin log, without the link",
   });
   assert.deepEqual(await handlers["family.garbage"](), { error: "I couldn't get the garbage schedule just now. Try again in a bit." });
   assert.deepEqual(lines, ["oc-family-pack: the garbage calendar answered HTTP 503; no garbage line until it answers"]);
+});
+
+test("family.weather reads rain hours in the household's zone and reuses a reading for 30 minutes", async () => {
+  const golden = JSON.parse(readFileSync(new URL("./fixtures/weather-golden.json", import.meta.url), "utf8")) as { cases: { name: string; feature: unknown }[] };
+  const feature = golden.cases.find((c) => c.name === "rain this evening (6pm)")!.feature;
+  const config = parseConfig({ timezone: "America/Halifax", location: { lat: 44.65, lon: -63.57 } });
+  let clock = Date.parse("2026-10-04T12:30:00Z");
+  let calls = 0;
+  const handlers = familyHandlers(config, { now: () => clock, fetchWeather: async () => (calls++, Response.json({ type: "FeatureCollection", features: [feature] })) });
+  const first = await handlers["family.weather"]();
+  assert.deepEqual(first.status === "ok" && first.data.recommendation?.alerts, ["Rain likely this evening (6pm) (~61% chance)"]);
+  clock += 29 * 60_000;
+  await handlers["family.weather"]();
+  assert.equal(calls, 1);
+  clock += 2 * 60_000;
+  await handlers["family.weather"]();
+  assert.equal(calls, 2);
 });

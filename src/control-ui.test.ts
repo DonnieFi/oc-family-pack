@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, mock, test } from "node:test";
 import { parseHTML } from "linkedom";
 import type { ControlUiHost, ControlUiSessionListSnapshot, ControlUiViewContext } from "openclaw/plugin-sdk/control-ui";
-import { mountFamilyPage, READ_ONLY_HERE, staleText } from "./control-ui.ts";
+import { mountFamilyPage, observedText, READ_ONLY_HERE, staleText } from "./control-ui.ts";
 import type { WeekPayload } from "./types.ts";
 import { boundWeekStart } from "./week.ts";
 
@@ -604,6 +604,42 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(text.includes("Connect your family calendars"), true);
     assert.equal(text.includes("Weather is not set up."), true);
   });
+});
+
+test("the weather card says how old the station's reading is", () => {
+  const now = Date.parse("2026-10-04T12:00:00Z");
+  assert.equal(observedText("2026-10-04T11:59:30Z", now), "observed just now");
+  assert.equal(observedText("2026-10-04T11:48:00Z", now), "observed 12 min ago");
+  assert.equal(observedText("2026-10-04T10:15:00Z", now), "observed 1 h 45 min ago");
+  assert.equal(observedText("2026-10-04T12:05:00Z", now), "observed just now", "a clock a little behind the station's");
+  assert.equal(observedText(undefined, now), "");
+  assert.equal(observedText("not a time", now), "");
+});
+
+test("the weather card shows the advice line, the first alert, and the reading's age", async () => {
+  const observedAt = new Date(Date.now() - 12 * 60_000).toISOString();
+  const page = mountPage({
+    result: {
+      ...week(),
+      weather: {
+        status: "ok",
+        data: {
+          stationName: "Halifax",
+          observedAt,
+          tempC: 14.5,
+          condition: "Mostly Cloudy",
+          forecast: [],
+          sourceUrl: "https://weather.gc.ca/",
+          recommendation: { summary: "Mostly Cloudy · 14°C. Bring a light jacket or layer.", clothing: ["light jacket or layer"], alerts: ["Rain likely this evening (6pm) (~61% chance)"], severity: "low" },
+        },
+      },
+    },
+  });
+  await flush();
+  const advice = [...page.container.querySelectorAll(".ocfp-weather-advice")].map((node) => node.textContent);
+  assert.deepEqual(advice, ["Mostly Cloudy · 14°C. Bring a light jacket or layer.", "Rain likely this evening (6pm) (~61% chance)"]);
+  assert.equal(page.container.querySelector(".ocfp-weather-temp")?.textContent, "14°", "rounded as the advice line rounds it");
+  assert.equal(page.container.querySelector(".ocfp-weather .ocfp-source-note")?.textContent, "Environment Canada · observed 12 min ago");
 });
 
 test("someone with no calendars of their own gets one notice and blank days", async () => {
