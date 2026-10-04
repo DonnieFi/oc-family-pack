@@ -6,9 +6,10 @@ import {
   type ControlUiHost,
   type ControlUiSessionListSubscription,
   type ControlUiViewContext,
+  type ControlUiWidget,
 } from "openclaw/plugin-sdk/control-ui";
 import { createFeatureClient } from "openclaw/plugin-sdk/feature-contract";
-import { CALENDAR_WRITE_ACTION, contract, WEEK_METHOD } from "./contract.ts";
+import { CALENDAR_WRITE_ACTION, contract, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.ts";
 import { mixTowardInk } from "./contrast.ts";
 import { roundHalfEven } from "./recommendation.ts";
 import type { CalendarRef, FamilyEvent, Member, WeekPayload } from "./types.ts";
@@ -911,10 +912,103 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   };
 }
 
+const QUIET_DAY = "Looks like a quiet day — nothing urgent.";
+
+/** The dashboard Today widget. The week page's Today tab stays; this is the second surface. */
+export function mountTodayWidget(container: HTMLElement, initial: ControlUiViewContext): { dispose: () => void } {
+  const host = initial.host;
+  const frame = h("div", { class: "ocfp-today-frame" });
+  const root = h("section", { class: "ocfp-today", "aria-label": "Today" });
+  const title = h("h2", { class: "ocfp-today-title" }, "Today");
+  frame.append(root);
+  container.append(frame);
+  const feature = createFeatureClient(contract, host);
+  let disposed = false;
+  let generation = 0;
+  let answered = false;
+
+  function showLoading() {
+    root.setAttribute("aria-busy", "true");
+    root.replaceChildren(title, h("p", { class: "is-muted", role: "status" }, "Loading today"));
+  }
+
+  function showDenied() {
+    root.removeAttribute("aria-busy");
+    root.replaceChildren(title, h("p", { class: "is-muted", role: "status" }, "You need read access to see today."));
+  }
+
+  function showError() {
+    root.removeAttribute("aria-busy");
+    root.replaceChildren(title, h("p", { class: "is-error", role: "alert" }, "Couldn't load today."));
+  }
+
+  function showLines(highlights: readonly string[]) {
+    root.removeAttribute("aria-busy");
+    const quiet = highlights.length === 0 || (highlights.length === 1 && highlights[0] === QUIET_DAY);
+    if (quiet) {
+      root.replaceChildren(title, h("p", { class: "is-muted", role: "status" }, QUIET_DAY));
+      return;
+    }
+    root.replaceChildren(title, ...highlights.map((line) => h("p", {}, line)));
+  }
+
+  const load = () => {
+    if (disposed) return;
+    if (!host.connection.canRead) {
+      showDenied();
+      return;
+    }
+    if (!host.connection.connected) {
+      if (!answered) showLoading();
+      return;
+    }
+    if (!answered) showLoading();
+    const current = ++generation;
+    feature.invoke("family.today", {}).then(
+      (today) => {
+        if (disposed || current !== generation) return;
+        const highlights = today.highlights;
+        if (!Array.isArray(highlights) || highlights.some((line) => typeof line !== "string")) {
+          showError();
+          return;
+        }
+        answered = true;
+        showLines(highlights);
+      },
+      () => {
+        if (disposed || current !== generation) return;
+        answered = true;
+        showError();
+      },
+    );
+  };
+  const stopChanged = feature.on("calendar-changed", load);
+  let connected = host.connection.connected;
+  let readable = host.connection.canRead;
+  const stopHost = host.subscribe(() => {
+    if (connected === host.connection.connected && readable === host.connection.canRead) return;
+    connected = host.connection.connected;
+    readable = host.connection.canRead;
+    load();
+  });
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    generation += 1;
+    stopChanged();
+    stopHost();
+    frame.remove();
+  };
+  initial.signal.addEventListener("abort", dispose, { once: true });
+  load();
+  return { dispose };
+}
+
 export default defineControlUiPlugin({
   id: contract.pluginId,
   activate(host) {
     host.ui.registerNavigation({ id: PAGE_ID, label: "Family", page: { id: PAGE_ID }, icon: "calendarClock" });
     host.ui.registerPage({ id: PAGE_ID, label: "Family", mount: mountFamilyPage });
+    host.ui.registerWidget({ id: TODAY_WIDGET_ID, label: "Today", mount: mountTodayWidget as unknown as ControlUiWidget["mount"] });
   },
 });

@@ -184,7 +184,10 @@ export const CalendarWriteSchema = Type.Union([
 export const CalendarWriteResultSchema = Type.Object({ ok: Type.Boolean(), message: Text(MESSAGE_MAX) }, { additionalProperties: false });
 export const CALENDAR_WRITE_ACTION = "family.calendar.write";
 
-/** Highlights plus today's noteworthy events. Exported only; registered when its handler exists. */
+/** The dashboard widget id. The Control UI registers this id, and the plugin advertises the same one. */
+export const TODAY_WIDGET_ID = "family-today";
+
+/** Highlights plus today's noteworthy events. `family.today` returns it. */
 export const TodayPayloadSchema = Type.Object(
   {
     date: IsoDate,
@@ -391,6 +394,16 @@ export const contract = defineFeatureContract({
       input: ScheduleInputSchema,
       output: ScheduleOutputSchema,
       tool: { name: "family_schedule", label: "Family schedule" },
+    },
+    "family.today": {
+      kind: "query",
+      description:
+        "Read what is urgent today: at most three lines (an event starting within four hours, the next school class, and garbage tomorrow when a collection calendar is set), " +
+        "or one quiet-day line when nothing is. exceptions are today's noteworthy events. Shows only the calendars the person asking may see. " +
+        "Write the reply from these fields; never add events.",
+      input: EmptyInput,
+      output: TodayPayloadSchema,
+      tool: { name: "family_today", label: "Today" },
     },
     "family.garbage": {
       kind: "query",

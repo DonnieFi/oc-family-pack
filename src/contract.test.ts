@@ -26,13 +26,14 @@ type _CalendarWriteOps = Assert<
     : false
 >;
 
-test("the contract registers the four read queries and the page's one write action, and the week is not one", () => {
+test("the contract registers the read queries and the page's one write action, and the week is not one", () => {
   assert.deepEqual(
     Object.entries(contract.operations).map(([name, operation]) => [name, operation.kind]),
     [
       ["family.members", "query"],
       ["family.weather", "query"],
       ["family.schedule", "query"],
+      ["family.today", "query"],
       ["family.garbage", "query"],
       ["family.calendar.write", "action"],
     ],
@@ -41,17 +42,18 @@ test("the contract registers the four read queries and the page's one write acti
     Object.entries(contract.operations).flatMap(([name, operation]) => ("tool" in operation ? [[name, operation.tool]] : [])),
     [
       ["family.schedule", { name: "family_schedule", label: "Family schedule" }],
+      ["family.today", { name: "family_today", label: "Today" }],
       ["family.garbage", { name: "garbage_schedule", label: "Garbage day" }],
     ],
   );
   assert.deepEqual(Object.keys(contract.events), ["calendar-changed", "calendar-checked"]);
-  assert.equal(Object.hasOwn(contract.operations, "family.today"), false);
 });
 
 test("queries are operator.read session actions, the page write is operator.write, the agent tools are the schedule, garbage day and the four calendar writes with their first-running approval hook, the week is an operator.read Gateway method, and there is no command adapter", () => {
   const actions: { id: string; requiredScopes: string[] }[] = [];
   const tools: { name: string; optional?: boolean }[] = [];
   const methods: { method: string; scope?: string }[] = [];
+  const widgets: { surface: string; id: string; label: string; requiredScopes?: readonly string[] }[] = [];
   const hooks: { name: string; priority?: number; matcher?: readonly string[] }[] = [];
   const cli: string[] = [];
   let commands = 0;
@@ -74,6 +76,13 @@ test("queries are operator.read session actions, the page write is operator.writ
     },
     registerGatewayMethod(method: string, _handler: unknown, opts?: { scope?: string }) {
       methods.push({ method, ...(opts?.scope ? { scope: opts.scope } : {}) });
+    },
+    session: {
+      controls: {
+        registerControlUiDescriptor(descriptor: { surface: string; id: string; label: string; requiredScopes?: readonly string[] }) {
+          widgets.push(descriptor);
+        },
+      },
     },
     registerCli(
       registrar: (ctx: { program: { command: (name: string) => unknown }; config: { gateway?: unknown } }) => void,
@@ -101,12 +110,20 @@ test("queries are operator.read session actions, the page write is operator.writ
     { id: "family.garbage", requiredScopes: ["operator.read"] },
     { id: "family.members", requiredScopes: ["operator.read"] },
     { id: "family.schedule", requiredScopes: ["operator.read"] },
+    { id: "family.today", requiredScopes: ["operator.read"] },
     { id: "family.weather", requiredScopes: ["operator.read"] },
   ]);
   const writes = ["calendar_create", "calendar_update", "calendar_move", "calendar_delete"];
-  assert.deepEqual(tools, [...writes.map((name) => ({ name })), { name: "set_reminder_mode" }, { name: "garbage_schedule" }, { name: "family_schedule" }]);
+  assert.deepEqual(tools, [
+    ...writes.map((name) => ({ name })),
+    { name: "set_reminder_mode" },
+    { name: "garbage_schedule" },
+    { name: "family_schedule" },
+    { name: "family_today" },
+  ]);
   assert.deepEqual(hooks, [{ name: "before_tool_call", priority: CALENDAR_HOOK_PRIORITY, matcher: writes }]);
   assert.deepEqual(methods, [{ method: "family.week", scope: "operator.read" }]);
+  assert.deepEqual(widgets, [{ surface: "widget", id: "family-today", label: "Today", requiredScopes: ["operator.read"] }]);
   assert.equal(commands, 0);
   assert.deepEqual(cliCommands, ["family"]);
   assert.deepEqual(cli, ["family", "gog", "access", "setup"]);

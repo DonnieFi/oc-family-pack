@@ -1,7 +1,7 @@
 import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { ConfigSchema, parseConfig } from "./config.ts";
-import { CALENDAR_WRITE_ACTION, contract, WEEK_METHOD } from "./contract.ts";
+import { CALENDAR_WRITE_ACTION, contract, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.ts";
 import { execGog } from "./calendar-gog.ts";
 import { watchCalendars } from "./calendar-watch.ts";
 import { registerFamilyCli } from "./gog-setup.ts";
@@ -183,6 +183,12 @@ const plugin = defineFeaturePlugin({
     );
     // The week is a Gateway method, not a feature query, because only a Gateway
     // method sees who signed in. Same operator.read scope the queries get.
+    api.session.controls.registerControlUiDescriptor({
+      surface: "widget",
+      id: TODAY_WIDGET_ID,
+      label: "Today",
+      requiredScopes: ["operator.read"],
+    });
     api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant })), { scope: "operator.read" });
     return {
       ...familyHandlers(config, { log: (line) => api.logger.warn(line) }),

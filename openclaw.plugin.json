@@ -8,7 +8,8 @@
   ],
   "uiCapabilities": [
     "page",
-    "navigation"
+    "navigation",
+    "widget"
   ],
   "skills": [
     "./skills"
@@ -450,15 +451,16 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/79dafa3a49c80dde76d868d9f7f74bb2bdbb99084a101a00b4c229d459f0faac/index.js",
+    "entry": "dist/control-ui/324f2781d040465ab2cbf9f63710e59b000b9bd71720ff1fde445ea195034588/index.js",
     "styles": [
-      "dist/control-ui/79dafa3a49c80dde76d868d9f7f74bb2bdbb99084a101a00b4c229d459f0faac/index.css"
+      "dist/control-ui/324f2781d040465ab2cbf9f63710e59b000b9bd71720ff1fde445ea195034588/index.css"
     ]
   },
   "contracts": {
     "tools": [
       "garbage_schedule",
       "family_schedule",
+      "family_today",
       "calendar_create",
       "calendar_update",
       "calendar_move",

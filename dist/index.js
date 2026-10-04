@@ -1,7 +1,7 @@
 import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { ConfigSchema, parseConfig } from "./config.js";
-import { CALENDAR_WRITE_ACTION, contract, WEEK_METHOD } from "./contract.js";
+import { CALENDAR_WRITE_ACTION, contract, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.js";
 import { execGog } from "./calendar-gog.js";
 import { watchCalendars } from "./calendar-watch.js";
 import { registerFamilyCli } from "./gog-setup.js";
@@ -174,6 +174,12 @@ const plugin = defineFeaturePlugin({
         }), { name: SET_REMINDER_MODE_TOOL });
         // The week is a Gateway method, not a feature query, because only a Gateway
         // method sees who signed in. Same operator.read scope the queries get.
+        api.session.controls.registerControlUiDescriptor({
+            surface: "widget",
+            id: TODAY_WIDGET_ID,
+            label: "Today",
+            requiredScopes: ["operator.read"],
+        });
         api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant })), { scope: "operator.read" });
         return {
             ...familyHandlers(config, { log: (line) => api.logger.warn(line) }),

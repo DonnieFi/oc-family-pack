@@ -5,7 +5,8 @@ import { DEMO_MEMBERS } from "./demo.ts";
 import { createGarbageFeed, garbageSchedule, type GarbageFetch } from "./garbage.ts";
 import { buildWeekPayload } from "./payload.ts";
 import { buildSchedule, scheduleCaller } from "./schedule.ts";
-import type { Config, GarbageOutput, MembersPayload, ScheduleInput, ScheduleOutput, WeatherState, WeekPayload } from "./types.ts";
+import { buildToday } from "./today.ts";
+import type { Config, GarbageOutput, MembersPayload, ScheduleInput, ScheduleOutput, TodayPayload, WeatherState, WeekPayload } from "./types.ts";
 import type { Viewer } from "./visibility.ts";
 import { readEcWeather } from "./weather-ec.ts";
 import { resolveMembers } from "./week.ts";
@@ -41,18 +42,21 @@ export function familyWeek(config: Config, deps: FamilyHandlerDeps = {}) {
     });
 }
 
-/** Handlers for the registered queries. `family.schedule` and `family.garbage` are also the agent's `family_schedule` and `garbage_schedule` tools. */
+/** Handlers for the registered queries. `family.schedule`, `family.today`, and `family.garbage` are also the agent's tools. */
 export function familyHandlers(config: Config, deps: FamilyHandlerDeps = {}) {
   const now = deps.now ?? Date.now;
   const garbage = createGarbageFeed(deps.fetchGarbage, deps.log ? { log: deps.log } : {});
   const readWeather = weatherReader(config, deps, now);
+  const caller = (context: FeatureInvocationContext) => scheduleCaller(config.demo ? DEMO_MEMBERS : config.members, context);
   return {
     "family.members": (): MembersPayload => ({
       members: resolveMembers(config.demo ? DEMO_MEMBERS : config.members),
     }),
     "family.weather": (): Promise<WeatherState> => readWeather(),
     "family.schedule": (input: ScheduleInput, context: FeatureInvocationContext): Promise<ScheduleOutput> =>
-      buildSchedule(config, input, scheduleCaller(config.demo ? DEMO_MEMBERS : config.members, context), now(), deps.runGog),
+      buildSchedule(config, input, caller(context), now(), deps.runGog),
+    "family.today": (_input: object, context: FeatureInvocationContext): Promise<TodayPayload> =>
+      buildToday(config, caller(context), now(), { ...(deps.runGog === undefined ? {} : { runGog: deps.runGog }), garbage }),
     "family.garbage": (): Promise<GarbageOutput> => garbageSchedule(garbage, config, now()),
   };
 }

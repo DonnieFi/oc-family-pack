@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, mock, test } from "node:test";
 import { parseHTML } from "linkedom";
 import type { ControlUiHost, ControlUiSessionListSnapshot, ControlUiViewContext } from "openclaw/plugin-sdk/control-ui";
-import { mountFamilyPage, observedText, READ_ONLY_HERE, staleText } from "./control-ui.ts";
+import familyUi, { mountFamilyPage, mountTodayWidget, observedText, READ_ONLY_HERE, staleText } from "./control-ui.ts";
 import type { WeekPayload } from "./types.ts";
 import { boundWeekStart } from "./week.ts";
 
@@ -193,6 +193,7 @@ function mountPage(options: {
     container,
     signal,
     view,
+    host: host as unknown as ControlUiHost,
     counts: () => ({ requests, creates, opens, sessionDisposes }),
     calls,
     dialogs,
@@ -571,8 +572,9 @@ describe("family page", { concurrency: 1 }, () => {
     const second = boundWeekStart("2020-01-01", "2026-09-30");
     const page = mountPage({ props: { start: "2020-01-01" } });
     await flush();
-    assert.deepEqual(new Set(page.calls.map((call) => call[0])), new Set(["family.week"]));
-    const starts = page.calls.map((call) => (call[1] as { start?: string } | undefined)?.start);
+    const weekCalls = page.calls.filter((call) => call[0] === "family.week");
+    assert.deepEqual(new Set(weekCalls.map((call) => call[0])), new Set(["family.week"]));
+    const starts = weekCalls.map((call) => (call[1] as { start?: string } | undefined)?.start);
     assert.deepEqual(starts, first === second ? [first] : [first, second]);
     assert.equal(page.container.querySelector(".ocfp-title")?.textContent, "Sep 28 – Oct 4");
   });
@@ -604,6 +606,97 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(text.includes("Connect your family calendars"), true);
     assert.equal(text.includes("Weather is not set up."), true);
   });
+});
+
+test("the today widget is a second surface and renders only the highlight lines", async () => {
+  const widgets: { id: string; label: string }[] = [];
+  familyUi.activate({
+    ui: {
+      registerNavigation() {},
+      registerPage() {},
+      registerWidget(widget: { id: string; label: string }) {
+        widgets.push({ id: widget.id, label: widget.label });
+      },
+    },
+  } as unknown as ControlUiHost);
+  assert.deepEqual(widgets, [{ id: "family-today", label: "Today" }]);
+
+  const mountWidget = (page: ReturnType<typeof mountPage>) => {
+    const signal = new AbortController();
+    mounted.push(signal);
+    const holder = page.document.createElement("div");
+    const handle = mountTodayWidget(holder, {
+      host: page.host,
+      signal: signal.signal,
+      props: {},
+      presented: true,
+      mountDefault: () => () => {},
+    } as ControlUiViewContext);
+    return { holder, signal, handle };
+  };
+
+  const page = mountPage({
+    request: (method, params) => {
+      const action = params as { actionId?: string } | undefined;
+      if (method === "plugins.sessionAction" && action?.actionId === "family.today") {
+        return Promise.resolve({
+          ok: true,
+          result: { date: "2026-09-30", highlights: ["⏰ Dentist in 90 min"], exceptions: [{ title: "Secret trip" }] },
+        });
+      }
+      return Promise.resolve(week());
+    },
+  });
+  const shown = mountWidget(page);
+  assert.equal(shown.holder.querySelector(".ocfp-today-title")?.textContent, "Today");
+  assert.equal(shown.holder.querySelector("[role=status]")?.textContent, "Loading today");
+  assert.equal(shown.holder.querySelector(".ocfp-today")?.getAttribute("aria-busy"), "true");
+  await flush();
+  assert.equal(shown.holder.querySelector(".ocfp-today")?.getAttribute("aria-busy"), null);
+  assert.deepEqual(
+    [...shown.holder.querySelectorAll(".ocfp-today p")].map((node) => node.textContent),
+    ["⏰ Dentist in 90 min"],
+  );
+  assert.equal(shown.holder.textContent?.includes("Secret trip"), false);
+  assert.equal(page.container.querySelector(".ocfp-today"), null);
+  shown.signal.abort();
+  assert.equal(shown.holder.querySelector(".ocfp-today"), null);
+
+  const quiet = mountWidget(
+    mountPage({
+      request: (method, params) => {
+        const action = params as { actionId?: string } | undefined;
+        if (method === "plugins.sessionAction" && action?.actionId === "family.today") {
+          return Promise.resolve({ ok: true, result: { date: "2026-09-30", highlights: ["Looks like a quiet day — nothing urgent."], exceptions: [] } });
+        }
+        return Promise.resolve(week());
+      },
+    }),
+  );
+  await flush();
+  assert.equal(quiet.holder.querySelector(".ocfp-today p")?.textContent, "Looks like a quiet day — nothing urgent.");
+  assert.equal(quiet.holder.querySelector(".ocfp-today p")?.classList.contains("is-muted"), true);
+  quiet.signal.abort();
+
+  const broken = mountWidget(
+    mountPage({
+      request: (method, params) => {
+        const action = params as { actionId?: string } | undefined;
+        if (method === "plugins.sessionAction" && action?.actionId === "family.today") return Promise.reject(new Error("disk"));
+        return Promise.resolve(week());
+      },
+    }),
+  );
+  await flush();
+  const error = broken.holder.querySelector(".ocfp-today p");
+  assert.equal(error?.textContent, "Couldn't load today.");
+  assert.equal(error?.getAttribute("role"), "alert");
+  assert.equal(broken.holder.textContent?.includes("disk"), false);
+  broken.signal.abort();
+
+  const denied = mountWidget(mountPage({ canRead: false }));
+  assert.equal(denied.holder.querySelector(".ocfp-today p")?.textContent, "You need read access to see today.");
+  denied.signal.abort();
 });
 
 test("the weather card says how old the station's reading is", () => {
