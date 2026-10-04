@@ -1,5 +1,6 @@
 import type { FeatureInvocationContext } from "openclaw/plugin-sdk/feature-plugin";
 import type { RunGog } from "./calendar-gog.ts";
+import type { GrantHolder } from "./grant.ts";
 import { DEMO_MEMBERS } from "./demo.ts";
 import { buildWeekPayload } from "./payload.ts";
 import { buildSchedule, scheduleCaller } from "./schedule.ts";
@@ -15,13 +16,18 @@ export type FamilyHandlerDeps = {
   fetchWeather?: Parameters<typeof readEcWeather>[1];
   /** gog runner for the schedule tool. Defaults to the real binary. */
   runGog?: RunGog;
+  /** The Google grant, for the page's read-only notice. */
+  grant?: Pick<GrantHolder, "get">;
 };
 
 /** The week `viewer` may see, for the `family.week` Gateway method. */
 export function familyWeek(config: Config, deps: FamilyHandlerDeps = {}) {
   const now = deps.now ?? Date.now;
-  return ({ start }: { start?: string }, viewer: Viewer): Promise<WeekPayload> =>
-    buildWeekPayload(config, start, now(), () => readEcWeather(config.location, deps.fetchWeather), viewer);
+  return ({ start }: { start?: string }, viewer: Viewer, canEdit = false): Promise<WeekPayload> =>
+    buildWeekPayload(config, start, now(), () => readEcWeather(config.location, deps.fetchWeather), viewer, {
+      canEdit,
+      grantReadOnly: deps.grant?.get() === "read-only",
+    });
 }
 
 /** Handlers for the registered queries. `family.schedule` is also the agent's `family_schedule` tool. */

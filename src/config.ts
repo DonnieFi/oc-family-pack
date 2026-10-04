@@ -1,9 +1,10 @@
 import { Type } from "typebox";
 import { MAX_CALENDARS, MAX_MEMBERS } from "./contract.ts";
-import type { CalendarConfig, CalendarKind, Config, Location, MemberConfig, MemberDevice, MemberRole } from "./types.ts";
+import type { CalendarConfig, CalendarKind, Config, Location, MemberConfig, MemberDevice, MemberRole, WriteMode } from "./types.ts";
 
 const ROLES: readonly MemberRole[] = ["parent", "kid", "guest"];
 const KINDS: readonly CalendarKind[] = ["personal", "shared", "school"];
+const WRITE_MODES: readonly WriteMode[] = ["on", "confirm", "off"];
 // Colors land in CSS custom properties, so only accept plain color syntax.
 const CSS_COLOR = /^(?:#[0-9a-fA-F]{3,8}|(?:rgb|rgba|hsl|hsla|oklch|oklab)\([0-9.,%\s/-]+\)|[a-zA-Z]+)$/;
 /** Discord user ids are snowflakes. A mention like `<@…>` is not an id. */
@@ -33,6 +34,7 @@ export const ConfigSchema = Type.Object(
       ),
     ),
     gogPath: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
+    writes: Type.Optional(Type.Union(WRITE_MODES.map((mode) => Type.Literal(mode)), { default: "on" })),
     members: Type.Optional(
       Type.Array(
         Type.Object(
@@ -299,6 +301,7 @@ export function parseConfig(raw: unknown): Config {
         : timezone(value.timezone, "timezone"),
     demo,
     gogPath: value.gogPath === undefined ? "gog" : text(value.gogPath, "gogPath"),
+    writes: value.writes === undefined ? "on" : oneOf(value.writes, "writes", WRITE_MODES),
     members,
     calendars,
   };

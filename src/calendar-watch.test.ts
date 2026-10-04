@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { RunGog } from "./calendar-gog.ts";
 import { MAX_WAIT_MS, POLL_MS, watchCalendars, type Schedule } from "./calendar-watch.ts";
 import { parseConfig } from "./config.ts";
+import { grantHolder, type GrantHolder } from "./grant.ts";
 
 type Reply = { events: { id: string; updated: string; status?: string }[]; since: string } | Error | string;
 
@@ -17,7 +18,7 @@ function config(calendars: string[], demo = false) {
 }
 
 /** One queued gog answer per calendar per poll, plus a hand-run timer. */
-function harness(calendars: string[], options: { demo?: boolean; emitThrows?: boolean } = {}) {
+function harness(calendars: string[], options: { demo?: boolean; emitThrows?: boolean; grant?: GrantHolder } = {}) {
   const replies = new Map<string, Reply[]>();
   const calls: string[][] = [];
   const emitted: [string, unknown][] = [];
@@ -54,6 +55,7 @@ function harness(calendars: string[], options: { demo?: boolean; emitThrows?: bo
       events: events as never,
       logger: { warn: (message: string) => warnings.push(message) },
       schedule,
+      ...(options.grant ? { grant: options.grant } : {}),
     });
   /** Fires the pending timer and waits for that poll to finish. */
   const tick = async () => {
@@ -232,4 +234,55 @@ test("demo mode and an empty roster never call gog", async () => {
     assert.deepEqual(h.calls, []);
     assert.equal(h.timers.length, 0);
   }
+});
+
+const AUTH_LIST = "--no-input";
+const account = (scopes: string[]) => JSON.stringify({ accounts: [{ email: "person@example.com", services: ["calendar"], scopes }] });
+const READ_WRITE_ACCOUNT = account(["https://www.googleapis.com/auth/calendar", "openid"]);
+const READ_ONLY_ACCOUNT = account(["https://www.googleapis.com/auth/calendar.readonly", "openid"]);
+
+test("each poll re-reads gog's grant: read-only sets it, read-write clears it, and a failed or unclear read leaves it", async () => {
+  const grant = grantHolder();
+  const h = harness(["cal-a"], { grant });
+  h.queue("cal-a", one(T0), one(T0), one(T0), one(T0), one(T0));
+  h.queue(AUTH_LIST, READ_ONLY_ACCOUNT, READ_WRITE_ACCOUNT, new Error("gog timed out"), JSON.stringify({ accounts: [] }), READ_ONLY_ACCOUNT);
+  h.start();
+  await h.settle();
+  assert.deepEqual(h.calls[0], ["calendar", "changed", "--since", "720h", "--max", "1", "--json", "--no-input", "--", "cal-a"]);
+  assert.deepEqual(h.calls[1], ["auth", "list", "--json", "--no-input"]);
+  assert.equal(grant.get(), "read-only");
+  await h.tick();
+  assert.equal(grant.get(), "read-write");
+  await h.tick();
+  assert.equal(grant.get(), "read-write");
+  await h.tick();
+  assert.equal(grant.get(), "read-write");
+  await h.tick();
+  assert.equal(grant.get(), "read-only");
+});
+
+test("a poll that sees read-write clears a read-only status a failed write set", async () => {
+  const grant = grantHolder();
+  grant.noteWriteFailure(Object.assign(new Error("Command failed"), { stderr: "Error 403: Request had insufficient authentication scopes." }));
+  assert.equal(grant.get(), "read-only");
+  const h = harness(["cal-a"], { grant });
+  h.queue("cal-a", one(T0));
+  h.queue(AUTH_LIST, READ_WRITE_ACCOUNT);
+  h.start();
+  await h.settle();
+  assert.equal(grant.get(), "read-write");
+});
+
+test("a failed or unclear poll leaves a read-only grant read-only", async () => {
+  const grant = grantHolder("read-only");
+  const h = harness(["cal-a"], { grant });
+  h.queue("cal-a", one(T0), one(T0), one(T0));
+  h.queue(AUTH_LIST, new Error("gog timed out"), JSON.stringify({ accounts: [] }), "not json");
+  h.start();
+  await h.settle();
+  assert.equal(grant.get(), "read-only");
+  await h.tick();
+  assert.equal(grant.get(), "read-only");
+  await h.tick();
+  assert.equal(grant.get(), "read-only");
 });

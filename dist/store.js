@@ -149,7 +149,7 @@ async function openSession(options) {
             return opening;
         return spawnWorker();
     }
-    function postStatus() {
+    function post(op, input) {
         const worker = current;
         if (!worker || phase !== "ready")
             return Promise.reject(new Error("oc-family-pack: family store is not ready"));
@@ -157,7 +157,7 @@ async function openSession(options) {
         return new Promise((resolve, reject) => {
             pending.set(id, { resolve, reject });
             try {
-                worker.postMessage({ id, op: "store.status", input: {} });
+                worker.postMessage({ id, op, input });
             }
             catch (error) {
                 pending.delete(id);
@@ -173,7 +173,19 @@ async function openSession(options) {
         },
         async status() {
             await ensureOpen();
-            return postStatus();
+            return (await post("store.status", {}));
+        },
+        async countCommittedWrites(baseKey) {
+            await ensureOpen();
+            return (await post("writeLog.countCommitted", { baseKey }));
+        },
+        async committedWrite(requestKey) {
+            await ensureOpen();
+            return (await post("writeLog.committed", { requestKey })) ?? undefined;
+        },
+        async appendWriteLog(row, { ifAbsent }) {
+            await ensureOpen();
+            return (await post("writeLog.append", { row, ifAbsent }));
         },
         stop() {
             if (stopPromise)

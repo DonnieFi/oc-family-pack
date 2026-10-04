@@ -8,16 +8,29 @@ import {
   type ControlUiViewContext,
 } from "openclaw/plugin-sdk/control-ui";
 import { createFeatureClient } from "openclaw/plugin-sdk/feature-contract";
-import { contract, WEEK_METHOD } from "./contract.ts";
+import { CALENDAR_WRITE_ACTION, contract, WEEK_METHOD } from "./contract.ts";
 import { mixTowardInk } from "./contrast.ts";
 import type { CalendarRef, FamilyEvent, Member, WeekPayload } from "./types.ts";
 import { addDays, boundWeekStart, localDate, pageWeekStart } from "./week.ts";
+import { somethingWrongLine } from "./write-lines.ts";
 import "./control-ui.css";
 
 const PAGE_ID = "family";
 /** ux: say nothing while the week is fresh; after this long without a good read, one quiet line. */
 const STALE_AFTER_MS = 6 * 60_000;
 const STALE_TICK_MS = 30_000;
+/** ux: what a parent or the owner sees in place of edit controls while the Google grant is read-only. */
+export const READ_ONLY_HERE = "Calendars are read-only here.";
+
+/** A fresh id per submit. crypto.randomUUID needs a secure context; a LAN Control UI may not be one. */
+function newRequestId(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** ux's lines bold the event name with **; everything else is plain text. */
+function lineNodes(text: string): (Node | string)[] {
+  return text.split("**").map((part, index) => (index % 2 === 1 ? h("strong", {}, part) : part));
+}
 
 type Load =
   | { kind: "loading" }
@@ -631,6 +644,59 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     ];
   }
 
+  /**
+   * Save and Delete for a viewer who may write; nothing for anyone else. Both stay disabled until
+   * the reply comes back, which shows inline as ux's line. Delete asks nothing first.
+   */
+  function editControls(week: WeekPayload, event: FamilyEvent): HTMLElement | null {
+    if (!week.canEdit) return null;
+    if (week.calendarsReadOnly) return h("p", { class: "ocfp-dialog-note" }, READ_ONLY_HERE);
+    const title = h("input", { type: "text", class: "ocfp-input", value: event.title, maxlength: "500", "aria-label": "Title" });
+    const where = h("input", { type: "text", class: "ocfp-input", value: event.location ?? "", maxlength: "500", "aria-label": "Where" });
+    const status = h("p", { class: "ocfp-dialog-status", role: "status" });
+    const save = h("button", { type: "button", class: "ocfp-btn ocfp-btn-today", disabled: true }, "Save");
+    const remove = h("button", { type: "button", class: "ocfp-btn ocfp-btn-danger" }, "Delete");
+    let busy = false;
+    const changes = () => ({
+      ...(title.value.trim() && title.value.trim() !== event.title ? { title: title.value.trim() } : {}),
+      ...(where.value.trim() !== (event.location ?? "") ? { location: where.value.trim() } : {}),
+    });
+    const sync = () => {
+      save.disabled = busy || Object.keys(changes()).length === 0;
+      remove.disabled = busy;
+    };
+    const send = async (input: { op: "update"; title?: string; location?: string } | { op: "delete" }) => {
+      if (busy) return;
+      busy = true;
+      sync();
+      let message: string;
+      try {
+        const result = await feature.invoke(CALENDAR_WRITE_ACTION, { ...input, id: event.id, requestId: newRequestId() });
+        message = result.message;
+      } catch {
+        // Never the host's text: the same line the Gateway gives for a write that did not happen.
+        message = somethingWrongLine(input.op, event.title);
+      }
+      if (!alive()) return;
+      status.replaceChildren(...lineNodes(message));
+      busy = false;
+      sync();
+    };
+    on(title, "input", sync);
+    on(where, "input", sync);
+    on(save, "click", () => void send({ op: "update", ...changes() }));
+    on(remove, "click", () => void send({ op: "delete" }));
+    return h(
+      "div",
+      { class: "ocfp-dialog-edit" },
+      h("label", { class: "ocfp-field" }, h("span", {}, "Title"), title),
+      h("label", { class: "ocfp-field" }, h("span", {}, "Where"), where),
+      h("div", { class: "ocfp-dialog-actions" }, save),
+      status,
+      h("div", { class: "ocfp-dialog-danger" }, remove),
+    );
+  }
+
   function closeDialog() {
     dialog?.dispose();
     dialog = undefined;
@@ -690,6 +756,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
               icon("external"),
             )
           : null,
+        editControls(week, event),
       ),
       { "--ocfp-event": color },
     );

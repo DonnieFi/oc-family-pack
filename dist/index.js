@@ -1,13 +1,18 @@
 import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { ConfigSchema, parseConfig } from "./config.js";
-import { contract, WEEK_METHOD } from "./contract.js";
+import { CALENDAR_WRITE_ACTION, contract, WEEK_METHOD } from "./contract.js";
 import { execGog } from "./calendar-gog.js";
 import { watchCalendars } from "./calendar-watch.js";
 import { registerFamilyCli } from "./gog-setup.js";
 import { familyHandlers, familyWeek } from "./handlers.js";
 import { openFamilyStore } from "./store.js";
 import { weekMethod } from "./week-method.js";
+import { familyGrant } from "./grant.js";
+import { CALENDAR_DELETE_TOOL, CALENDAR_MOVE_TOOL, CALENDAR_UPDATE_TOOL, CalendarDeleteInputSchema, CalendarMoveInputSchema, CalendarUpdateInputSchema } from "./calendar-change.js";
+import { CALENDAR_CREATE_TOOL, CalendarCreateInputSchema } from "./calendar-create.js";
+import { registerCalendarWrite } from "./calendar-tools.js";
+import { pageWrite } from "./page-write.js";
 function configuredGogPath(raw) {
     try {
         return parseConfig(raw).gogPath;
@@ -32,8 +37,8 @@ const plugin = defineFeaturePlugin({
         });
         // Discovery loads the plugin without starting it. The worker belongs to the
         // service start, which the host only calls in a live Gateway.
+        let store;
         if (api.registrationMode === "full") {
-            let store;
             api.registerService({
                 id: "family-store",
                 reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
@@ -61,7 +66,7 @@ const plugin = defineFeaturePlugin({
                 id: "calendar-watch",
                 reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
                 start(ctx) {
-                    stopWatch = watchCalendars({ config, runGog: execGog(), events, logger: ctx.logger });
+                    stopWatch = watchCalendars({ config, runGog: execGog(), events, logger: ctx.logger, grant: familyGrant });
                 },
                 stop() {
                     stopWatch?.();
@@ -69,10 +74,32 @@ const plugin = defineFeaturePlugin({
                 },
             });
         }
+        // The four calendar write tools and their before_tool_call approval hook, registered together.
+        const writeApi = {
+            on: (hookName, handler, opts) => api.on(hookName, handler, opts),
+            registerTool: (factory, opts) => api.registerTool(factory, opts),
+        };
+        registerCalendarWrite(writeApi, { config, runGog: execGog(), grant: familyGrant, log: () => store });
         // The week is a Gateway method, not a feature query, because only a Gateway
         // method sees who signed in. Same operator.read scope the queries get.
-        api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config)), { scope: "operator.read" });
-        return familyHandlers(config);
+        api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant })), { scope: "operator.read" });
+        return {
+            ...familyHandlers(config),
+            [CALENDAR_WRITE_ACTION]: pageWrite({
+                config,
+                runGog: execGog(),
+                grant: familyGrant,
+                log: () => store,
+                changed: (calendarKeys) => {
+                    try {
+                        events.emit("calendar-changed", { reason: "write", calendarKeys, at: new Date().toISOString() });
+                    }
+                    catch {
+                        // The write stands; open pages catch up on the next poll.
+                    }
+                },
+            }),
+        };
     },
 });
 // defineFeaturePlugin (openclaw 2026.9.7) takes no configSchema option, and the
@@ -85,4 +112,28 @@ if (!metadata) {
     throw new Error("oc-family-pack: feature plugin metadata is missing");
 }
 metadata.configSchema = { ...ConfigSchema };
+// The calendar write tools are registered with api.registerTool, not through the feature
+// contract, so they get no page session action. `openclaw plugins build` reads contracts.tools
+// from this list.
+metadata.tools.push({
+    name: CALENDAR_CREATE_TOOL,
+    label: "Add to calendar",
+    description: "Add one event to a family calendar; some additions wait for a parent to approve them.",
+    parameters: { ...CalendarCreateInputSchema },
+}, {
+    name: CALENDAR_UPDATE_TOOL,
+    label: "Change a calendar event",
+    description: "Change one family calendar event; some changes wait for a parent to approve them.",
+    parameters: { ...CalendarUpdateInputSchema },
+}, {
+    name: CALENDAR_MOVE_TOOL,
+    label: "Move a calendar event",
+    description: "Move one event to another family calendar; some moves wait for a parent to approve them.",
+    parameters: { ...CalendarMoveInputSchema },
+}, {
+    name: CALENDAR_DELETE_TOOL,
+    label: "Delete a calendar event",
+    description: "Delete one family calendar event; some deletions wait for a parent to approve them.",
+    parameters: { ...CalendarDeleteInputSchema },
+});
 export default plugin;

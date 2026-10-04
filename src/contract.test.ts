@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Value } from "typebox/value";
 import plugin from "./index.ts";
+import { CALENDAR_HOOK_PRIORITY } from "./calendar-create.ts";
 import {
   CALENDAR_CHANGED_EVENT,
   CALENDAR_CHECKED_EVENT,
   CalendarChangedSchema,
   CalendarCheckedSchema,
+  CalendarWriteResultSchema,
   CalendarWriteSchema,
   FEATURE_EVENT_ID_PATTERN,
   TodayPayloadSchema,
@@ -24,13 +26,14 @@ type _CalendarWriteOps = Assert<
     : false
 >;
 
-test("the contract registers exactly the three read queries, and the week is not one", () => {
+test("the contract registers the three read queries and the page's one write action, and the week is not one", () => {
   assert.deepEqual(
     Object.entries(contract.operations).map(([name, operation]) => [name, operation.kind]),
     [
       ["family.members", "query"],
       ["family.weather", "query"],
       ["family.schedule", "query"],
+      ["family.calendar.write", "action"],
     ],
   );
   assert.deepEqual(
@@ -41,10 +44,11 @@ test("the contract registers exactly the three read queries, and the week is not
   assert.equal(Object.hasOwn(contract.operations, "family.today"), false);
 });
 
-test("registered queries are operator.read session actions, the schedule is the one agent tool, the week is an operator.read Gateway method, and there is no command adapter", () => {
+test("queries are operator.read session actions, the page write is operator.write, the agent tools are the schedule and the four calendar writes with their first-running approval hook, the week is an operator.read Gateway method, and there is no command adapter", () => {
   const actions: { id: string; requiredScopes: string[] }[] = [];
   const tools: { name: string; optional?: boolean }[] = [];
   const methods: { method: string; scope?: string }[] = [];
+  const hooks: { name: string; priority?: number; matcher?: readonly string[] }[] = [];
   const cli: string[] = [];
   let commands = 0;
   let cliCommands: readonly string[] = [];
@@ -60,6 +64,9 @@ test("registered queries are operator.read session actions, the schedule is the 
     },
     registerTool(_factory: unknown, opts: { name: string; optional?: boolean }) {
       tools.push(opts);
+    },
+    on(name: string, _handler: unknown, opts?: { priority?: number; matcher?: readonly string[] }) {
+      hooks.push({ name, ...opts });
     },
     registerGatewayMethod(method: string, _handler: unknown, opts?: { scope?: string }) {
       methods.push({ method, ...(opts?.scope ? { scope: opts.scope } : {}) });
@@ -86,11 +93,14 @@ test("registered queries are operator.read session actions, the schedule is the 
     },
   } as unknown as Parameters<typeof plugin.register>[0]);
   assert.deepEqual(actions, [
+    { id: "family.calendar.write", requiredScopes: ["operator.write"] },
     { id: "family.members", requiredScopes: ["operator.read"] },
     { id: "family.schedule", requiredScopes: ["operator.read"] },
     { id: "family.weather", requiredScopes: ["operator.read"] },
   ]);
-  assert.deepEqual(tools, [{ name: "family_schedule" }]);
+  const writes = ["calendar_create", "calendar_update", "calendar_move", "calendar_delete"];
+  assert.deepEqual(tools, [...writes.map((name) => ({ name })), { name: "family_schedule" }]);
+  assert.deepEqual(hooks, [{ name: "before_tool_call", priority: CALENDAR_HOOK_PRIORITY, matcher: writes }]);
   assert.deepEqual(methods, [{ method: "family.week", scope: "operator.read" }]);
   assert.equal(commands, 0);
   assert.deepEqual(cliCommands, ["family"]);
@@ -110,18 +120,24 @@ test("both calendar events match the feature event id pattern, and calendar-chec
   assert.equal(Value.Check(TodayPayloadSchema, { date: "2026-10-02", highlights: ["a", "b", "c", "d"], exceptions: [] }), false);
 });
 
-test("CalendarWrite rejects an unknown op", () => {
-  assert.equal(Value.Check(CalendarWriteSchema, { op: "archive", id: "c0/e1" }), false);
-  assert.equal(
-    Value.Check(CalendarWriteSchema, {
-      op: "create",
-      title: "Dentist",
-      start: "2026-10-06T19:00:00.000Z",
-      end: "2026-10-06T20:00:00.000Z",
-    }),
-    true,
-  );
-  assert.equal(Value.Check(CalendarWriteSchema, { op: "update", id: "c0/e1", title: "Dentist", scope: "single" }), true);
-  assert.equal(Value.Check(CalendarWriteSchema, { op: "move", id: "c0/e1", destinationKey: "c4" }), true);
-  assert.equal(Value.Check(CalendarWriteSchema, { op: "delete", id: "c0/e1" }), true);
+test("CalendarWrite rejects an unknown op, a missing or multi-line requestId, and any extra field", () => {
+  const requestId = "submit-1";
+  const variants = [
+    { op: "create", requestId, calendarKey: "c0", title: "Dentist", start: "2026-10-06T19:00:00.000Z", end: "2026-10-06T20:00:00.000Z" },
+    { op: "update", requestId, id: "c0/e1", title: "Dentist", scope: "single" },
+    { op: "move", requestId, id: "c0/e1", destinationKey: "c4" },
+    { op: "delete", requestId, id: "c0/e1" },
+  ];
+  assert.equal(Value.Check(CalendarWriteSchema, { op: "archive", requestId, id: "c0/e1" }), false);
+  for (const variant of variants) {
+    assert.equal(Value.Check(CalendarWriteSchema, variant), true, variant.op);
+    const { requestId: _requestId, ...without } = variant;
+    assert.equal(Value.Check(CalendarWriteSchema, without), false, `${variant.op} without requestId`);
+    assert.equal(Value.Check(CalendarWriteSchema, { ...variant, requestId: "" }), false, `${variant.op} blank`);
+    assert.equal(Value.Check(CalendarWriteSchema, { ...variant, requestId: "a\nb" }), false, `${variant.op} newline`);
+    assert.equal(Value.Check(CalendarWriteSchema, { ...variant, requestId: "k".repeat(257) }), false, `${variant.op} too long`);
+    assert.equal(Value.Check(CalendarWriteSchema, { ...variant, calendarId: "family@group.calendar.google.com" }), false, `${variant.op} extra`);
+  }
+  assert.equal(Value.Check(CalendarWriteResultSchema, { ok: true, message: "Deleted **Dentist**." }), true);
+  assert.equal(Value.Check(CalendarWriteResultSchema, { ok: true, message: "x", eventId: "c0/e1" }), false);
 });

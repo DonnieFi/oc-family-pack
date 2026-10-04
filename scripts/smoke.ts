@@ -679,6 +679,34 @@ function assertStoreModes(path: string): void {
   }
 }
 
+/** Inserts a scratch row into a copy of the database and reports which changes the triggers refused. */
+function readWriteLogGuards(path: string): string[] {
+  const copy = `${path}.guard-check`;
+  const script = `
+    import { DatabaseSync } from "node:sqlite";
+    const source = new DatabaseSync(process.env.DB, { readOnly: true });
+    source.exec("VACUUM INTO '" + process.env.COPY.replaceAll("'", "''") + "'");
+    source.close();
+    const db = new DatabaseSync(process.env.COPY);
+    db.exec("INSERT INTO oc_family_pack_write_log (request_key, base_key, requester, op, calendar_id, status, at) VALUES ('k.0', 'k', 'page', 'create', 'c', 'committed', 1)");
+    const blocked = [];
+    for (const [name, sql] of [["update", "UPDATE oc_family_pack_write_log SET status = 'reverted'"], ["delete", "DELETE FROM oc_family_pack_write_log"]]) {
+      try { db.exec(sql); } catch (error) { if (/append-only/.test(String(error))) blocked.push(name); }
+    }
+    db.close();
+    process.stdout.write(JSON.stringify(blocked));
+  `;
+  const result = spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", "--input-type=module", "-e", script], {
+    env: { ...process.env, DB: path, COPY: copy },
+    encoding: "utf8",
+  });
+  rmSync(copy, { force: true });
+  if (result.status !== 0) {
+    fail("sqlite store", `could not check the write log: ${(result.stderr || "").trim().slice(0, 300)}`);
+  }
+  return JSON.parse(result.stdout) as string[];
+}
+
 async function waitForStore(stateDir: string): Promise<string> {
   const path = storeDbPath(stateDir);
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -863,17 +891,22 @@ async function main(): Promise<void> {
   note(`host scheduler surface answers (${jobs.jobs.length} host jobs); the store is a service, and briefs register jobs later`, "service scheduler");
 
   // 8. The plugin-owned store. The service opens the real database, applies
-  // 0001-initial, and leaves that row in place across a Gateway restart, a
+  // 0001-initial and 0002-write-log, and leaves those rows in place across a Gateway restart, a
   // forced reinstall, and plugins update. Backup must snapshot it instead of
   // archiving it as opaque bytes. A store that cannot open must not take the Gateway down.
   const pluginStateDir = join(stateDir, "plugins", PLUGIN_ID);
   const opened = await waitForStore(stateDir);
   assertStoreModes(opened);
   const firstRows = readMigrations(opened);
-  if (firstRows.length !== 1 || firstRows[0]?.id !== "0001-initial") {
-    fail("sqlite store", `expected one 0001-initial row, got ${JSON.stringify(firstRows)}`);
+  if (firstRows.map((row) => row.id).join(",") !== "0001-initial,0002-write-log") {
+    fail("sqlite store", `expected 0001-initial and 0002-write-log, got ${JSON.stringify(firstRows)}`);
   }
-  const appliedAt = firstRows[0].applied_at;
+  const writeLogBlocked = readWriteLogGuards(opened);
+  if (writeLogBlocked.join(",") !== "update,delete") {
+    fail("sqlite store", `the write log is not append-only in the Gateway's database: ${JSON.stringify(writeLogBlocked)}`);
+  }
+  note("0002-write-log is applied, and the Gateway's write log refuses UPDATE and DELETE", "sqlite store");
+  const appliedAt = firstRows[0]?.applied_at ?? 0;
   const readyLine = stripAnsi(readFileSync(logPath, "utf8"))
     .split("\n")
     .find((line) => line.includes("oc-family-pack store ready"));
@@ -1443,9 +1476,9 @@ async function scheduleTool(configPath: string, port: number): Promise<void> {
     return result as Record<string, unknown>;
   };
   const owner = await invoke({});
-  const expected = { sections: [{ name: "not the usual", items: [{ title: "Dentist", time: "12:00 PM", owners: [] }] }], usual: "Usual: Swim 5:00 PM" };
+  const expected = { sections: [{ name: "not the usual", items: [{ id: "c0/dentist", title: "Dentist", time: "12:00 PM", owners: [] }] }], usual: "Usual: Swim 5:00 PM" };
   if (JSON.stringify(owner) !== JSON.stringify(expected)) fail(step, `family_schedule returned ${JSON.stringify(owner)}, expected ${JSON.stringify(expected)}`);
-  note("the agent tool, called with the shared password, put Dentist under not the usual and Swim in the usual line", step);
+  note("the agent tool, called with the shared password, put Dentist (with the id the change tools take) under not the usual and Swim in the usual line", step);
   const claimed = await invoke({ member: "me" }, { "x-openclaw-message-channel": "discord" });
   if (JSON.stringify(claimed) !== JSON.stringify({ error: "I can't tell who 'me' is here. Name the person." })) {
     fail(step, `a Discord caller with no roster sender id asked for "me" and got ${JSON.stringify(claimed)}`);

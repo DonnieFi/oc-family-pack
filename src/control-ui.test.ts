@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, mock, test } from "node:test";
 import { parseHTML } from "linkedom";
 import type { ControlUiHost, ControlUiSessionListSnapshot, ControlUiViewContext } from "openclaw/plugin-sdk/control-ui";
-import { mountFamilyPage, staleText } from "./control-ui.ts";
+import { mountFamilyPage, READ_ONLY_HERE, staleText } from "./control-ui.ts";
 import type { WeekPayload } from "./types.ts";
 import { boundWeekStart } from "./week.ts";
 
@@ -50,6 +50,8 @@ function week(): WeekPayload {
       ],
     },
     weather: { status: "unconfigured", hint: "Weather is not set up." },
+    canEdit: false,
+    calendarsReadOnly: false,
   };
 }
 
@@ -90,7 +92,7 @@ function mountPage(options: {
   props?: Record<string, unknown>;
   /** What the family.week Gateway method answers: the week, or an error it rejects with. */
   result?: WeekPayload | Error;
-  request?: () => Promise<unknown>;
+  request?: (...args: unknown[]) => Promise<unknown>;
   observe?: (listener: Listen) => void;
   create?: () => Promise<string | null>;
 }) {
@@ -131,7 +133,7 @@ function mountPage(options: {
     request: (...args: unknown[]) => {
       requests += 1;
       calls.push(args);
-      if (options.request) return options.request();
+      if (options.request) return options.request(...args);
       const result = options.result ?? week();
       return result instanceof Error ? Promise.reject(result) : Promise.resolve(result);
     },
@@ -694,5 +696,82 @@ describe("calendar freshness", { concurrency: 1 }, () => {
     assert.deepEqual([...page.listeners.keys()].sort(), [CHANGED, CHECKED]);
     page.signal.abort();
     assert.equal(page.listeners.size, 0);
+  });
+});
+
+describe("editing from the event dialog", { concurrency: 1 }, () => {
+  /** A page whose writes wait until the test answers them. */
+  function editPage(flags: Partial<Pick<WeekPayload, "canEdit" | "calendarsReadOnly">>) {
+    const writes: { payload: Record<string, unknown>; answer: (value: unknown) => void; fail: (error: Error) => void }[] = [];
+    const page = mountPage({
+      result: { ...week(), ...flags },
+      request: (method, params) => {
+        if (method !== "plugins.sessionAction") return Promise.resolve({ ...week(), ...flags });
+        return new Promise((resolve, reject) => {
+          writes.push({ payload: (params as { payload: Record<string, unknown> }).payload, answer: (result) => resolve({ ok: true, result }), fail: reject });
+        });
+      },
+    });
+    return { page, writes };
+  }
+  async function openDentist(page: ReturnType<typeof mountPage>) {
+    await flush();
+    page.container.querySelector<HTMLElement>("[data-event-id='e-alex']")?.click();
+    const dialog = page.dialogs.at(-1)?.content;
+    assert.ok(dialog);
+    const buttons = () => Object.fromEntries([...dialog.querySelectorAll<HTMLButtonElement>("button")].map((button) => [button.textContent ?? "", button]));
+    return { dialog, buttons };
+  }
+
+  test("no edit controls without operator.write, and the read-only notice instead of them while the grant is read-only", async () => {
+    const guest = await openDentist(editPage({ canEdit: false, calendarsReadOnly: false }).page);
+    assert.deepEqual(Object.keys(guest.buttons()).filter((name) => name), []);
+    assert.equal(guest.dialog.querySelector("input"), null);
+    const readOnly = await openDentist(editPage({ canEdit: true, calendarsReadOnly: true }).page);
+    assert.equal(readOnly.dialog.querySelector(".ocfp-dialog-note")?.textContent, READ_ONLY_HERE);
+    assert.deepEqual(Object.keys(readOnly.buttons()).filter((name) => name), []);
+  });
+
+  test("Delete sends one write with a fresh requestId, no confirm, and both buttons stay disabled until the reply shows inline", async () => {
+    const { page, writes } = editPage({ canEdit: true, calendarsReadOnly: false });
+    const { dialog, buttons } = await openDentist(page);
+    assert.equal(buttons().Save?.disabled, true);
+    assert.notEqual(buttons().Save?.parentElement, buttons().Delete?.parentElement);
+    buttons().Delete?.click();
+    await flush();
+    assert.equal(writes.length, 1);
+    assert.deepEqual(Object.keys(writes[0]!.payload).sort(), ["id", "op", "requestId"]);
+    assert.equal(writes[0]!.payload.op, "delete");
+    assert.equal(writes[0]!.payload.id, "e-alex");
+    assert.match(String(writes[0]!.payload.requestId), /^[0-9a-f]{32}$/);
+    assert.deepEqual([buttons().Save?.disabled, buttons().Delete?.disabled], [true, true]);
+    buttons().Delete?.click();
+    await flush();
+    assert.equal(writes.length, 1);
+    writes[0]!.answer({ ok: true, message: "Deleted **Dentist** from Alex's calendar. It was Wednesday September 30 at 1:30 PM." });
+    await flush();
+    const status = dialog.querySelector(".ocfp-dialog-status");
+    assert.equal(status?.textContent, "Deleted Dentist from Alex's calendar. It was Wednesday September 30 at 1:30 PM.");
+    assert.equal(status?.querySelector("strong")?.textContent, "Dentist");
+    assert.equal(buttons().Delete?.disabled, false);
+  });
+
+  test("Save sends only what changed, and a failed request shows ux's line instead of the host's text", async () => {
+    const { page, writes } = editPage({ canEdit: true, calendarsReadOnly: false });
+    const { dialog, buttons } = await openDentist(page);
+    const title = dialog.querySelector<HTMLInputElement>("input[aria-label='Title']");
+    assert.ok(title);
+    title.value = "Dentist (Sam)";
+    title.dispatchEvent(new page.Event("input"));
+    assert.equal(buttons().Save?.disabled, false);
+    buttons().Save?.click();
+    await flush();
+    assert.deepEqual({ ...writes[0]!.payload, requestId: "x" }, { op: "update", title: "Dentist (Sam)", id: "e-alex", requestId: "x" });
+    writes[0]!.fail(new Error("tool execution failed: SQLITE_IOERR"));
+    await flush();
+    assert.equal(dialog.querySelector(".ocfp-dialog-status")?.textContent, "Something went wrong checking that, so I didn't change Dentist.");
+    buttons().Save?.click();
+    await flush();
+    assert.notEqual(writes[1]?.payload.requestId, writes[0]?.payload.requestId);
   });
 });

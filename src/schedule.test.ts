@@ -102,15 +102,15 @@ const FRIDAY: ScheduleOutput = {
     {
       name: "not the usual",
       items: [
-        { title: "Dentist", time: "9:30 AM", owners: ["Donnie"] },
-        { title: "Math test", time: "11:00 AM", owners: ["Calla"] },
-        { title: "Furnace service", time: "12:00 PM", owners: [] },
-        { title: "Café social", time: "1:00 PM", owners: ["Donnie", "Britta", "Calla", "Penny"] },
-        { title: "Family dinner", time: "6:00 PM", owners: ["Donnie", "Britta", "Calla", "Penny"] },
+        { id: "c0/dentist", title: "Dentist", time: "9:30 AM", owners: ["Donnie"] },
+        { id: "c3/test", title: "Math test", time: "11:00 AM", owners: ["Calla"] },
+        { id: "c5/furnace", title: "Furnace service", time: "12:00 PM", owners: [] },
+        { id: "c2/cafe", title: "Café social", time: "1:00 PM", owners: ["Donnie", "Britta", "Calla", "Penny"] },
+        { id: "c2/dinner", title: "Family dinner", time: "6:00 PM", owners: ["Donnie", "Britta", "Calla", "Penny"] },
       ],
     },
-    { name: "homework", items: [{ title: "Science project", allDay: true, due: "Fri Oct 9", owners: ["Calla"] }] },
-    { name: "uniforms", items: [{ title: "PE uniform", allDay: true, due: "Fri Oct 9", owners: ["Donnie", "Britta", "Calla", "Penny"] }] },
+    { name: "homework", items: [{ id: "c3/project", title: "Science project", allDay: true, due: "Fri Oct 9", owners: ["Calla"] }] },
+    { name: "uniforms", items: [{ id: "c2/pe-f", title: "PE uniform", allDay: true, due: "Fri Oct 9", owners: ["Donnie", "Britta", "Calla", "Penny"] }] },
   ],
   classes: [{ line: "Calla: Math 8:30 AM · Gym 10:15 AM" }, { line: "Penny: Art 9:00 AM" }],
   usual: "Usual: Swim 5:00 PM",
@@ -153,7 +153,7 @@ test("a merged event takes the earliest section in precedence: homework, uniform
     "school-calla": [allDay("p2", "Science project", "2026-10-09", "2026-10-10")],
   });
   assert.deepEqual(homework.output, {
-    sections: [{ name: "homework", items: [{ title: "Science project", allDay: true, due: "Fri Oct 9", owners: ["Donnie", "Britta", "Calla", "Penny"] }] }],
+    sections: [{ name: "homework", items: [{ id: "c2/p1", title: "Science project", allDay: true, due: "Fri Oct 9", owners: ["Donnie", "Britta", "Calla", "Penny"] }] }],
   });
 });
 
@@ -217,6 +217,16 @@ test("days: 7 without a query, 90 with one", async () => {
   assert.ok("error" in (await schedule({ start: "2026-10-09", days: 91, query: "swim" })).output);
 });
 
+test("a query with no days looks 90 days ahead, and an explicit days still wins", async () => {
+  const events = { ...EVENTS, donnie: [...(EVENTS.donnie ?? []), timed("dentist-nov", "Dentist", "2026-11-08", "09:30", "10:30"), timed("dentist-day-90", "Dentist", "2027-01-06", "09:30", "10:30"), timed("dentist-day-91", "Dentist", "2027-01-07", "09:30", "10:30")] };
+  const { output } = await schedule({ query: "dentist" }, OWNER, events);
+  assert.deepEqual(
+    "sections" in output ? output.sections[0]?.items.map((item) => item.date) : output,
+    ["Fri Oct 9", "Sun Nov 8", "Wed Jan 6"],
+  );
+  assert.deepEqual(titles((await schedule({ query: "dentist", days: 1 }, OWNER, events)).output), ["Dentist"]);
+});
+
 test("a query that normalizes to empty is no query and keeps the week cap", async () => {
   assert.ok("error" in (await schedule({ start: "2026-10-09", days: 8, query: "   " })).output);
   assert.ok("error" in (await schedule({ start: "2026-10-09", days: 8, query: " - " })).output);
@@ -230,8 +240,8 @@ test("a query lists whole-word title matches in one section sorted by start", as
       {
         name: "matches",
         items: [
-          { title: "Swim", time: "5:00 PM", date: "Fri Oct 9", owners: ["Donnie", "Britta", "Calla", "Penny"] },
-          { title: "Swim", time: "5:00 PM", date: "Sat Oct 10", owners: ["Donnie", "Britta", "Calla", "Penny"] },
+          { id: "c1/swim-calla-2026-10-09", title: "Swim", time: "5:00 PM", date: "Fri Oct 9", owners: ["Donnie", "Britta", "Calla", "Penny"] },
+          { id: "c1/swim-calla-2026-10-10", title: "Swim", time: "5:00 PM", date: "Sat Oct 10", owners: ["Donnie", "Britta", "Calla", "Penny"] },
         ],
       },
     ],
@@ -382,4 +392,26 @@ test("member keeps a shared calendar nobody owns, like the page's member chip", 
   });
   const output = await buildSchedule(config, { start: "2026-10-09", member: "calla" }, OWNER, NOW, runGog);
   assert.deepEqual(titles(output), ["PE uniform", "Café social", "Family dinner"]);
+});
+
+test("no family_schedule answer carries a Google calendar id: week, lookup, a kid's view or a member's", async () => {
+  const ids = { donnie: "donnie@example.com", calla: "calla.k@example.com", family: "family0123@group.calendar.google.com" };
+  const calendars = [
+    { id: ids.donnie, label: "Donnie", kind: "personal", owners: ["donnie"] },
+    { id: ids.calla, label: "Calla", kind: "personal", owners: ["calla"] },
+    { id: ids.family, label: "Family", kind: "shared", owners: ["donnie", "britta", "calla", "penny"] },
+  ];
+  const events = { [ids.donnie]: EVENTS.donnie!, [ids.calla]: EVENTS.calla!, [ids.family]: EVENTS.family! };
+  const { config, runGog } = household(events, { calendars });
+  const outputs = [
+    await buildSchedule(config, {}, OWNER, NOW, runGog),
+    await buildSchedule(config, { days: 7 }, OWNER, NOW, runGog),
+    await buildSchedule(config, { query: "dentist" }, OWNER, NOW, runGog),
+    await buildSchedule(config, {}, CALLA, NOW, runGog),
+    await buildSchedule(config, { member: "calla" }, OWNER, NOW, runGog),
+  ];
+  const wire = JSON.stringify(outputs);
+  assert.ok(wire.includes('"id":"c0/dentist"'), wire);
+  for (const id of Object.values(ids)) assert.equal(wire.includes(id), false, id);
+  assert.equal(wire.includes("@"), false);
 });

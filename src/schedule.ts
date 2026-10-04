@@ -5,6 +5,7 @@ import { CLASSES_LINE_MAX, LOOKUP_DAYS_MAX, SCHEDULE_DAYS_MAX, SCHEDULE_ITEMS_MA
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.ts";
 import { groupCopies, mergeGroup, normalTitle } from "./merge.ts";
 import { fitsHostLimits } from "./payload.ts";
+import { resolveRequester } from "./requester.ts";
 import type { CalendarConfig, CalendarKind, CalendarStateOf, Config, FamilyEvent, MemberConfig, ScheduleInput, ScheduleOutput } from "./types.ts";
 import { visibleCalendarIds, type Viewer } from "./visibility.ts";
 import { addDays, localDate, type Week } from "./week.ts";
@@ -17,18 +18,13 @@ const GUEST: Viewer = { kind: "person", username: undefined };
 
 export type ScheduleCaller = { viewer: Viewer; me?: string };
 
-/**
- * Who is asking, from the host's tool context only. A Discord sender is the roster
- * person with that exact discordId or a guest; the owner flag counts only off Discord.
- */
+/** Who is reading. A Discord sender is the roster person with that exact discordId or a guest; the owner flag counts only off Discord. */
 export function scheduleCaller(members: readonly MemberConfig[], context: FeatureInvocationContext): ScheduleCaller {
-  if (context.source !== "tool") return { viewer: GUEST };
-  const { messageChannel, requesterSenderId, senderIsOwner } = context.tool;
-  if (messageChannel === "discord") {
-    const person = requesterSenderId === undefined ? undefined : members.find((member) => member.discordId === requesterSenderId);
-    return person ? { viewer: { kind: "person", username: person.profileId }, me: person.profileId } : { viewer: GUEST };
+  const requester = resolveRequester(members, context);
+  if (requester.from === "discord" && requester.member) {
+    return { viewer: { kind: "person", username: requester.member.profileId }, me: requester.member.profileId };
   }
-  return { viewer: senderIsOwner === true ? { kind: "owner" } : GUEST };
+  return { viewer: requester.from === "tool" && requester.senderIsOwner ? { kind: "owner" } : GUEST };
 }
 
 type ReadEvent = FamilyEvent & { google?: GoogleEventFields };
@@ -94,7 +90,8 @@ export async function buildSchedule(
   const query = input.query === undefined ? [] : words(input.query);
   // A query with no words would match everything, so it reads as no query and keeps the week cap.
   const lookup = query.length > 0;
-  const days = input.days ?? 1;
+  // "When's the dentist?" means the coming months, not today, so a lookup defaults to its whole range.
+  const days = input.days ?? (lookup ? LOOKUP_DAYS_MAX : 1);
   if (days > (lookup ? LOOKUP_DAYS_MAX : SCHEDULE_DAYS_MAX)) {
     return { error: lookup ? `days must be ${LOOKUP_DAYS_MAX} or fewer.` : `days must be ${SCHEDULE_DAYS_MAX} or fewer without a query.` };
   }
@@ -163,6 +160,7 @@ export async function buildSchedule(
     .sort((a, b) => (sortKey(a.event) < sortKey(b.event) ? -1 : sortKey(a.event) > sortKey(b.event) ? 1 : a.event.title.localeCompare(b.event.title)));
 
   const item = ({ event, due, owners }: (typeof merged)[number]): Item => ({
+    id: event.id,
     title: event.title,
     ...(event.allDay ? { allDay: true as const } : { time: clockTime(event.start, timezone) }),
     ...(days > 1 ? { date: dayLabel(dayOf(event)) } : {}),

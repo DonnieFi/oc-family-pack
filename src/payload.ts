@@ -70,6 +70,7 @@ export async function buildWeekPayload(
   now: number,
   readWeather: () => Promise<SourceState<WeatherCard>>,
   viewer: Viewer,
+  access: { canEdit: boolean; grantReadOnly: boolean } = { canEdit: false, grantReadOnly: false },
 ): Promise<WeekPayload> {
   let week: Week;
   try {
@@ -98,5 +99,8 @@ export async function buildWeekPayload(
     calendars: shown.map(calendarRef),
     calendar,
     weather,
+    // The demo has no Google calendar to write to.
+    canEdit: access.canEdit && !config.demo,
+    calendarsReadOnly: access.canEdit && !config.demo && access.grantReadOnly,
   });
 }

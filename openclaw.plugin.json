@@ -110,6 +110,23 @@
         "minLength": 1,
         "maxLength": 1024
       },
+      "writes": {
+        "anyOf": [
+          {
+            "type": "string",
+            "const": "on"
+          },
+          {
+            "type": "string",
+            "const": "confirm"
+          },
+          {
+            "type": "string",
+            "const": "off"
+          }
+        ],
+        "default": "on"
+      },
       "members": {
         "type": "array",
         "items": {
@@ -255,14 +272,18 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/937de607f088a555498bf1c840b5466ccfa6333eccddfa35a510c27af4da13fb/index.js",
+    "entry": "dist/control-ui/49a3a18c898fac9788f14d7c35ee8a865c6f0f43b4c681875aa5a59ebb05fdf1/index.js",
     "styles": [
-      "dist/control-ui/937de607f088a555498bf1c840b5466ccfa6333eccddfa35a510c27af4da13fb/index.css"
+      "dist/control-ui/49a3a18c898fac9788f14d7c35ee8a865c6f0f43b4c681875aa5a59ebb05fdf1/index.css"
     ]
   },
   "contracts": {
     "tools": [
-      "family_schedule"
+      "family_schedule",
+      "calendar_create",
+      "calendar_update",
+      "calendar_move",
+      "calendar_delete"
     ]
   }
 }

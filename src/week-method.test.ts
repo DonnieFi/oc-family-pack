@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { parseConfig } from "./config.ts";
 import { familyWeek } from "./handlers.ts";
 import type { WeekPayload } from "./types.ts";
-import { viewerOf, weekMethod } from "./week-method.ts";
+import { canEditOf, viewerOf, weekMethod } from "./week-method.ts";
+import { grantHolder } from "./grant.ts";
 
 type Client = Parameters<typeof viewerOf>[0];
 const client = (fields: Record<string, unknown>) => fields as unknown as Client;
@@ -74,4 +75,25 @@ test("a start outside what Family can show is a request error", async () => {
   const reply = await call({ start: "9999-12-31" }, TOKEN);
   assert.equal(reply.ok, false);
   assert.equal(reply.error?.code, "INVALID_REQUEST");
+});
+
+test("edit controls follow the connection's granted scopes only; the read-only notice needs both edit rights and a read-only grant", async () => {
+  assert.equal(canEditOf(client({ connect: { scopes: ["operator.read", "operator.write"] } })), true);
+  assert.equal(canEditOf(client({ connect: { scopes: ["operator.admin"] } })), true);
+  for (const other of [client({ connect: { scopes: ["operator.read"] } }), client({ connect: {} }), client({}), null as unknown as Client]) {
+    assert.equal(canEditOf(other), false, JSON.stringify(other));
+  }
+  const live = parseConfig({ timezone: "America/Toronto", calendars: [] });
+  const flags = async (canEdit: boolean, grant: "read-only" | "read-write", demo = false) => {
+    const week = await familyWeek(demo ? config : live, { now: () => Date.parse("2026-09-30T16:00:00Z"), fetchWeather: async () => new Response("", { status: 503 }), grant: grantHolder(grant) })(
+      {},
+      { kind: "owner" },
+      canEdit,
+    );
+    return [week.canEdit, week.calendarsReadOnly];
+  };
+  assert.deepEqual(await flags(true, "read-write"), [true, false]);
+  assert.deepEqual(await flags(true, "read-only"), [true, true]);
+  assert.deepEqual(await flags(false, "read-only"), [false, false]);
+  assert.deepEqual(await flags(true, "read-only", true), [false, false]);
 });

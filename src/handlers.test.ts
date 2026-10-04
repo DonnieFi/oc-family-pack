@@ -63,6 +63,8 @@ test("family.week returns one literal demo week to the owner", async () => {
       ],
     },
     weather: { status: "unconfigured", hint: "Add location { lat, lon } to the plugin config to show local weather." },
+    canEdit: false,
+    calendarsReadOnly: false,
   });
   assert.equal(Value.Check(WeekPayloadSchema, week), true);
 });

@@ -47,10 +47,11 @@ async function readCalendar(config, calendar, since, runGog) {
  * Google changed underneath them. State is in memory: a restart takes a fresh
  * baseline, and a calendar's first successful read never counts as a change.
  * gog drops the milliseconds from `--since`, so the newest event comes back on
- * every poll; only a strictly newer `updated` is a change.
+ * every poll; only a strictly newer `updated` is a change. Each poll also
+ * re-reads gog's grant into `grant`, so a fixed grant clears a read-only status.
  */
 export function watchCalendars(options) {
-    const { config, runGog, events, logger, schedule = unrefSchedule } = options;
+    const { config, runGog, events, logger, schedule = unrefSchedule, grant } = options;
     if (config.demo || config.calendars.length === 0)
         return () => { };
     const marks = new Map();
@@ -66,7 +67,10 @@ export function watchCalendars(options) {
         }
     };
     const poll = async (first) => {
-        const reads = await Promise.all(config.calendars.map(async (calendar) => [calendar, await readCalendar(config, calendar, marks.get(calendar.key) ?? FIRST_SINCE, runGog)]));
+        const [reads] = await Promise.all([
+            Promise.all(config.calendars.map(async (calendar) => [calendar, await readCalendar(config, calendar, marks.get(calendar.key) ?? FIRST_SINCE, runGog)])),
+            grant?.refresh(runGog, config.gogPath),
+        ]);
         if (stopped)
             return;
         let changed = false;

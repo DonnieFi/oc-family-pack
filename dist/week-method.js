@@ -2,6 +2,7 @@ import { ErrorCodes, errorShape } from "openclaw/plugin-sdk/gateway-runtime";
 import { Value } from "typebox/value";
 import { ConfigError } from "./config.js";
 import { WeekInputSchema } from "./contract.js";
+import { pageRole } from "./write-permissions.js";
 /**
  * Who signed in, read only from fields the published Gateway client type
  * carries, never from request params. A Gateway-attested user (the household
@@ -24,6 +25,10 @@ export function viewerOf(client) {
         return { kind: "owner" };
     return { kind: "person", username: undefined };
 }
+/** Whether the page shows edit controls: the same scope rule as the write gate, from the connection's granted scopes. */
+export function canEditOf(client) {
+    return pageRole({ scopes: client?.connect?.scopes ?? [] }) === "parent";
+}
 /** The `family.week` Gateway method: the week, filtered for whoever is asking. */
 export function weekMethod(week) {
     return async ({ params, client, respond }) => {
@@ -32,7 +37,7 @@ export function weekMethod(week) {
             return;
         }
         try {
-            respond(true, await week(params, viewerOf(client)));
+            respond(true, await week(params, viewerOf(client), canEditOf(client)));
         }
         catch (error) {
             const message = error instanceof Error ? error.message : String(error);

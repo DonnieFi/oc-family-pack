@@ -5,11 +5,12 @@ export const MAX_MEMBERS = 32;
 export const MAX_CALENDARS = 16;
 /**
  * Feature results are capped at 4096 JSON nodes, counting every value. With every list at its
- * maximum, the fixed part costs 845 nodes: root 1, mode 1, range 4, today 1, days 29 (7 x 4 + 1),
+ * maximum, the fixed part costs 847 nodes: root 1, mode 1, range 4, today 1, days 29 (7 x 4 + 1),
  * members 161 (32 x 5 + 1), calendars 593 (16 x (5 + 32 owners) + 1), calendar state 20
- * (object, status, data, warnings, 16 warnings), weather 35 (with 8 forecast periods).
+ * (object, status, data, warnings, 16 warnings), weather 35 (with 8 forecast periods), and the
+ * two write flags.
  * A single-source event costs 9 nodes (object plus 8 fields) and up to 7 more as a day reference
- * on every day it spans, so (4096 - 845) / 16 = 203 such events fit; 200 leaves a margin.
+ * on every day it spans, so (4096 - 847) / 16 = 203 such events fit; 200 leaves a margin.
  * A merged event adds calendarKeys, 3 to 17 more nodes (the array plus 2 to 16 keys), so a week
  * heavy with merges can pass 4096 under this cap. fitWeek checks the real payload against the
  * host's limits and sends a calendar error instead of a week the host would reject.
@@ -24,13 +25,8 @@ export const LABEL_MAX = 200;
 export const MESSAGE_MAX = 1000;
 /** Google event description limit, kept under the 8 KiB API cap. */
 export const DESCRIPTION_MAX = 8000;
-export const RRULE_MAX = 500;
-export const MAX_RRULES = 8;
-/** gog accepts at most five `--reminder` values. */
-export const MAX_REMINDERS = 5;
-export const REMINDER_MAX = 32;
-export const MAX_ATTENDEES = 64;
-export const ATTENDEE_MAX = 320;
+/** Bernie's idempotency key limit (email_service.py:603-610), for a page write's requestId. */
+export const REQUEST_ID_MAX = 256;
 /** family.today keeps the three most urgent lines. */
 export const MAX_HIGHLIGHTS = 3;
 /**
@@ -116,21 +112,21 @@ const eventDetails = {
   allDay: Type.Optional(Type.Boolean()),
   location: Type.Optional(Text(LOCATION_MAX)),
   description: Type.Optional(Text(DESCRIPTION_MAX)),
-  rrules: Type.Optional(Type.Array(NonEmpty(RRULE_MAX), { maxItems: MAX_RRULES })),
-  reminders: Type.Optional(Type.Array(NonEmpty(REMINDER_MAX), { maxItems: MAX_REMINDERS })),
-  attendees: Type.Optional(Type.Array(NonEmpty(ATTENDEE_MAX), { maxItems: MAX_ATTENDEES })),
 };
+/** One per submit, so two submits are two requests. calendar-write's checkKey runs on it too. */
+const RequestId = Type.String({ minLength: 1, maxLength: REQUEST_ID_MAX, pattern: "^[^\\r\\n]+$" });
 
 /**
- * One calendar write, discriminated by `op`. Calendars are wire keys (`c0`), and
- * `id` is the wire event id (`c0/...`), so Google calendar ids never appear here.
- * Exported for the write pipeline. Not a registered operation until that handler exists.
+ * One calendar write from the page, discriminated by `op`. Calendars are wire keys (`c0`), and
+ * `id` is the wire event id (`c0/...`), so Google calendar ids never appear here. A repeating
+ * event's occurrence id already names its original start.
  */
 export const CalendarWriteSchema = Type.Union([
   Type.Object(
     {
       op: Type.Literal("create"),
-      calendarKey: Type.Optional(NonEmpty(8)),
+      requestId: RequestId,
+      calendarKey: NonEmpty(8),
       title: NonEmpty(TITLE_MAX),
       start: NonEmpty(32),
       end: NonEmpty(32),
@@ -141,9 +137,9 @@ export const CalendarWriteSchema = Type.Union([
   Type.Object(
     {
       op: Type.Literal("update"),
+      requestId: RequestId,
       id: NonEmpty(EVENT_ID_MAX),
       scope: Type.Optional(RecurrenceScope),
-      originalStart: Type.Optional(NonEmpty(32)),
       title: Type.Optional(NonEmpty(TITLE_MAX)),
       start: Type.Optional(NonEmpty(32)),
       end: Type.Optional(NonEmpty(32)),
@@ -154,6 +150,7 @@ export const CalendarWriteSchema = Type.Union([
   Type.Object(
     {
       op: Type.Literal("move"),
+      requestId: RequestId,
       id: NonEmpty(EVENT_ID_MAX),
       destinationKey: NonEmpty(8),
     },
@@ -162,13 +159,17 @@ export const CalendarWriteSchema = Type.Union([
   Type.Object(
     {
       op: Type.Literal("delete"),
+      requestId: RequestId,
       id: NonEmpty(EVENT_ID_MAX),
       scope: Type.Optional(RecurrenceScope),
-      originalStart: Type.Optional(NonEmpty(32)),
     },
     { additionalProperties: false },
   ),
 ]);
+
+/** A page write's answer: whether it happened, and ux's line. No event id, no key. */
+export const CalendarWriteResultSchema = Type.Object({ ok: Type.Boolean(), message: Text(MESSAGE_MAX) }, { additionalProperties: false });
+export const CALENDAR_WRITE_ACTION = "family.calendar.write";
 
 /** Highlights plus today's noteworthy events. Exported only; registered when its handler exists. */
 export const TodayPayloadSchema = Type.Object(
@@ -235,6 +236,10 @@ export const WeekPayloadSchema = Type.Object({
     Failed,
   ]),
   weather: WeatherStateSchema,
+  /** The viewer's connection may write (operator.write or operator.admin): the page shows edit controls. */
+  canEdit: Type.Boolean(),
+  /** A viewer who may write, while the Google grant is read-only: the page says so instead. */
+  calendarsReadOnly: Type.Boolean(),
 });
 
 /**
@@ -258,7 +263,7 @@ export const ScheduleInputSchema = Type.Object(
   {
     start: Type.Optional(Type.String({ pattern: ISO_DATE, description: "First day, YYYY-MM-DD in the family's timezone. Defaults to today." })),
     days: Type.Optional(
-      Type.Integer({ minimum: 1, maximum: LOOKUP_DAYS_MAX, description: "How many days from start. Defaults to 1. At most 7, or 90 with a query." }),
+      Type.Integer({ minimum: 1, maximum: LOOKUP_DAYS_MAX, description: "How many days from start. Defaults to 1, or 90 with a query. At most 7, or 90 with a query." }),
     ),
     member: Type.Optional(
       Type.String({
@@ -280,6 +285,8 @@ export const ScheduleInputSchema = Type.Object(
 
 const ScheduleItemSchema = Type.Object(
   {
+    /** The wire id (`c0/...`) the calendar write tools take. A merged event's is its first copy's. */
+    id: Text(EVENT_ID_MAX),
     title: Text(TITLE_MAX),
     /** "8:05 AM" for a timed event; all-day events carry `allDay` instead. */
     time: Type.Optional(Text(16)),
@@ -352,6 +359,12 @@ export const contract = defineFeatureContract({
       input: ScheduleInputSchema,
       output: ScheduleOutputSchema,
       tool: { name: "family_schedule", label: "Family schedule" },
+    },
+    [CALENDAR_WRITE_ACTION]: {
+      kind: "action",
+      description: "Change, move or delete one event from the page (or add one). Each submit carries its own requestId. Answers with the line to show.",
+      input: CalendarWriteSchema,
+      output: CalendarWriteResultSchema,
     },
   },
   events: {

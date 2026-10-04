@@ -42,6 +42,7 @@ test("discord ids and device MACs stay off the week payload", async () => {
   assert.equal(wire.includes("primaryMac"), false);
   assert.equal(wire.includes("aa:bb:cc:dd:ee:01"), false);
   assert.equal(wire.includes("aa:bb:cc:dd:ee:02"), false);
+  assert.equal(wire.includes("school-feed@group.calendar.google.com"), false, "calendars travel as keys");
 });
 
 test("demo mode renders a synthetic week with a roster, calendars, colors, and day buckets", async () => {
@@ -138,12 +139,14 @@ function busiestWeek(eventCount: number, event: (index: number) => Omit<FamilyEv
         sourceUrl: "https://weather.gc.ca/",
       },
     },
+    canEdit: true,
+    calendarsReadOnly: true,
   };
 }
 
 test("the busiest allowed week fits the host's node budget and the output schema", () => {
   const payload = busiestWeek(200);
-  assert.deepEqual([jsonNodeCount(payload), Value.Check(WeekPayloadSchema, payload), fitWeek(payload) === payload], [4045, true, true]);
+  assert.deepEqual([jsonNodeCount(payload), Value.Check(WeekPayloadSchema, payload), fitWeek(payload) === payload], [4047, true, true]);
 });
 
 test("a week over the event cap or the host's size limit becomes a calendar error instead of a rejected query", () => {
@@ -155,7 +158,7 @@ test("a week over the event cap or the host's size limit becomes a calendar erro
     [tooMany, tooLarge].map((payload) => [payload.calendar, payload.days.flatMap((day) => day.eventIds).length, payload.members.length, payload.weather.status]),
     [
       [{ status: "error", message: "This week has 201 events, more than Family can show at once. Remove a busy calendar from the plugin config." }, 0, 32, "ok"],
-      [{ status: "error", message: "This week is 418667 bytes, more than Family can show at once. Remove a busy calendar from the plugin config." }, 0, 32, "ok"],
+      [{ status: "error", message: "This week is 418707 bytes, more than Family can show at once. Remove a busy calendar from the plugin config." }, 0, 32, "ok"],
     ],
   );
   assert.equal(Value.Check(WeekPayloadSchema, tooMany), true);
@@ -246,7 +249,7 @@ test("copies merge after the visibility filter, so a kid never sees a hidden cal
   }
 });
 
-test("family.week is byte-identical to the 00a3483 build for a week with a merged copy and Google fields", async () => {
+test("family.week is byte-identical to the 00a3483 build, plus the two write flags, for a week with a merged copy and Google fields", async () => {
   const dir = mkdtempSync(join(tmpdir(), "ocfp-golden-"));
   const gogPath = join(dir, "gog");
   const fixtures = join(import.meta.dirname, "fixtures");
@@ -279,7 +282,9 @@ test("family.week is byte-identical to the 00a3483 build for a week with a merge
   try {
     const payload = await buildWeekPayload(config, "2026-09-28", NOW, noWeather, OWNER);
     // Printed by the same setup at 00a3483, before reads kept Google fields for the classifier.
-    assert.equal(JSON.stringify(payload), readFileSync(join(fixtures, "week-00a3483.json"), "utf8"));
+    // s5k.28 appended the write flags; an owner's page with no write scope reads both false.
+    const golden = readFileSync(join(fixtures, "week-00a3483.json"), "utf8").replace(/}$/, ',"canEdit":false,"calendarsReadOnly":false}');
+    assert.equal(JSON.stringify(payload), golden);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
