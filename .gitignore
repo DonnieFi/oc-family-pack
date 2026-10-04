@@ -5,6 +5,7 @@
 !/README.md
 !/FAQ.md
 !/HOUSEHOLD-LAN.md
+!/CHANGELOG.md
 !/LICENSE
 !/package.json
 !/pnpm-lock.yaml
@@ -27,6 +28,7 @@
 !/README.md
 !/FAQ.md
 !/HOUSEHOLD-LAN.md
+!/CHANGELOG.md
 !/skills/**/SKILL.md
 !/AGENTS.md
 !/.agents/**/*.md
