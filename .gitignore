@@ -39,9 +39,12 @@
 
 # Planning, research, audits and proof artifacts: local only.
 # The plan map (docs/overview.html) is public, served by GitHub Pages.
+# docs/readme holds the demo renders embedded in README.md.
 !/docs/
 /docs/*
 !/docs/overview.html
+!/docs/readme/
+!/docs/readme/*.png
 
 node_modules/
 coverage/
