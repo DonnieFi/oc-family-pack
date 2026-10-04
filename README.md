@@ -124,6 +124,8 @@ Family Pack reads `plugins.entries["oc-family-pack"].config`. Each `profileId` i
 
 Set `demo: true` to preview the page with a sample week before connecting a calendar.
 
+Set `garbageIcsUrl` to your city's waste collection calendar, an `.ics` link such as a ReCollect feed (for a `webcal://` link, use `https://` instead). The `garbage_schedule` tool then answers garbage-day questions with the curbside pickups for the next two weeks. The feed is read at most once a week; if it is down, the last copy is used until the Gateway restarts.
+
 ## How it fits into OpenClaw
 
 Family Pack reuses what OpenClaw already owns instead of rebuilding it.

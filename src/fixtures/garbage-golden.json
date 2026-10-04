@@ -1,0 +1,547 @@
+{
+ "source": "Bernie bot/garbage_service.py via s5k.21-bernie-golden.py; tool text bot/tools/home.py:545-551; brief line bot/ui/embeds.py:74-75",
+ "timezone": "America/Halifax",
+ "parsed": [
+  {
+   "date": "2026-09-28",
+   "summary": "Garbage and Green Cart"
+  },
+  {
+   "date": "2026-10-05",
+   "summary": "Recycling and Green Cart"
+  },
+  {
+   "date": "2026-10-05",
+   "summary": "Leaf and Yard Waste"
+  },
+  {
+   "date": "2026-10-10",
+   "summary": "Christmas Tree Depot Drop-off"
+  },
+  {
+   "date": "2026-10-12",
+   "summary": "Garbage, Recycling and Green Cart"
+  },
+  {
+   "date": "2026-10-13",
+   "summary": "Mobile HSW Event"
+  },
+  {
+   "date": "2026-10-14",
+   "summary": "Community Clothing Swap"
+  },
+  {
+   "date": "2026-10-18",
+   "summary": "Mobile HSW Drop-off"
+  },
+  {
+   "date": "2026-10-19",
+   "summary": "Garbage and Recycling (Thanksgiving week: collection is one day later)"
+  },
+  {
+   "date": "2026-10-26",
+   "summary": "Yard Waste"
+  },
+  {
+   "date": "2026-11-02",
+   "summary": "Green Cart"
+  },
+  {
+   "date": "2026-11-03",
+   "summary": "Organics and Recycling"
+  },
+  {
+   "date": "2026-11-09",
+   "summary": "Garbage"
+  },
+  {
+   "date": "2026-11-10",
+   "summary": "Recycling"
+  },
+  {
+   "date": "2026-11-16",
+   "summary": "Organics"
+  }
+ ],
+ "cases": [
+  {
+   "now": "2026-09-27T12:00:00-03:00",
+   "next14": [
+    {
+     "date": "2026-09-28",
+     "summary": "Garbage and Green Bin",
+     "icon": "🗑️"
+    },
+    {
+     "date": "2026-10-05",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-10-05",
+     "summary": "Collection",
+     "icon": "🚛"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Sep 28: Garbage and Green Bin\n- Monday, Oct 05: Green Bin and Recycling\n- Monday, Oct 05: Collection",
+   "tomorrow": {
+    "date": "2026-09-28",
+    "summary": "Garbage and Green Bin",
+    "icon": "🗑️"
+   },
+   "briefLine": "🗑️ **Garbage tomorrow:** Garbage And Green Bin"
+  },
+  {
+   "now": "2026-10-04T12:00:00-03:00",
+   "next14": [
+    {
+     "date": "2026-10-05",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-10-05",
+     "summary": "Collection",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-10-12",
+     "summary": "Garbage, Green Bin, and Recycling",
+     "icon": "🗑️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Oct 05: Green Bin and Recycling\n- Monday, Oct 05: Collection\n- Monday, Oct 12: Garbage, Green Bin, and Recycling",
+   "tomorrow": {
+    "date": "2026-10-05",
+    "summary": "Green Bin and Recycling",
+    "icon": "♻️"
+   },
+   "briefLine": "♻️ **Garbage tomorrow:** Green Bin And Recycling"
+  },
+  {
+   "now": "2026-10-04T23:30:00-03:00",
+   "next14": [
+    {
+     "date": "2026-10-05",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-10-05",
+     "summary": "Collection",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-10-12",
+     "summary": "Garbage, Green Bin, and Recycling",
+     "icon": "🗑️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Oct 05: Green Bin and Recycling\n- Monday, Oct 05: Collection\n- Monday, Oct 12: Garbage, Green Bin, and Recycling",
+   "tomorrow": {
+    "date": "2026-10-05",
+    "summary": "Green Bin and Recycling",
+    "icon": "♻️"
+   },
+   "briefLine": "♻️ **Garbage tomorrow:** Green Bin And Recycling"
+  },
+  {
+   "now": "2026-10-05T07:00:00-03:00",
+   "next14": [
+    {
+     "date": "2026-10-05",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-10-05",
+     "summary": "Collection",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-10-12",
+     "summary": "Garbage, Green Bin, and Recycling",
+     "icon": "🗑️"
+    },
+    {
+     "date": "2026-10-19",
+     "summary": "Garbage and Recycling",
+     "icon": "🗑️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Oct 05: Green Bin and Recycling\n- Monday, Oct 05: Collection\n- Monday, Oct 12: Garbage, Green Bin, and Recycling\n- Monday, Oct 19: Garbage and Recycling",
+   "tomorrow": null,
+   "briefLine": null
+  },
+  {
+   "now": "2026-10-11T12:00:00-03:00",
+   "next14": [
+    {
+     "date": "2026-10-12",
+     "summary": "Garbage, Green Bin, and Recycling",
+     "icon": "🗑️"
+    },
+    {
+     "date": "2026-10-19",
+     "summary": "Garbage and Recycling",
+     "icon": "🗑️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Oct 12: Garbage, Green Bin, and Recycling\n- Monday, Oct 19: Garbage and Recycling",
+   "tomorrow": {
+    "date": "2026-10-12",
+    "summary": "Garbage, Green Bin, and Recycling",
+    "icon": "🗑️"
+   },
+   "briefLine": "🗑️ **Garbage tomorrow:** Garbage, Green Bin, And Recycling"
+  },
+  {
+   "now": "2026-10-18T12:00:00-03:00",
+   "next14": [
+    {
+     "date": "2026-10-19",
+     "summary": "Garbage and Recycling",
+     "icon": "🗑️"
+    },
+    {
+     "date": "2026-10-26",
+     "summary": "Collection",
+     "icon": "🚛"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Oct 19: Garbage and Recycling\n- Monday, Oct 26: Collection",
+   "tomorrow": {
+    "date": "2026-10-19",
+    "summary": "Garbage and Recycling",
+    "icon": "🗑️"
+   },
+   "briefLine": "🗑️ **Garbage tomorrow:** Garbage And Recycling"
+  },
+  {
+   "now": "2026-10-21T12:00:00-03:00",
+   "next14": [
+    {
+     "date": "2026-10-26",
+     "summary": "Collection",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-11-02",
+     "summary": "Green Bin",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-11-03",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Oct 26: Collection\n- Monday, Nov 02: Green Bin\n- Tuesday, Nov 03: Green Bin and Recycling",
+   "tomorrow": null,
+   "briefLine": null
+  },
+  {
+   "now": "2026-10-25T12:00:00-03:00",
+   "next14": [
+    {
+     "date": "2026-10-26",
+     "summary": "Collection",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-11-02",
+     "summary": "Green Bin",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-11-03",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Oct 26: Collection\n- Monday, Nov 02: Green Bin\n- Tuesday, Nov 03: Green Bin and Recycling",
+   "tomorrow": {
+    "date": "2026-10-26",
+    "summary": "Collection",
+    "icon": "🚛"
+   },
+   "briefLine": "🚛 **Garbage tomorrow:** Collection"
+  },
+  {
+   "now": "2026-11-01T12:00:00-04:00",
+   "next14": [
+    {
+     "date": "2026-11-02",
+     "summary": "Green Bin",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-11-03",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-11-09",
+     "summary": "Garbage",
+     "icon": "🗑️"
+    },
+    {
+     "date": "2026-11-10",
+     "summary": "Recycling",
+     "icon": "♻️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Nov 02: Green Bin\n- Tuesday, Nov 03: Green Bin and Recycling\n- Monday, Nov 09: Garbage\n- Tuesday, Nov 10: Recycling",
+   "tomorrow": {
+    "date": "2026-11-02",
+    "summary": "Green Bin",
+    "icon": "🚛"
+   },
+   "briefLine": "🚛 **Garbage tomorrow:** Green Bin"
+  },
+  {
+   "now": "2026-11-02T12:00:00-04:00",
+   "next14": [
+    {
+     "date": "2026-11-02",
+     "summary": "Green Bin",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-11-03",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-11-09",
+     "summary": "Garbage",
+     "icon": "🗑️"
+    },
+    {
+     "date": "2026-11-10",
+     "summary": "Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-11-16",
+     "summary": "Green Bin",
+     "icon": "♻️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Nov 02: Green Bin\n- Tuesday, Nov 03: Green Bin and Recycling\n- Monday, Nov 09: Garbage\n- Tuesday, Nov 10: Recycling\n- Monday, Nov 16: Green Bin",
+   "tomorrow": {
+    "date": "2026-11-03",
+    "summary": "Green Bin and Recycling",
+    "icon": "♻️"
+   },
+   "briefLine": "♻️ **Garbage tomorrow:** Green Bin And Recycling"
+  },
+  {
+   "now": "2026-11-15T12:00:00-04:00",
+   "next14": [
+    {
+     "date": "2026-11-16",
+     "summary": "Green Bin",
+     "icon": "♻️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Nov 16: Green Bin",
+   "tomorrow": {
+    "date": "2026-11-16",
+    "summary": "Green Bin",
+    "icon": "♻️"
+   },
+   "briefLine": "♻️ **Garbage tomorrow:** Green Bin"
+  },
+  {
+   "now": "2026-11-20T12:00:00-04:00",
+   "next14": [],
+   "toolText": "No upcoming garbage/recycling collections found.",
+   "tomorrow": null,
+   "briefLine": null
+  },
+  {
+   "now": "2026-10-31T23:30:00-03:00",
+   "next14": [
+    {
+     "date": "2026-11-02",
+     "summary": "Green Bin",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-11-03",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-11-09",
+     "summary": "Garbage",
+     "icon": "🗑️"
+    },
+    {
+     "date": "2026-11-10",
+     "summary": "Recycling",
+     "icon": "♻️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Nov 02: Green Bin\n- Tuesday, Nov 03: Green Bin and Recycling\n- Monday, Nov 09: Garbage\n- Tuesday, Nov 10: Recycling",
+   "tomorrow": null,
+   "briefLine": null
+  },
+  {
+   "now": "2026-11-01T00:30:00-03:00",
+   "next14": [
+    {
+     "date": "2026-11-02",
+     "summary": "Green Bin",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-11-03",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-11-09",
+     "summary": "Garbage",
+     "icon": "🗑️"
+    },
+    {
+     "date": "2026-11-10",
+     "summary": "Recycling",
+     "icon": "♻️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Nov 02: Green Bin\n- Tuesday, Nov 03: Green Bin and Recycling\n- Monday, Nov 09: Garbage\n- Tuesday, Nov 10: Recycling",
+   "tomorrow": {
+    "date": "2026-11-02",
+    "summary": "Green Bin",
+    "icon": "🚛"
+   },
+   "briefLine": "🚛 **Garbage tomorrow:** Green Bin"
+  },
+  {
+   "now": "2026-11-01T01:30:00-03:00",
+   "next14": [
+    {
+     "date": "2026-11-02",
+     "summary": "Green Bin",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-11-03",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-11-09",
+     "summary": "Garbage",
+     "icon": "🗑️"
+    },
+    {
+     "date": "2026-11-10",
+     "summary": "Recycling",
+     "icon": "♻️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Nov 02: Green Bin\n- Tuesday, Nov 03: Green Bin and Recycling\n- Monday, Nov 09: Garbage\n- Tuesday, Nov 10: Recycling",
+   "tomorrow": {
+    "date": "2026-11-02",
+    "summary": "Green Bin",
+    "icon": "🚛"
+   },
+   "briefLine": "🚛 **Garbage tomorrow:** Green Bin"
+  },
+  {
+   "now": "2026-11-01T20:00:00-04:00",
+   "next14": [
+    {
+     "date": "2026-11-02",
+     "summary": "Green Bin",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-11-03",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-11-09",
+     "summary": "Garbage",
+     "icon": "🗑️"
+    },
+    {
+     "date": "2026-11-10",
+     "summary": "Recycling",
+     "icon": "♻️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Nov 02: Green Bin\n- Tuesday, Nov 03: Green Bin and Recycling\n- Monday, Nov 09: Garbage\n- Tuesday, Nov 10: Recycling",
+   "tomorrow": {
+    "date": "2026-11-02",
+    "summary": "Green Bin",
+    "icon": "🚛"
+   },
+   "briefLine": "🚛 **Garbage tomorrow:** Green Bin"
+  },
+  {
+   "now": "2026-11-01T23:30:00-04:00",
+   "next14": [
+    {
+     "date": "2026-11-02",
+     "summary": "Green Bin",
+     "icon": "🚛"
+    },
+    {
+     "date": "2026-11-03",
+     "summary": "Green Bin and Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-11-09",
+     "summary": "Garbage",
+     "icon": "🗑️"
+    },
+    {
+     "date": "2026-11-10",
+     "summary": "Recycling",
+     "icon": "♻️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Nov 02: Green Bin\n- Tuesday, Nov 03: Green Bin and Recycling\n- Monday, Nov 09: Garbage\n- Tuesday, Nov 10: Recycling",
+   "tomorrow": {
+    "date": "2026-11-02",
+    "summary": "Green Bin",
+    "icon": "🚛"
+   },
+   "briefLine": "🚛 **Garbage tomorrow:** Green Bin"
+  },
+  {
+   "now": "2026-11-08T20:00:00-04:00",
+   "next14": [
+    {
+     "date": "2026-11-09",
+     "summary": "Garbage",
+     "icon": "🗑️"
+    },
+    {
+     "date": "2026-11-10",
+     "summary": "Recycling",
+     "icon": "♻️"
+    },
+    {
+     "date": "2026-11-16",
+     "summary": "Green Bin",
+     "icon": "♻️"
+    }
+   ],
+   "toolText": "Upcoming collections:\n- Monday, Nov 09: Garbage\n- Tuesday, Nov 10: Recycling\n- Monday, Nov 16: Green Bin",
+   "tomorrow": {
+    "date": "2026-11-09",
+    "summary": "Garbage",
+    "icon": "🗑️"
+   },
+   "briefLine": "🗑️ **Garbage tomorrow:** Garbage"
+  }
+ ]
+}

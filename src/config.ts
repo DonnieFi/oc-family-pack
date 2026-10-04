@@ -1,5 +1,5 @@
 import { Type } from "typebox";
-import { MAX_CALENDARS, MAX_MEMBERS } from "./contract.ts";
+import { LINK_MAX, MAX_CALENDARS, MAX_MEMBERS } from "./contract.ts";
 import type { CalendarConfig, CalendarKind, Config, Location, MemberConfig, MemberDevice, MemberRole, WriteMode } from "./types.ts";
 
 const ROLES: readonly MemberRole[] = ["parent", "kid", "guest"];
@@ -33,6 +33,7 @@ export const ConfigSchema = Type.Object(
         { additionalProperties: false },
       ),
     ),
+    garbageIcsUrl: Type.Optional(Type.String({ minLength: 1, maxLength: LINK_MAX })),
     gogPath: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
     writes: Type.Optional(Type.Union(WRITE_MODES.map((mode) => Type.Literal(mode)), { default: "on" })),
     members: Type.Optional(
@@ -250,6 +251,20 @@ function calendar(value: unknown, index: number, profileIds: ReadonlySet<string>
   };
 }
 
+function feedUrl(value: unknown, field: string): string {
+  const url = text(value, field);
+  let protocol: string | undefined;
+  try {
+    protocol = new URL(url).protocol;
+  } catch {
+    protocol = undefined;
+  }
+  if (protocol !== "https:" && protocol !== "http:") {
+    throw new ConfigError(field, "must be an http or https link to an .ics calendar (for a webcal:// link, use https:// instead)");
+  }
+  return url;
+}
+
 function discordId(value: unknown, field: string): string {
   const id = text(value, field);
   if (!DISCORD_ID.test(id)) {
@@ -308,6 +323,9 @@ export function parseConfig(raw: unknown): Config {
   const parsedLocation = location(value.location);
   if (parsedLocation) {
     config.location = parsedLocation;
+  }
+  if (value.garbageIcsUrl !== undefined) {
+    config.garbageIcsUrl = feedUrl(value.garbageIcsUrl, "garbageIcsUrl");
   }
   return config;
 }

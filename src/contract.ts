@@ -335,6 +335,25 @@ export const ScheduleOutputSchema = Type.Union([
   ),
 ]);
 
+/** `garbage_schedule` lists curbside pickups from today through 14 days out, as Bernie's tool did. */
+export const GARBAGE_DAYS = 14;
+export const GARBAGE_ITEMS_MAX = 30;
+
+/** An error, a note when nothing is due, or the pickups: "Monday, Oct 05" and "Garbage and Recycling". */
+export const GarbageOutputSchema = Type.Union([
+  Type.Object({ error: Text(MESSAGE_MAX) }, { additionalProperties: false }),
+  Type.Object({ note: Text(MESSAGE_MAX) }, { additionalProperties: false }),
+  Type.Object(
+    {
+      collections: Type.Array(Type.Object({ date: Text(32), what: Text(64) }, { additionalProperties: false }), {
+        minItems: 1,
+        maxItems: GARBAGE_ITEMS_MAX,
+      }),
+    },
+    { additionalProperties: false },
+  ),
+]);
+
 export const contract = defineFeatureContract({
   pluginId: "oc-family-pack",
   operations: {
@@ -359,6 +378,15 @@ export const contract = defineFeatureContract({
       input: ScheduleInputSchema,
       output: ScheduleOutputSchema,
       tool: { name: "family_schedule", label: "Family schedule" },
+    },
+    "family.garbage": {
+      kind: "query",
+      description:
+        "Read the curbside garbage, green bin and recycling pickups from today through the next 14 days, from the city's collection calendar. " +
+        "Dates are in the family's timezone. Write the reply yourself from these fields.",
+      input: EmptyInput,
+      output: GarbageOutputSchema,
+      tool: { name: "garbage_schedule", label: "Garbage day" },
     },
     [CALENDAR_WRITE_ACTION]: {
       kind: "action",

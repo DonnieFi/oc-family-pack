@@ -4,6 +4,7 @@ import type {
   CalendarRefSchema,
   CalendarWriteSchema,
   FamilyEventSchema,
+  GarbageOutputSchema,
   MembersPayloadSchema,
   ScheduleInputSchema,
   ScheduleOutputSchema,
@@ -52,6 +53,8 @@ export type Config = {
   timezone: string;
   demo: boolean;
   location?: Location;
+  /** The city's collection calendar (ICS). Stays in config; never in a tool reply. */
+  garbageIcsUrl?: string;
   gogPath: string;
   writes: WriteMode;
   members: MemberConfig[];
@@ -74,6 +77,7 @@ export type TodayPayload = Static<typeof TodayPayloadSchema>;
 export type CalendarChanged = Static<typeof CalendarChangedSchema>;
 export type ScheduleInput = Static<typeof ScheduleInputSchema>;
 export type ScheduleOutput = Static<typeof ScheduleOutputSchema>;
+export type GarbageOutput = Static<typeof GarbageOutputSchema>;
 export type CalendarState = WeekPayload["calendar"];
 /** A calendar read whose events carry more than the wire fields, such as gog's Google fields. */
 export type CalendarStateOf<E extends FamilyEvent> = Exclude<CalendarState, { status: "ok" }> | { status: "ok"; data: E[]; warnings: string[] };

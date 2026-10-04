@@ -2,9 +2,10 @@ import type { FeatureInvocationContext } from "openclaw/plugin-sdk/feature-plugi
 import type { RunGog } from "./calendar-gog.ts";
 import type { GrantHolder } from "./grant.ts";
 import { DEMO_MEMBERS } from "./demo.ts";
+import { createGarbageFeed, garbageSchedule, type GarbageFetch } from "./garbage.ts";
 import { buildWeekPayload } from "./payload.ts";
 import { buildSchedule, scheduleCaller } from "./schedule.ts";
-import type { Config, MembersPayload, ScheduleInput, ScheduleOutput, WeatherState, WeekPayload } from "./types.ts";
+import type { Config, GarbageOutput, MembersPayload, ScheduleInput, ScheduleOutput, WeatherState, WeekPayload } from "./types.ts";
 import type { Viewer } from "./visibility.ts";
 import { readEcWeather } from "./weather-ec.ts";
 import { resolveMembers } from "./week.ts";
@@ -18,6 +19,10 @@ export type FamilyHandlerDeps = {
   runGog?: RunGog;
   /** The Google grant, for the page's read-only notice. */
   grant?: Pick<GrantHolder, "get">;
+  /** The garbage calendar fetch. Defaults to the global fetch. */
+  fetchGarbage?: GarbageFetch;
+  /** Where a failed garbage-calendar read is reported (never with the URL). */
+  log?: (line: string) => void;
 };
 
 /** The week `viewer` may see, for the `family.week` Gateway method. */
@@ -30,10 +35,11 @@ export function familyWeek(config: Config, deps: FamilyHandlerDeps = {}) {
     });
 }
 
-/** Handlers for the registered queries. `family.schedule` is also the agent's `family_schedule` tool. */
+/** Handlers for the registered queries. `family.schedule` and `family.garbage` are also the agent's `family_schedule` and `garbage_schedule` tools. */
 export function familyHandlers(config: Config, deps: FamilyHandlerDeps = {}) {
   const readWeather = () => readEcWeather(config.location, deps.fetchWeather);
   const now = deps.now ?? Date.now;
+  const garbage = createGarbageFeed(deps.fetchGarbage, deps.log ? { log: deps.log } : {});
   return {
     "family.members": (): MembersPayload => ({
       members: resolveMembers(config.demo ? DEMO_MEMBERS : config.members),
@@ -41,5 +47,6 @@ export function familyHandlers(config: Config, deps: FamilyHandlerDeps = {}) {
     "family.weather": (): Promise<WeatherState> => readWeather(),
     "family.schedule": (input: ScheduleInput, context: FeatureInvocationContext): Promise<ScheduleOutput> =>
       buildSchedule(config, input, scheduleCaller(config.demo ? DEMO_MEMBERS : config.members, context), now(), deps.runGog),
+    "family.garbage": (): Promise<GarbageOutput> => garbageSchedule(garbage, config, now()),
   };
 }

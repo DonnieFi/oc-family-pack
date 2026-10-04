@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { parseConfig } from "./config.ts";
 
@@ -221,4 +222,23 @@ test("writes is on by default, takes confirm or off, and refuses anything else",
   for (const writes of ["OFF", "", true, null, "draft"]) {
     assert.throws(() => parseConfig({ writes }), { message: "oc-family-pack config: writes must be one of on, confirm, off" }, String(writes));
   }
+});
+
+test("garbageIcsUrl is optional, trimmed, and only an http or https link", () => {
+  assert.equal(Object.hasOwn(parseConfig({ timezone: "UTC" }), "garbageIcsUrl"), false);
+  const url = "https://recollect.example/api/places/PLACE-1234/services/waste/events.en.ics?client_id=abc";
+  assert.equal(parseConfig({ timezone: "UTC", garbageIcsUrl: ` ${url} ` }).garbageIcsUrl, url);
+  assert.equal(parseConfig({ timezone: "UTC", garbageIcsUrl: "HTTP://127.0.0.1:8080/feed.ics" }).garbageIcsUrl, "HTTP://127.0.0.1:8080/feed.ics");
+  const message = "oc-family-pack config: garbageIcsUrl must be an http or https link to an .ics calendar (for a webcal:// link, use https:// instead)";
+  for (const bad of ["webcal://recollect.example/feed.ics", "file:///etc/passwd", "recollect.example/feed.ics", "javascript:alert(1)"]) {
+    assert.throws(() => parseConfig({ timezone: "UTC", garbageIcsUrl: bad }), { name: "ConfigError", message }, bad);
+  }
+  for (const bad of ["", "  ", 42]) {
+    assert.throws(() => parseConfig({ timezone: "UTC", garbageIcsUrl: bad }), { name: "ConfigError", message: "oc-family-pack config: garbageIcsUrl must be a non-empty string" }, String(bad));
+  }
+});
+
+test("the garbage calendar link is marked sensitive, so the Control UI masks it: the link encodes the household's address", () => {
+  const manifest = JSON.parse(readFileSync(new URL("../openclaw.plugin.json", import.meta.url), "utf8")) as { uiHints: Record<string, { sensitive?: boolean }> };
+  assert.equal(manifest.uiHints.garbageIcsUrl?.sensitive, true);
 });

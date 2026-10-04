@@ -133,3 +133,39 @@ test("family.weather handler returns the Environment Canada card from the fixtur
   });
   assert.equal(Value.Check(WeatherStateSchema, weather), true);
 });
+
+test("family.garbage reads the configured calendar in the family's zone and keeps one copy across calls", async () => {
+  const ics = readFileSync(new URL("./fixtures/garbage-recollect.ics", import.meta.url), "utf8");
+  const url = "https://recollect.example/places/PLACE-1234/events.en.ics";
+  const config = parseConfig({ timezone: "America/Halifax", garbageIcsUrl: url });
+  const fetched: string[] = [];
+  const handlers = familyHandlers(config, {
+    now: () => Date.parse("2026-10-05T02:30:00Z"),
+    fetchGarbage: async (input) => {
+      fetched.push(input);
+      return new Response(ics, { status: 200 });
+    },
+  });
+  const expected = {
+    collections: [
+      { date: "Monday, Oct 05", what: "Green Bin and Recycling" },
+      { date: "Monday, Oct 05", what: "Collection" },
+      { date: "Monday, Oct 12", what: "Garbage, Green Bin, and Recycling" },
+    ],
+  };
+  assert.deepEqual(await handlers["family.garbage"](), expected);
+  assert.deepEqual(await handlers["family.garbage"](), expected);
+  assert.deepEqual(fetched, [url]);
+});
+
+test("family.garbage reports a failed read to the plugin log, without the link", async () => {
+  const url = "https://recollect.example/places/PLACE-1234/events.en.ics?client_id=secret-77";
+  const lines: string[] = [];
+  const handlers = familyHandlers(parseConfig({ timezone: "America/Halifax", garbageIcsUrl: url }), {
+    now: () => Date.parse("2026-10-05T02:30:00Z"),
+    fetchGarbage: async () => new Response(url, { status: 503 }),
+    log: (line) => lines.push(line),
+  });
+  assert.deepEqual(await handlers["family.garbage"](), { error: "I couldn't get the garbage schedule just now. Try again in a bit." });
+  assert.deepEqual(lines, ["oc-family-pack: the garbage calendar answered HTTP 503; no garbage line until it answers"]);
+});

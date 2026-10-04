@@ -47,6 +47,14 @@
       "properties": [
         "location"
       ]
+    },
+    {
+      "id": "family-garbage",
+      "title": "Garbage day",
+      "order": 40,
+      "properties": [
+        "garbageIcsUrl"
+      ]
     }
   ],
   "uiHints": {
@@ -66,6 +74,12 @@
     "location": {
       "label": "Weather location",
       "help": "Environment Canada forecasts; Canada only."
+    },
+    "garbageIcsUrl": {
+      "label": "Garbage day calendar",
+      "placeholder": "https://…/events.en.ics",
+      "help": "Your city's collection calendar link (.ics), for example from ReCollect. Only curbside pickups are shown.",
+      "sensitive": true
     }
   },
   "configSchema": {
@@ -104,6 +118,11 @@
           }
         },
         "additionalProperties": false
+      },
+      "garbageIcsUrl": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2048
       },
       "gogPath": {
         "type": "string",
@@ -272,13 +291,14 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/49a3a18c898fac9788f14d7c35ee8a865c6f0f43b4c681875aa5a59ebb05fdf1/index.js",
+    "entry": "dist/control-ui/21eea24316e5562b05517ec58a3bf7757f0ab6835b6fa71134cf3b26281a6e37/index.js",
     "styles": [
-      "dist/control-ui/49a3a18c898fac9788f14d7c35ee8a865c6f0f43b4c681875aa5a59ebb05fdf1/index.css"
+      "dist/control-ui/21eea24316e5562b05517ec58a3bf7757f0ab6835b6fa71134cf3b26281a6e37/index.css"
     ]
   },
   "contracts": {
     "tools": [
+      "garbage_schedule",
       "family_schedule",
       "calendar_create",
       "calendar_update",

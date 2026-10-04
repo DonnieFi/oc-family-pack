@@ -87,7 +87,7 @@ const plugin = defineFeaturePlugin({
     // method sees who signed in. Same operator.read scope the queries get.
     api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant })), { scope: "operator.read" });
     return {
-      ...familyHandlers(config),
+      ...familyHandlers(config, { log: (line) => api.logger.warn(line) }),
       [CALENDAR_WRITE_ACTION]: pageWrite({
         config,
         runGog: execGog(),

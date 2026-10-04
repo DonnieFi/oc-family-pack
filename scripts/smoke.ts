@@ -15,6 +15,7 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash, generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { createRequire } from "node:module";
+import { createServer as createHttpServer } from "node:http";
 import { createServer } from "node:net";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,6 +27,7 @@ import { buildWeekPayload, fitsHostLimits, jsonNodeCount } from "../src/payload.
 import { planAccess } from "../src/access.ts";
 import { planSetup } from "../src/setup.ts";
 import { POLL_MS } from "../src/calendar-watch.ts";
+import { addDays } from "../src/week.ts";
 import { isolatedGatewayEnv } from "./isolated-env.ts";
 
 const ROOT = dirname(dirname(new URL(import.meta.url).pathname));
@@ -78,7 +80,8 @@ type Step =
   | "update path"
   | "household sign-in"
   | "calendar watch"
-  | "family_schedule tool";
+  | "family_schedule tool"
+  | "garbage_schedule tool";
 
 let workDir: string | undefined;
 let gateway: ChildProcess | undefined;
@@ -1067,8 +1070,10 @@ async function main(): Promise<void> {
 
   await deviceTokenOwner(port, TOKEN);
   await householdSignIn(env, configPath, port, logPath);
-  await calendarWatch(env, configPath, port, logPath);
+  const garbage = await garbageFeed();
+  await calendarWatch(env, configPath, port, logPath, garbage.url);
   await scheduleTool(configPath, port);
+  await garbageTool(port, garbage);
 }
 
 /** Stand-ins for what a real household fills in, used only on this isolated Gateway. */
@@ -1380,8 +1385,9 @@ function awaitEvents(port: number, user: string, events: string[], timeoutMs: nu
  * then reports a newer edit, and the next poll must reach a signed-in page as
  * plugin events. No Google call and no real gog: gogPath is the stand-in.
  * Waits one poll interval, since the interval is deliberately not configurable.
+ * The config also points garbageIcsUrl at step 14's stand-in city calendar.
  */
-async function calendarWatch(env: NodeJS.ProcessEnv, configPath: string, port: number, logPath: string): Promise<void> {
+async function calendarWatch(env: NodeJS.ProcessEnv, configPath: string, port: number, logPath: string, garbageIcsUrl: string): Promise<void> {
   const step: Step = "calendar watch";
   const dir = join(dirname(configPath), "gog");
   mkdirSync(dir);
@@ -1413,6 +1419,7 @@ async function calendarWatch(env: NodeJS.ProcessEnv, configPath: string, port: n
       gogPath,
       members: [{ profileId: "alex", displayName: "Alex", role: "parent" }],
       calendars: [{ id: calendarId, label: "Family", kind: "shared" }],
+      garbageIcsUrl,
     },
   };
   writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -1450,6 +1457,20 @@ async function calendarWatch(env: NodeJS.ProcessEnv, configPath: string, port: n
  * on-time repeat in the usual line. The shared password is the owner. A caller
  * claiming Discord carries no roster sender id, so "me" is refused.
  */
+/** Calls an agent tool over the Gateway's HTTP tools endpoint as the household owner. */
+async function invokeTool(step: Step, port: number, tool: string, args: Record<string, unknown>, headers: Record<string, string> = {}): Promise<Record<string, unknown>> {
+  const response = await fetch(`http://127.0.0.1:${port}/tools/invoke`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${HOUSEHOLD_PASSWORD}`, "content-type": "application/json", ...headers },
+    body: JSON.stringify({ tool, args }),
+  });
+  const text = await response.text();
+  if (!response.ok) fail(step, `/tools/invoke answered ${response.status}: ${text.slice(0, 500)}`);
+  const body = JSON.parse(text) as { ok?: boolean; result?: { details?: unknown; content?: { type: string; text?: string }[] } };
+  const result = body.result?.details ?? JSON.parse(body.result?.content?.find((part) => part.type === "text")?.text ?? "null");
+  return result as Record<string, unknown>;
+}
+
 async function scheduleTool(configPath: string, port: number): Promise<void> {
   const step: Step = "family_schedule tool";
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(Date.now());
@@ -1463,18 +1484,7 @@ async function scheduleTool(configPath: string, port: number): Promise<void> {
       ],
     }),
   );
-  const invoke = async (args: Record<string, unknown>, headers: Record<string, string> = {}) => {
-    const response = await fetch(`http://127.0.0.1:${port}/tools/invoke`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${HOUSEHOLD_PASSWORD}`, "content-type": "application/json", ...headers },
-      body: JSON.stringify({ tool: "family_schedule", args }),
-    });
-    const text = await response.text();
-    if (!response.ok) fail(step, `/tools/invoke answered ${response.status}: ${text.slice(0, 500)}`);
-    const body = JSON.parse(text) as { ok?: boolean; result?: { details?: unknown; content?: { type: string; text?: string }[] } };
-    const result = body.result?.details ?? JSON.parse(body.result?.content?.find((part) => part.type === "text")?.text ?? "null");
-    return result as Record<string, unknown>;
-  };
+  const invoke = (args: Record<string, unknown>, headers: Record<string, string> = {}) => invokeTool(step, port, "family_schedule", args, headers);
   const owner = await invoke({});
   const expected = { sections: [{ name: "not the usual", items: [{ id: "c0/dentist", title: "Dentist", time: "12:00 PM", owners: [] }] }], usual: "Usual: Swim 5:00 PM" };
   if (JSON.stringify(owner) !== JSON.stringify(expected)) fail(step, `family_schedule returned ${JSON.stringify(owner)}, expected ${JSON.stringify(expected)}`);
@@ -1484,6 +1494,46 @@ async function scheduleTool(configPath: string, port: number): Promise<void> {
     fail(step, `a Discord caller with no roster sender id asked for "me" and got ${JSON.stringify(claimed)}`);
   }
   note('a caller claiming Discord with no roster sender id asking for "me" got the refusal and no events', step);
+}
+
+/**
+ * A stand-in city collection calendar, served from this process: garbage tomorrow, recycling
+ * in eight days, and a depot day that is not curbside. Dates follow the smoke's Toronto zone.
+ */
+async function garbageFeed(): Promise<{ url: string; today: string; hits: () => number }> {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto" }).format(Date.now());
+  const day = (offset: number) => addDays(today, offset).replaceAll("-", "");
+  const event = (offset: number, summary: string) => ["BEGIN:VEVENT", `DTSTART;VALUE=DATE:${day(offset)}`, `SUMMARY:${summary}`, "END:VEVENT"];
+  const body = ["BEGIN:VCALENDAR", ...event(8, "Recycling and Green Cart"), ...event(1, "Garbage and Green Cart"), ...event(3, "Depot Drop-off Day"), "END:VCALENDAR", ""].join("\r\n");
+  let hits = 0;
+  const server = createHttpServer((_request, response) => {
+    hits += 1;
+    response.writeHead(200, { "content-type": "text/calendar" });
+    response.end(body);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  server.unref();
+  const { port } = server.address() as { port: number };
+  return { url: `http://127.0.0.1:${port}/places/PLACE-4242/events.en.ics`, today, hits: () => hits };
+}
+
+/** 14. The garbage_schedule tool on the same Gateway reads the stand-in calendar: curbside pickups only, no link or place id. */
+async function garbageTool(port: number, feed: { today: string; hits: () => number }): Promise<void> {
+  const step: Step = "garbage_schedule tool";
+  const label = (offset: number) => {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long", month: "short", day: "2-digit" })
+        .formatToParts(Date.parse(`${addDays(feed.today, offset)}T12:00:00Z`))
+        .map((part) => [part.type, part.value]),
+    );
+    return `${parts.weekday}, ${parts.month} ${parts.day}`;
+  };
+  const answer = await invokeTool(step, port, "garbage_schedule", {});
+  const expected = { collections: [{ date: label(1), what: "Garbage and Green Bin" }, { date: label(8), what: "Green Bin and Recycling" }] };
+  if (JSON.stringify(answer) !== JSON.stringify(expected)) fail(step, `garbage_schedule returned ${JSON.stringify(answer)}, expected ${JSON.stringify(expected)}`);
+  if (/127\.0\.0\.1|PLACE|ics/.test(JSON.stringify(answer))) fail(step, `garbage_schedule leaked the feed link: ${JSON.stringify(answer)}`);
+  if (feed.hits() < 1) fail(step, "the stand-in calendar was never fetched");
+  note(`garbage_schedule read the stand-in city calendar (${feed.hits()} fetch): garbage tomorrow and recycling in eight days, the depot day left out, no link in the reply`, step);
 }
 
 try {
