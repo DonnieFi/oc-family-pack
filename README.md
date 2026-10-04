@@ -38,6 +38,21 @@ It is built for the questions a household actually asks:
 
 Daily and weekly briefs stay short. Routine items fold into a single line so the unusual things stand out.
 
+The pictures below are the demo week (Alex, Sam, Riley, and Jordan). Demo mode does not read a real calendar.
+
+<p align="center">
+  <img src="docs/readme/family-dark.png" alt="Family week in dark mode. Monday through Sunday, weather for Home, and a color for each person." width="920">
+</p>
+
+<p align="center">
+  <img src="docs/readme/family-light.png" alt="The same Family week in light mode." width="920">
+</p>
+
+<p align="center">
+  <img src="docs/readme/family-phone.png" alt="The Family page on a phone, with Sunday selected." width="280">
+  <img src="docs/readme/today.png" alt="The Today widget: Grocery run in 60 min." width="340">
+</p>
+
 ## Features
 
 | Feature | What you get | Status |
