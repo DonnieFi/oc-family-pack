@@ -157,3 +157,43 @@ accounts. A browser stays signed in as whoever used it first, until you clear
 its saved data for this site. On a shared laptop, give each person their own
 browser profile. If you want a sign-in page, sign-out or passkeys, upgrade to
 Authelia.
+
+## What is a family member?
+
+A member is the household's record of a person, in `plugins.entries.oc-family-pack.config.members`. It holds `profileId`, `displayName`, and `role` (`parent`, `kid`, or `guest`). Optional fields are `color`, `discordId`, `reminders` (`dm`, `channel`, or `off`), and `devices`.
+
+`profileId` is the sign-in username, lower case, matched exactly to the trusted-proxy user. It is not the Gateway's internal profile id. The chips on the Family page only dim events. They do not add a person, and they are not identity. At least one parent is required. The fields and the steps are in [SETUP.md](SETUP.md).
+
+## How do I add someone?
+
+`openclaw family setup --parent alex --kid riley` prints a members patch and does not save it. Usernames are lower case: letters, numbers, dots, dashes, and underscores, up to 32 characters. `alex` is valid. `Alex Smith` is not. The display name becomes the username with the first letter capitalized. Someone already in the config is left unchanged. Pass `--guest sam` for a guest.
+
+Apply it with `openclaw config patch --stdin --dry-run`, then again without `--dry-run`. The Family page does not add people. Setup does.
+
+## Where do email and phone go?
+
+This version stores no email and no phone on the member. Sign-in is the `profileId`. A Discord user id goes in `discordId`, set with `openclaw family setup --discord alex=200000000000000001`. Email aliases, if you use them, belong to the OpenClaw user profile, not this plugin.
+
+## How do I set a Discord user id?
+
+Turn on Developer Mode, right-click the person, and Copy User ID. The id is 17 to 20 digits, not a mention. Pass `--discord NAME=ID` on `openclaw family setup`, alone or with the role flags. One id per person, for someone already in the family or added in the same command. The Family page never shows the id.
+
+In LAN mode, setup also prints `users.linkChannelIdentity`. Run it after that person has signed in once. Replace `PROFILE_` with the Gateway profile id from `users.list`. Solo mode does not print it, because there is no per-person sign-in. Discord is how this version knows who "me" is in chat. The Family page works without Discord. The cutover from solo to LAN is in [HOUSEHOLD-LAN.md](HOUSEHOLD-LAN.md).
+
+## Why does setup print a patch instead of saving?
+
+`openclaw config patch` replaces a whole array. Setup copies the members you already have and appends the new ones, so a patch cannot drop someone by accident. You read it, dry-run it, then apply it.
+
+`openclaw family gog` and `openclaw family access` also change nothing by themselves. gog never passes `--readonly`. `openclaw family access` reports solo or LAN, or prints steps.
+
+## What does setup check?
+
+Five lines, each Done or To do, then one next step.
+
+- **Access mode.** `openclaw family access`.
+- **Timezone.** Set `plugins.entries.oc-family-pack.config.timezone`, for example `America/Toronto`.
+- **Location.** `lat` and `lon`. Weather is Canada only.
+- **Members.** At least one parent. In LAN mode every member must also be in `allowUsers`.
+- **Calendars.** `openclaw family gog`, then put calendar ids in config.
+
+When all five are Done, it prints "Everything is set up." A patch is not saved yet, so that run is not finished.

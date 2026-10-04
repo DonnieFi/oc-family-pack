@@ -89,7 +89,7 @@ The repository ships its built `dist/`, so a git install does not build. A diffe
 
 Calendar sign-in is `gog`, including on a headless Gateway. Run `openclaw family gog` and follow what it prints. A headless host takes two `gog auth add` commands: the first prints a URL, and the second exchanges the browser redirect (`openclaw family gog --auth-url '…'`). Repeat until it tells you to list calendars, then put those ids in the config below. The commands never pass `--readonly`. On a machine with a browser, `openclaw family gog --desktop` prints that sign-in instead of the two remote steps. If the Gateway service cannot see `gog` on `PATH`, set `gogPath` to the full path of the binary.
 
-`openclaw family setup` shows what is left: access mode, time zone, location, members, and calendars, each marked Done or To do, then the next step. Add people with `--parent`, `--kid`, or `--guest`. It never writes config. It prints a members patch. Check it with `openclaw config patch --stdin --dry-run`, then run the same command without `--dry-run` to apply it. People already in the config are kept as they are. `--discord alex=ID` adds someone's Discord user id the same way. In LAN mode, setup also prints the `users.linkChannelIdentity` command that ties that id to the person's Gateway profile.
+`openclaw family setup` shows what is left: access mode, time zone, location, members, and calendars, each marked Done or To do, then the next step. Add people with `--parent`, `--kid`, or `--guest`. It never writes config. It prints a members patch. Check it with `openclaw config patch --stdin --dry-run`, then run the same command without `--dry-run` to apply it. People already in the config are kept as they are. `--discord alex=ID` adds someone's Discord user id the same way. In LAN mode, setup also prints the `users.linkChannelIdentity` command that ties that id to the person's Gateway profile. The member record, the patch, and each checklist step are in [SETUP.md](SETUP.md).
 
 To try the page before you connect a calendar, set `demo: true` (see below). Add your configuration, then enable the plugin:
 
@@ -283,7 +283,7 @@ Shipped work is checked. Chores are still later. This version has no undo, no me
 
 ## FAQ
 
-Common questions live in [FAQ.md](FAQ.md).
+Common questions live in [FAQ.md](FAQ.md). The setup walkthrough is [SETUP.md](SETUP.md).
 
 ## License
 
