@@ -156,6 +156,18 @@ const handlers: Record<string, (input: unknown) => unknown> = {
       .get(field(input, "kind"), field(input, "target"), field(input, "kind"), field(input, "target")) as { id: number; status: string } | undefined;
     return row ? { id: Number(row.id), status: row.status } : null;
   },
+  "reminderMode.append": (input) => {
+    const mode = field(input, "mode");
+    if (mode !== "dm" && mode !== "channel" && mode !== "off") throw new Error("oc-family-pack: reminder mode is dm, channel or off");
+    const result = db.prepare("INSERT INTO oc_family_pack_reminder_mode (profile_id, mode, at) VALUES (?, ?, ?)").run(field(input, "profileId"), mode, Date.now());
+    return { id: Number(result.lastInsertRowid) };
+  },
+  "reminderMode.latest": () => {
+    const rows = db.prepare("SELECT profile_id AS profileId, mode FROM oc_family_pack_reminder_mode WHERE id IN (SELECT MAX(id) FROM oc_family_pack_reminder_mode GROUP BY profile_id)").all() as { profileId: string; mode: string }[];
+    const modes: Record<string, string> = {};
+    for (const row of rows) modes[row.profileId] = row.mode;
+    return modes;
+  },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

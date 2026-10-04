@@ -84,14 +84,14 @@ test("the built store module is the one production loads", () => {
   for (const sourceFile of mainFiles) assert.equal(sourceFile.includes("node:sqlite"), false);
 });
 
-test("a first start applies 0001 to 0003 and a second start applies nothing", async () => {
+test("a first start applies 0001 to 0004 and a second start applies nothing", async () => {
   const stateDir = tempState();
   const previous = process.umask(0o022);
   const { openFamilyStore } = await loadStore();
   try {
     const first = await openFamilyStore({ stateDir });
-    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log", "0003-delivery-log"]);
-    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log"]);
+    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode"]);
+    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode"]);
     assert.deepEqual(first.ready.unknown, []);
     assert.equal(first.ready.journalMode, "wal");
     assert.equal(first.ready.isMainThread, false);
@@ -101,13 +101,13 @@ test("a first start applies 0001 to 0003 and a second start applies nothing", as
     assert.equal(status.scriptUrl.endsWith("/dist/store-worker.js"), true);
     assertPermissions(dbPath(stateDir));
     const rows = migrationRows(dbPath(stateDir));
-    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log", "0003-delivery-log"]);
+    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode"]);
     const appliedAt = rows[0]?.applied_at;
     await first.stop();
 
     const second = await openFamilyStore({ stateDir });
     assert.deepEqual(second.ready.appliedNow, []);
-    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log"]);
+    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode"]);
     assert.equal(second.ready.journalMode, "wal");
     assertPermissions(dbPath(stateDir));
     const again = migrationRows(dbPath(stateDir));
@@ -144,6 +144,24 @@ test("the delivery log is strict and append-only, and a key is sent at most once
     assert.throws(() => sqliteJson(path, `UPDATE oc_family_pack_delivery_log SET status = 'sent' WHERE id = ${failed.id}`, true), /append-only/);
     assert.throws(() => sqliteJson(path, "DELETE FROM oc_family_pack_delivery_log", true), /append-only/);
     assert.throws(() => sqliteJson(path, "INSERT INTO oc_family_pack_delivery_log (delivery_key, kind, target, status, error_kind, at) VALUES ('k', 'daily', 't', 'held', 'other', 'soon')", true), /cannot store TEXT/);
+  } finally {
+    await store.stop();
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("reminder mode keeps the latest row per person and refuses updates", async () => {
+  const stateDir = tempState();
+  const { openFamilyStore } = await loadStore();
+  const store = await openFamilyStore({ stateDir });
+  try {
+    await store.appendReminderMode("riley", "off");
+    const latest = await store.appendReminderMode("riley", "channel");
+    await store.appendReminderMode("alex", "dm");
+    assert.deepEqual(await store.reminderModes(), { riley: "channel", alex: "dm" });
+    const path = dbPath(stateDir);
+    assert.throws(() => sqliteJson(path, `UPDATE oc_family_pack_reminder_mode SET mode = 'off' WHERE id = ${latest.id}`, true), /append-only/);
+    assert.throws(() => sqliteJson(path, "DELETE FROM oc_family_pack_reminder_mode", true), /append-only/);
   } finally {
     await store.stop();
     rmSync(stateDir, { recursive: true, force: true });
@@ -396,7 +414,7 @@ test("the family-store service opens the database, and discovery does not regist
     registerGatewayMethod() {},
     registerCli() {},
   });
-  assert.deepEqual(services.map((entry) => entry.id).sort(), ["calendar-watch", "family-store", "oc-family-pack:feature-events"]);
+  assert.deepEqual(services.map((entry) => entry.id).sort(), ["calendar-watch", "family-reminders", "family-store", "oc-family-pack:feature-events"]);
   const service = services.find((entry) => entry.id === "family-store");
   assert.ok(service);
   assert.deepEqual(service.reload?.configPrefixes, ["plugins.entries.oc-family-pack.config"]);

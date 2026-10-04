@@ -97,7 +97,15 @@
     "summaryChannel": {
       "label": "Brief channel",
       "placeholder": "family-briefs",
-      "help": "The channel name from Discord channels that gets the 7:00 AM daily brief and the Sunday 8:00 PM week ahead. Leave empty for no briefs."
+      "help": "The channel name from Discord channels that gets the 7:00 AM daily brief and the Sunday 8:00 PM week ahead. Leave empty for no briefs. Channel reminders mention people here."
+    },
+    "reminderLeadMinutes": {
+      "label": "Reminder lead times",
+      "help": "Minutes before an event to remind the people who own that calendar. 15 if left empty. An empty list sends no reminders."
+    },
+    "quietHours": {
+      "label": "Quiet hours",
+      "help": "Hours in the household timezone when reminders wait. They go out when the window ends. 22:00 to 07:00 if left empty."
     }
   },
   "configSchema": {
@@ -158,6 +166,40 @@
       "summaryChannel": {
         "type": "string",
         "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
+      },
+      "reminderLeadMinutes": {
+        "type": "array",
+        "items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10080
+        },
+        "maxItems": 8,
+        "default": [
+          15
+        ]
+      },
+      "quietHours": {
+        "type": "object",
+        "required": [
+          "startHour",
+          "endHour"
+        ],
+        "properties": {
+          "startHour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23,
+            "default": 22
+          },
+          "endHour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23,
+            "default": 7
+          }
+        },
+        "additionalProperties": false
       },
       "gogPath": {
         "type": "string",
@@ -227,6 +269,23 @@
               "minLength": 17,
               "maxLength": 20,
               "pattern": "^\\d{17,20}$"
+            },
+            "reminders": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "dm"
+                },
+                {
+                  "type": "string",
+                  "const": "channel"
+                },
+                {
+                  "type": "string",
+                  "const": "off"
+                }
+              ],
+              "default": "dm"
             },
             "devices": {
               "type": "array",
@@ -326,9 +385,9 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/80e7c1352552c4a520cf71beda66c723489098a70eae1e6eee6ef9a9c3a1fdb6/index.js",
+    "entry": "dist/control-ui/79dafa3a49c80dde76d868d9f7f74bb2bdbb99084a101a00b4c229d459f0faac/index.js",
     "styles": [
-      "dist/control-ui/80e7c1352552c4a520cf71beda66c723489098a70eae1e6eee6ef9a9c3a1fdb6/index.css"
+      "dist/control-ui/79dafa3a49c80dde76d868d9f7f74bb2bdbb99084a101a00b4c229d459f0faac/index.css"
     ]
   },
   "contracts": {
@@ -338,7 +397,8 @@
       "calendar_create",
       "calendar_update",
       "calendar_move",
-      "calendar_delete"
+      "calendar_delete",
+      "set_reminder_mode"
     ]
   }
 }

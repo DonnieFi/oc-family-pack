@@ -16,6 +16,8 @@ import type {
 } from "./contract.ts";
 
 export type MemberRole = "parent" | "kid" | "guest";
+/** Where a person's event reminders go. `channel` mentions them in the brief channel. */
+export type ReminderMode = "dm" | "channel" | "off";
 export type CalendarKind = "personal" | "shared" | "school";
 /** The operator's switch for calendar changes: on, every change waits for approval, or none at all. */
 export type WriteMode = "on" | "confirm" | "off";
@@ -35,6 +37,8 @@ export type MemberConfig = {
   role: MemberRole;
   /** Discord sender id. Stays in config; never copied onto the week payload. */
   discordId?: string;
+  /** How this person gets event reminders. Omitted means a direct message. A chat change overrides it. */
+  reminders?: ReminderMode;
   /** Normalized at parse. Stays in config; never copied onto the week payload. */
   devices: MemberDevice[];
 };
@@ -58,8 +62,12 @@ export type Config = {
   garbageIcsUrl?: string;
   /** Discord channel ids by key. Delivery targets and rows name the key, never the id. */
   channels?: Record<string, string>;
-  /** The channels key the daily and weekly briefs post to; briefs are off without it. */
+  /** The channels key the daily and weekly briefs post to; briefs are off without it. Channel reminders use it too. */
   summaryChannel?: string;
+  /** Minutes before an event to remind its owners. Empty sends nothing. Omitted means 15. */
+  reminderLeadMinutes?: number[];
+  /** Hours when reminders wait, in the household zone. Omitted means 22:00–07:00. */
+  quietHours?: { startHour: number; endHour: number };
   gogPath: string;
   writes: WriteMode;
   members: MemberConfig[];

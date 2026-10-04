@@ -1,4 +1,5 @@
 import { Worker } from "node:worker_threads";
+import type { ReminderMode } from "./types.ts";
 
 export const STORE_CLOSE_TIMEOUT_MS = 5000;
 
@@ -72,6 +73,10 @@ export type FamilyStore = {
   deliveryDone: (deliveryKey: string) => Promise<boolean>;
   /** The first row that was not sent since the last sent row for (kind, target), if any. */
   deliveryStreakStart: (kind: DeliveryKind, target: string) => Promise<{ id: number; status: DeliveryStatus } | undefined>;
+  /** Records a chat change of one person's reminder mode. The latest row wins. */
+  appendReminderMode: (profileId: string, mode: ReminderMode) => Promise<{ id: number }>;
+  /** The latest saved mode for each person who has changed it. */
+  reminderModes: () => Promise<Record<string, ReminderMode>>;
   stop: () => Promise<void>;
   spawned: () => number;
 };
@@ -296,6 +301,14 @@ async function openSession(options: {
     async deliveryStreakStart(kind, target) {
       await ensureOpen();
       return ((await post("deliveryLog.streakStart", { kind, target })) as { id: number; status: DeliveryStatus } | null) ?? undefined;
+    },
+    async appendReminderMode(profileId, mode) {
+      await ensureOpen();
+      return (await post("reminderMode.append", { profileId, mode })) as { id: number };
+    },
+    async reminderModes() {
+      await ensureOpen();
+      return (await post("reminderMode.latest", {})) as Record<string, ReminderMode>;
     },
     stop() {
       if (stopPromise) return stopPromise;

@@ -15,6 +15,7 @@ import { registerCalendarWrite, type CalendarWriteApi } from "./calendar-tools.t
 import { pageWrite } from "./page-write.ts";
 import { briefDirectory, startBriefs } from "./briefs.ts";
 import { deliver } from "./discord-delivery.ts";
+import { SET_REMINDER_MODE_TOOL, SetReminderModeSchema, reminderTool, startReminders } from "./reminders.ts";
 import { createGarbageFeed } from "./garbage.ts";
 import { readEcWeather } from "./weather-ec.ts";
 
@@ -115,12 +116,44 @@ const plugin = defineFeaturePlugin({
         },
       });
     }
+    if (api.registrationMode === "full") {
+      // Event reminders: the same minute poll, one send per owner, held through quiet hours.
+      let stopReminders: (() => void) | undefined;
+      api.registerService({
+        id: "family-reminders",
+        reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
+        async start(ctx) {
+          const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
+          const directory = briefDirectory(config);
+          stopReminders = startReminders({
+            config,
+            store: () => store,
+            deliver: (target, messages, key) => deliver(sendDurableMessageBatch, ctx.config, directory, target, messages, key),
+            log: (line) => ctx.logger.warn(line),
+          });
+        },
+        stop() {
+          stopReminders?.();
+          stopReminders = undefined;
+        },
+      });
+    }
     // The four calendar write tools and their before_tool_call approval hook, registered together.
     const writeApi: CalendarWriteApi = {
       on: (hookName, handler, opts) => api.on(hookName, handler, opts),
       registerTool: (factory, opts) => api.registerTool(factory, opts),
     };
     registerCalendarWrite(writeApi, { config, runGog: execGog(), grant: familyGrant, log: () => store });
+    api.registerTool(
+      (ctx: { messageChannel?: string; requesterSenderId?: string; senderIsOwner?: boolean; conversationReadOrigin?: string }) =>
+        reminderTool(config, () => store, {
+          channel: ctx.messageChannel,
+          senderId: ctx.requesterSenderId,
+          senderIsOwner: ctx.senderIsOwner,
+          directOperator: ctx.conversationReadOrigin === "direct-operator",
+        }),
+      { name: SET_REMINDER_MODE_TOOL },
+    );
     // The week is a Gateway method, not a feature query, because only a Gateway
     // method sees who signed in. Same operator.read scope the queries get.
     api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant })), { scope: "operator.read" });
@@ -180,6 +213,12 @@ metadata.tools.push(
     label: "Delete a calendar event",
     description: "Delete one family calendar event; some deletions wait for a parent to approve them.",
     parameters: { ...CalendarDeleteInputSchema },
+  },
+  {
+    name: SET_REMINDER_MODE_TOOL,
+    label: "Reminder delivery",
+    description: "Change how one person gets event reminders: a direct message, a mention in the brief channel, or off. A person can change their own. A parent can change anyone's.",
+    parameters: { ...SetReminderModeSchema },
   },
 );
 

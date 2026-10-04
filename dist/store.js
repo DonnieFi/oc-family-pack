@@ -199,6 +199,14 @@ async function openSession(options) {
             await ensureOpen();
             return (await post("deliveryLog.streakStart", { kind, target })) ?? undefined;
         },
+        async appendReminderMode(profileId, mode) {
+            await ensureOpen();
+            return (await post("reminderMode.append", { profileId, mode }));
+        },
+        async reminderModes() {
+            await ensureOpen();
+            return (await post("reminderMode.latest", {}));
+        },
         stop() {
             if (stopPromise)
                 return stopPromise;

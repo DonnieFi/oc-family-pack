@@ -20,7 +20,9 @@ test("a minimal live config fills defaults and keys calendars by position", () =
       demo: false,
       gogPath: "gog",
       writes: "on",
-      members: [{ ...member, devices: [] }],
+      reminderLeadMinutes: [15],
+      quietHours: { startHour: 22, endHour: 7 },
+      members: [{ ...member, devices: [], reminders: "dm" }],
       calendars: [
         { key: "c0", id: "family@group.calendar.google.com", label: "Family", kind: "shared", owners: [] },
         { key: "c1", id: "p1@example.com", label: "Parent", kind: "personal", owners: ["p1"] },
@@ -241,6 +243,17 @@ test("garbageIcsUrl is optional, trimmed, and only an http or https link", () =>
 test("the garbage calendar link is marked sensitive, so the Control UI masks it: the link encodes the household's address", () => {
   const manifest = JSON.parse(readFileSync(new URL("../openclaw.plugin.json", import.meta.url), "utf8")) as { uiHints: Record<string, { sensitive?: boolean }> };
   assert.equal(manifest.uiHints.garbageIcsUrl?.sensitive, true);
+});
+
+test("reminders default to a 15 minute lead, quiet hours 22:00 to 07:00, and a direct message", () => {
+  const parsed = parseConfig({ timezone: "UTC", members: [{ profileId: "alex", displayName: "Alex", role: "parent", reminders: "off" }] });
+  assert.deepEqual(parsed.reminderLeadMinutes, [15]);
+  assert.deepEqual(parsed.quietHours, { startHour: 22, endHour: 7 });
+  assert.equal(parsed.members[0]!.reminders, "off");
+  assert.deepEqual(parseConfig({ timezone: "UTC", reminderLeadMinutes: [60, 15], quietHours: { startHour: 21, endHour: 6 } }).reminderLeadMinutes, [60, 15]);
+  assert.throws(() => parseConfig({ timezone: "UTC", reminderLeadMinutes: [15, 15] }), /must not repeat/);
+  assert.throws(() => parseConfig({ timezone: "UTC", quietHours: { startHour: 24, endHour: 7 } }), /quietHours.startHour/);
+  assert.throws(() => parseConfig({ timezone: "UTC", members: [{ profileId: "alex", displayName: "Alex", role: "kid", reminders: "sms" }] }), /reminders must be one of/);
 });
 
 test("summaryChannel names a key in channels; a key that isn't there fails the config at load", () => {

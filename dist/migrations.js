@@ -1,4 +1,4 @@
-/** Ordered schema changes. 0001 creates the migrations table; 0002 adds the append-only write log; 0003 the delivery log. */
+/** Ordered schema changes. 0001 creates the migrations table; 0002 adds the append-only write log; 0003 the delivery log; 0004 reminder modes. */
 export const MIGRATIONS = [
     {
         id: "0001-initial",
@@ -56,5 +56,21 @@ CREATE TRIGGER oc_family_pack_delivery_log_no_update BEFORE UPDATE ON oc_family_
 BEGIN SELECT RAISE(ABORT, 'oc_family_pack_delivery_log is append-only'); END;
 CREATE TRIGGER oc_family_pack_delivery_log_no_delete BEFORE DELETE ON oc_family_pack_delivery_log
 BEGIN SELECT RAISE(ABORT, 'oc_family_pack_delivery_log is append-only'); END;`,
+    },
+    {
+        id: "0004-reminder-mode",
+        // One row per chat change of how a person gets reminders. The latest row for a profile wins.
+        // Config is the mode until the first row. Rows are never changed or removed.
+        sql: `CREATE TABLE oc_family_pack_reminder_mode (
+  id INTEGER PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('dm', 'channel', 'off')),
+  at INTEGER NOT NULL
+) STRICT;
+CREATE INDEX oc_family_pack_reminder_mode_profile ON oc_family_pack_reminder_mode (profile_id, id);
+CREATE TRIGGER oc_family_pack_reminder_mode_no_update BEFORE UPDATE ON oc_family_pack_reminder_mode
+BEGIN SELECT RAISE(ABORT, 'oc_family_pack_reminder_mode is append-only'); END;
+CREATE TRIGGER oc_family_pack_reminder_mode_no_delete BEFORE DELETE ON oc_family_pack_reminder_mode
+BEGIN SELECT RAISE(ABORT, 'oc_family_pack_reminder_mode is append-only'); END;`,
     },
 ];

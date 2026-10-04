@@ -155,19 +155,29 @@ export function alertText(brief: DueBrief, status: Exclude<DeliveryStatus, "sent
 /**
  * One alert per parent per streak: the streak is the rows since the last sent one for (kind, target),
  * named by its first row's id, so a second failure in the same streak finds the alert already done.
- * Alert rows are logged as kind alert and never raise alerts of their own.
+ * Alert rows are logged as kind alert and never raise alerts of their own. The line is the streak's
+ * first status, not the latest attempt.
  */
-async function alertParents(deps: BriefDeps, store: Store, brief: DueBrief, target: string): Promise<void> {
-  const kind = brief.kind;
+export async function alertDeliveryFailure(
+  deps: Pick<BriefDeps, "config" | "deliver">,
+  store: Store,
+  kind: Exclude<DeliveryKind, "alert">,
+  target: string,
+  textFor: (status: Exclude<DeliveryStatus, "sent">) => string,
+): Promise<void> {
   const streak = await store.deliveryStreakStart(kind, target);
   if (!streak || streak.status === "sent") return;
   const parents = (deps.config.demo ? DEMO_MEMBERS : deps.config.members).filter((member) => member.role === "parent");
   for (const parent of parents) {
     const key = `alert:${kind}:${target}:${streak.id}:${parent.profileId}`;
     if (await store.deliveryDone(key)) continue;
-    const outcome = await deps.deliver({ member: parent.profileId }, [{ text: alertText(brief, streak.status) }], key);
+    const outcome = await deps.deliver({ member: parent.profileId }, [{ text: textFor(streak.status) }], key);
     await store.appendDeliveryLog(rowOf(key, "alert", parent.profileId, outcome));
   }
+}
+
+async function alertParents(deps: BriefDeps, store: Store, brief: DueBrief, target: string): Promise<void> {
+  await alertDeliveryFailure(deps, store, brief.kind, target, (status) => alertText(brief, status));
 }
 
 /** One poll: each due brief whose key has no final row is built, sent once and logged. */

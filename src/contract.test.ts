@@ -104,7 +104,7 @@ test("queries are operator.read session actions, the page write is operator.writ
     { id: "family.weather", requiredScopes: ["operator.read"] },
   ]);
   const writes = ["calendar_create", "calendar_update", "calendar_move", "calendar_delete"];
-  assert.deepEqual(tools, [...writes.map((name) => ({ name })), { name: "garbage_schedule" }, { name: "family_schedule" }]);
+  assert.deepEqual(tools, [...writes.map((name) => ({ name })), { name: "set_reminder_mode" }, { name: "garbage_schedule" }, { name: "family_schedule" }]);
   assert.deepEqual(hooks, [{ name: "before_tool_call", priority: CALENDAR_HOOK_PRIORITY, matcher: writes }]);
   assert.deepEqual(methods, [{ method: "family.week", scope: "operator.read" }]);
   assert.equal(commands, 0);

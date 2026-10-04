@@ -3,6 +3,9 @@ import { LINK_MAX, MAX_CALENDARS, MAX_MEMBERS } from "./contract.js";
 const ROLES = ["parent", "kid", "guest"];
 const KINDS = ["personal", "shared", "school"];
 const WRITE_MODES = ["on", "confirm", "off"];
+const REMINDER_MODES = ["dm", "channel", "off"];
+const MAX_LEADS = 8;
+const MAX_LEAD_MINUTES = 7 * 24 * 60;
 // Colors land in CSS custom properties, so only accept plain color syntax.
 const CSS_COLOR = /^(?:#[0-9a-fA-F]{3,8}|(?:rgb|rgba|hsl|hsla|oklch|oklab)\([0-9.,%\s/-]+\)|[a-zA-Z]+)$/;
 /** Discord user ids are snowflakes. A mention like `<@…>` is not an id. */
@@ -16,7 +19,7 @@ const Name = Type.String({ minLength: 1, maxLength: 200 });
 const MacInput = Type.String({ minLength: 1, maxLength: 64 });
 // Structural rules the host checks before the plugin loads. parseConfig adds the
 // cross-field rules (zone validity, owner references, uniqueness), lowercases
-// roster ids, normalizes MACs, and fills defaults. phone, aliases, and reminders
+// roster ids, normalizes MACs, and fills defaults. phone and aliases
 // are left to the beads that read them.
 export const ConfigSchema = Type.Object({
     demo: Type.Optional(Type.Boolean({ default: false })),
@@ -32,6 +35,11 @@ export const ConfigSchema = Type.Object({
         additionalProperties: false,
     })),
     summaryChannel: Type.Optional(Type.String({ pattern: CHANNEL_KEY.source })),
+    reminderLeadMinutes: Type.Optional(Type.Array(Type.Integer({ minimum: 0, maximum: MAX_LEAD_MINUTES }), { maxItems: MAX_LEADS, default: [15] })),
+    quietHours: Type.Optional(Type.Object({
+        startHour: Type.Integer({ minimum: 0, maximum: 23, default: 22 }),
+        endHour: Type.Integer({ minimum: 0, maximum: 23, default: 7 }),
+    }, { additionalProperties: false })),
     gogPath: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
     writes: Type.Optional(Type.Union(WRITE_MODES.map((mode) => Type.Literal(mode)), { default: "on" })),
     members: Type.Optional(Type.Array(Type.Object({
@@ -40,6 +48,7 @@ export const ConfigSchema = Type.Object({
         role: Type.Union(ROLES.map((role) => Type.Literal(role))),
         color: Type.Optional(Type.String({ maxLength: 100, pattern: CSS_COLOR.source })),
         discordId: Type.Optional(Type.String({ minLength: 17, maxLength: 20, pattern: DISCORD_ID.source })),
+        reminders: Type.Optional(Type.Union(REMINDER_MODES.map((mode) => Type.Literal(mode)), { default: "dm" })),
         devices: Type.Optional(Type.Array(Type.Object({
             label: Name,
             primaryMac: MacInput,
@@ -179,6 +188,7 @@ function member(value, index) {
     if (value.discordId !== undefined) {
         parsed.discordId = discordId(value.discordId, `${field}.discordId`);
     }
+    parsed.reminders = value.reminders === undefined ? "dm" : oneOf(value.reminders, `${field}.reminders`, REMINDER_MODES);
     return parsed;
 }
 function calendar(value, index, profileIds) {
@@ -215,6 +225,34 @@ function feedUrl(value, field) {
         throw new ConfigError(field, "must be an http or https link to an .ics calendar (for a webcal:// link, use https:// instead)");
     }
     return url;
+}
+function hour(value, field) {
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 23) {
+        throw new ConfigError(field, "must be an hour from 0 to 23");
+    }
+    return value;
+}
+function leadMinutes(value) {
+    if (value === undefined)
+        return [15];
+    const items = atMost(list(value, "reminderLeadMinutes"), "reminderLeadMinutes", MAX_LEADS);
+    const leads = [];
+    for (const [index, item] of items.entries()) {
+        if (typeof item !== "number" || !Number.isInteger(item) || item < 0 || item > MAX_LEAD_MINUTES) {
+            throw new ConfigError(`reminderLeadMinutes[${index}]`, `must be a whole number of minutes from 0 to ${MAX_LEAD_MINUTES}`);
+        }
+        leads.push(item);
+    }
+    if (new Set(leads).size !== leads.length)
+        throw new ConfigError("reminderLeadMinutes", "must not repeat a lead time");
+    return leads;
+}
+function quietHours(value) {
+    if (value === undefined)
+        return { startHour: 22, endHour: 7 };
+    if (!isRecord(value))
+        throw new ConfigError("quietHours", "must be an object with startHour and endHour");
+    return { startHour: hour(value.startHour, "quietHours.startHour"), endHour: hour(value.endHour, "quietHours.endHour") };
 }
 function discordId(value, field) {
     const id = text(value, field);
@@ -296,5 +334,7 @@ export function parseConfig(raw) {
         }
         config.summaryChannel = key;
     }
+    config.reminderLeadMinutes = leadMinutes(value.reminderLeadMinutes);
+    config.quietHours = quietHours(value.quietHours);
     return config;
 }
