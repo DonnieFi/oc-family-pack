@@ -84,14 +84,14 @@ test("the built store module is the one production loads", () => {
   for (const sourceFile of mainFiles) assert.equal(sourceFile.includes("node:sqlite"), false);
 });
 
-test("a first start applies 0001 and 0002 and a second start applies nothing", async () => {
+test("a first start applies 0001 to 0003 and a second start applies nothing", async () => {
   const stateDir = tempState();
   const previous = process.umask(0o022);
   const { openFamilyStore } = await loadStore();
   try {
     const first = await openFamilyStore({ stateDir });
-    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log"]);
-    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log"]);
+    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log", "0003-delivery-log"]);
+    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log"]);
     assert.deepEqual(first.ready.unknown, []);
     assert.equal(first.ready.journalMode, "wal");
     assert.equal(first.ready.isMainThread, false);
@@ -101,13 +101,13 @@ test("a first start applies 0001 and 0002 and a second start applies nothing", a
     assert.equal(status.scriptUrl.endsWith("/dist/store-worker.js"), true);
     assertPermissions(dbPath(stateDir));
     const rows = migrationRows(dbPath(stateDir));
-    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log"]);
+    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log", "0003-delivery-log"]);
     const appliedAt = rows[0]?.applied_at;
     await first.stop();
 
     const second = await openFamilyStore({ stateDir });
     assert.deepEqual(second.ready.appliedNow, []);
-    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log"]);
+    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log"]);
     assert.equal(second.ready.journalMode, "wal");
     assertPermissions(dbPath(stateDir));
     const again = migrationRows(dbPath(stateDir));
@@ -115,6 +115,59 @@ test("a first start applies 0001 and 0002 and a second start applies nothing", a
     await second.stop();
   } finally {
     process.umask(previous);
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("the delivery log is strict and append-only, and a key is sent at most once", async () => {
+  const stateDir = tempState();
+  const { openFamilyStore } = await loadStore();
+  const store = await openFamilyStore({ stateDir });
+  try {
+    const base = { kind: "daily", target: "family" } as const;
+    const failed = await store.appendDeliveryLog({ ...base, deliveryKey: "daily-summary:2026-11-01", status: "failed", errorKind: "no-channel", errorDetail: "no Discord id" });
+    assert.equal(await store.deliveryDone("daily-summary:2026-11-01"), false, "failed is tried again");
+    for (const status of ["held", "unknown", "partial"] as const) {
+      const key = `daily-summary:${status}`;
+      await store.appendDeliveryLog({ ...base, deliveryKey: key, status, errorKind: "other", errorDetail: "x" });
+      assert.equal(await store.deliveryDone(key), true, status);
+    }
+    await store.appendDeliveryLog({ ...base, deliveryKey: "daily-summary:2026-11-01", status: "sent", receiptJson: "{}" });
+    assert.equal(await store.deliveryDone("daily-summary:2026-11-01"), true);
+    await assert.rejects(store.appendDeliveryLog({ ...base, deliveryKey: "daily-summary:2026-11-01", status: "sent" }), /UNIQUE/);
+    await assert.rejects(store.appendDeliveryLog({ ...base, deliveryKey: "k", status: "sent", errorKind: "other" }), /CHECK/, "a sent row has no error_kind");
+    await assert.rejects(store.appendDeliveryLog({ ...base, deliveryKey: "k", status: "unknown" }), /CHECK/, "every other row has one");
+    await assert.rejects(store.appendDeliveryLog({ ...base, deliveryKey: "k", status: "unknown", errorKind: "other", errorDetail: "d".repeat(201) }), /CHECK/);
+    await assert.rejects(store.appendDeliveryLog({ ...base, deliveryKey: "k", status: "lost" as "sent" }), /CHECK/);
+    await assert.rejects(store.appendDeliveryLog({ ...base, kind: "digest" as "daily", deliveryKey: "k", status: "sent" }), /CHECK/);
+    const path = dbPath(stateDir);
+    assert.throws(() => sqliteJson(path, `UPDATE oc_family_pack_delivery_log SET status = 'sent' WHERE id = ${failed.id}`, true), /append-only/);
+    assert.throws(() => sqliteJson(path, "DELETE FROM oc_family_pack_delivery_log", true), /append-only/);
+    assert.throws(() => sqliteJson(path, "INSERT INTO oc_family_pack_delivery_log (delivery_key, kind, target, status, error_kind, at) VALUES ('k', 'daily', 't', 'held', 'other', 'soon')", true), /cannot store TEXT/);
+  } finally {
+    await store.stop();
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("a streak starts at the first row that was not sent since the last sent one for its kind and target", async () => {
+  const stateDir = tempState();
+  const { openFamilyStore } = await loadStore();
+  const store = await openFamilyStore({ stateDir });
+  try {
+    const row = (deliveryKey: string, status: "sent" | "held" | "unknown", target = "family") =>
+      store.appendDeliveryLog({ deliveryKey, kind: "daily", target, status, ...(status === "sent" ? {} : { errorKind: "other" as const }) });
+    assert.equal(await store.deliveryStreakStart("daily", "family"), undefined);
+    await row("a", "held");
+    await row("b", "sent");
+    assert.equal(await store.deliveryStreakStart("daily", "family"), undefined);
+    const first = await row("c", "unknown");
+    await row("d", "held");
+    await row("e", "held", "other-channel");
+    assert.deepEqual(await store.deliveryStreakStart("daily", "family"), { id: first.id, status: "unknown" });
+    assert.equal(await store.deliveryStreakStart("weekly", "family"), undefined);
+  } finally {
+    await store.stop();
     rmSync(stateDir, { recursive: true, force: true });
   }
 });

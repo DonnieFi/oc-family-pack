@@ -27,7 +27,7 @@ export function scheduleCaller(members: readonly MemberConfig[], context: Featur
   return { viewer: requester.from === "tool" && requester.senderIsOwner ? { kind: "owner" } : GUEST };
 }
 
-type ReadEvent = FamilyEvent & { google?: GoogleEventFields };
+export type ReadEvent = FamilyEvent & { google?: GoogleEventFields };
 type Section = "homework" | "uniforms" | "not the usual" | "classes" | "usual";
 /** When copies of one event classify differently, the earliest section here wins. */
 const PRECEDENCE: readonly Section[] = ["homework", "uniforms", "not the usual", "classes", "usual"];
@@ -70,7 +70,8 @@ function classify(event: ReadEvent, kind: CalendarKind): Copy {
   return { ...event, section, input, ...(due === undefined ? {} : { due }) };
 }
 
-async function readEvents(config: Config, shown: CalendarConfig[], span: Pick<Week, "range">, runGog?: RunGog): Promise<CalendarStateOf<ReadEvent>> {
+/** Events from `shown`: demo events in demo mode, else gog. */
+export async function readEvents(config: Config, shown: CalendarConfig[], span: Pick<Week, "range">, runGog?: RunGog): Promise<CalendarStateOf<ReadEvent>> {
   if (config.demo) {
     const keys = new Set(shown.map((calendar) => calendar.key));
     return { status: "ok", data: demoEvents(span).filter((event) => keys.has(event.calendarKey)), warnings: [] };

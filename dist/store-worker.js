@@ -100,6 +100,25 @@ const handlers = {
             .run(field(row, "requestKey"), field(row, "baseKey"), field(row, "requester"), field(row, "op"), field(row, "calendarId"), optional(row, "eventId"), optional(row, "beforeJson"), optional(row, "afterJson"), field(row, "status"), Date.now());
         return { inserted: Number(result.changes) === 1 };
     },
+    "deliveryLog.append": (input) => {
+        const row = isRecord(input) ? input.row : undefined;
+        const result = db
+            .prepare("INSERT INTO oc_family_pack_delivery_log (delivery_key, kind, target, status, error_kind, error_detail, receipt_json, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+            .run(field(row, "deliveryKey"), field(row, "kind"), field(row, "target"), field(row, "status"), optional(row, "errorKind"), optional(row, "errorDetail"), optional(row, "receiptJson"), Date.now());
+        return { id: Number(result.lastInsertRowid) };
+    },
+    // failed is the one status that is tried again: nothing reached the host.
+    "deliveryLog.done": (input) => db
+        .prepare("SELECT 1 AS found FROM oc_family_pack_delivery_log WHERE delivery_key = ? AND status IN ('sent', 'partial', 'held', 'unknown') LIMIT 1")
+        .get(field(input, "deliveryKey")) !== undefined,
+    "deliveryLog.streakStart": (input) => {
+        const row = db
+            .prepare(`SELECT id, status FROM oc_family_pack_delivery_log WHERE kind = ? AND target = ? AND status <> 'sent'
+         AND id > COALESCE((SELECT MAX(id) FROM oc_family_pack_delivery_log WHERE kind = ? AND target = ? AND status = 'sent'), 0)
+         ORDER BY id LIMIT 1`)
+            .get(field(input, "kind"), field(input, "target"), field(input, "kind"), field(input, "target"));
+        return row ? { id: Number(row.id), status: row.status } : null;
+    },
 };
 function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -107,7 +126,7 @@ function isRecord(value) {
 function field(input, name) {
     const value = isRecord(input) ? input[name] : undefined;
     if (typeof value !== "string" || value.length === 0)
-        throw new Error(`oc-family-pack: write log needs ${name}`);
+        throw new Error(`oc-family-pack: store call needs ${name}`);
     return value;
 }
 function optional(input, name) {

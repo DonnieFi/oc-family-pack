@@ -187,6 +187,18 @@ async function openSession(options) {
             await ensureOpen();
             return (await post("writeLog.append", { row, ifAbsent }));
         },
+        async appendDeliveryLog(row) {
+            await ensureOpen();
+            return (await post("deliveryLog.append", { row }));
+        },
+        async deliveryDone(deliveryKey) {
+            await ensureOpen();
+            return (await post("deliveryLog.done", { deliveryKey })) === true;
+        },
+        async deliveryStreakStart(kind, target) {
+            await ensureOpen();
+            return (await post("deliveryLog.streakStart", { kind, target })) ?? undefined;
+        },
         stop() {
             if (stopPromise)
                 return stopPromise;

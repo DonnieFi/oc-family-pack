@@ -111,6 +111,9 @@ function googleFields(eventId, item) {
         fields.recurringEventId = recurringEventId;
     if (originalStart)
         fields.originalStart = originalStart;
+    const description = nonEmpty(item.description);
+    if (description)
+        fields.description = description;
     return fields;
 }
 /** gog prints Google Calendar event resources, either bare (`--results-only`) or under `events`; anything else is unreadable. */

@@ -1,4 +1,4 @@
-/** Ordered schema changes. 0001 creates the migrations table; 0002 adds the append-only write log. */
+/** Ordered schema changes. 0001 creates the migrations table; 0002 adds the append-only write log; 0003 the delivery log. */
 export const MIGRATIONS = [
     {
         id: "0001-initial",
@@ -32,5 +32,29 @@ CREATE TRIGGER oc_family_pack_write_log_no_update BEFORE UPDATE ON oc_family_pac
 BEGIN SELECT RAISE(ABORT, 'oc_family_pack_write_log is append-only'); END;
 CREATE TRIGGER oc_family_pack_write_log_no_delete BEFORE DELETE ON oc_family_pack_write_log
 BEGIN SELECT RAISE(ABORT, 'oc_family_pack_write_log is append-only'); END;`,
+    },
+    {
+        id: "0003-delivery-log",
+        // One row per delivery attempt. `target` is a member id or a channels key, never a Discord id.
+        // error_kind is set on every row but a sent one. A key is sent at most once; rows are never
+        // changed or removed.
+        sql: `CREATE TABLE oc_family_pack_delivery_log (
+  id INTEGER PRIMARY KEY,
+  delivery_key TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('daily', 'weekly', 'reminder', 'household', 'alert')),
+  target TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('sent', 'partial', 'failed', 'held', 'unknown')),
+  error_kind TEXT CHECK (error_kind IN ('no-permission', 'no-channel', 'other')),
+  error_detail TEXT CHECK (length(error_detail) <= 200),
+  receipt_json TEXT,
+  at INTEGER NOT NULL,
+  CHECK ((status = 'sent') = (error_kind IS NULL))
+) STRICT;
+CREATE UNIQUE INDEX oc_family_pack_delivery_log_sent_key ON oc_family_pack_delivery_log (delivery_key) WHERE status = 'sent';
+CREATE INDEX oc_family_pack_delivery_log_streak ON oc_family_pack_delivery_log (kind, target, at);
+CREATE TRIGGER oc_family_pack_delivery_log_no_update BEFORE UPDATE ON oc_family_pack_delivery_log
+BEGIN SELECT RAISE(ABORT, 'oc_family_pack_delivery_log is append-only'); END;
+CREATE TRIGGER oc_family_pack_delivery_log_no_delete BEFORE DELETE ON oc_family_pack_delivery_log
+BEGIN SELECT RAISE(ABORT, 'oc_family_pack_delivery_log is append-only'); END;`,
     },
 ];

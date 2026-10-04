@@ -13,6 +13,10 @@ import { CALENDAR_DELETE_TOOL, CALENDAR_MOVE_TOOL, CALENDAR_UPDATE_TOOL, Calenda
 import { CALENDAR_CREATE_TOOL, CalendarCreateInputSchema } from "./calendar-create.js";
 import { registerCalendarWrite } from "./calendar-tools.js";
 import { pageWrite } from "./page-write.js";
+import { briefDirectory, startBriefs } from "./briefs.js";
+import { deliver } from "./discord-delivery.js";
+import { createGarbageFeed } from "./garbage.js";
+import { readEcWeather } from "./weather-ec.js";
 function configuredGogPath(raw) {
     try {
         return parseConfig(raw).gogPath;
@@ -71,6 +75,40 @@ const plugin = defineFeaturePlugin({
                 stop() {
                     stopWatch?.();
                     stopWatch = undefined;
+                },
+            });
+        }
+        const summaryChannel = config.summaryChannel;
+        if (api.registrationMode === "full" && summaryChannel !== undefined) {
+            // The daily and weekly briefs: a minute poll in the live Gateway, posted through the host's durable outbound.
+            let stopBriefs;
+            api.registerService({
+                id: "family-briefs",
+                reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
+                async start(ctx) {
+                    const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
+                    const { resolveAgentIdentity, resolveDefaultAgentId } = await import("openclaw/plugin-sdk/agent-runtime");
+                    const garbage = createGarbageFeed(fetch, { log: (line) => ctx.logger.warn(line) });
+                    const directory = briefDirectory(config);
+                    stopBriefs = startBriefs({
+                        config,
+                        store: () => store,
+                        deliver: (target, messages, key) => deliver(sendDurableMessageBatch, ctx.config, directory, target, messages, key),
+                        agentName: async () => {
+                            const id = resolveDefaultAgentId(ctx.config);
+                            return resolveAgentIdentity(ctx.config, id)?.name?.trim() || id;
+                        },
+                        readWeather: async () => {
+                            const state = await readEcWeather(config.location, undefined, Date.now(), { timezone: config.timezone });
+                            return state.status === "ok" ? state.data : undefined;
+                        },
+                        garbageTomorrow: async (now) => (config.garbageIcsUrl === undefined ? undefined : garbage.tomorrow(config.garbageIcsUrl, config.timezone, now)),
+                        log: (line) => ctx.logger.warn(line),
+                    });
+                },
+                stop() {
+                    stopBriefs?.();
+                    stopBriefs = undefined;
                 },
             });
         }

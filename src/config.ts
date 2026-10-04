@@ -9,6 +9,9 @@ const WRITE_MODES: readonly WriteMode[] = ["on", "confirm", "off"];
 const CSS_COLOR = /^(?:#[0-9a-fA-F]{3,8}|(?:rgb|rgba|hsl|hsla|oklch|oklab)\([0-9.,%\s/-]+\)|[a-zA-Z]+)$/;
 /** Discord user ids are snowflakes. A mention like `<@…>` is not an id. */
 export const DISCORD_ID = /^\d{17,20}$/;
+/** A channel key is a short name the operator picks; it is what delivery rows store instead of the Discord id. */
+const CHANNEL_KEY = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const MAX_CHANNELS = 20;
 const MAX_DEVICES = 32;
 const MAX_ALIAS_MACS = 32;
 
@@ -34,6 +37,13 @@ export const ConfigSchema = Type.Object(
       ),
     ),
     garbageIcsUrl: Type.Optional(Type.String({ minLength: 1, maxLength: LINK_MAX })),
+    channels: Type.Optional(
+      Type.Record(Type.String({ pattern: CHANNEL_KEY.source }), Type.String({ minLength: 17, maxLength: 20, pattern: DISCORD_ID.source }), {
+        maxProperties: MAX_CHANNELS,
+        additionalProperties: false,
+      }),
+    ),
+    summaryChannel: Type.Optional(Type.String({ pattern: CHANNEL_KEY.source })),
     gogPath: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
     writes: Type.Optional(Type.Union(WRITE_MODES.map((mode) => Type.Literal(mode)), { default: "on" })),
     members: Type.Optional(
@@ -273,6 +283,21 @@ function discordId(value: unknown, field: string): string {
   return id;
 }
 
+/** Discord channels by key. A key, never the id, is what config fields and delivery rows name. */
+function channels(value: unknown): Record<string, string> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) throw new ConfigError("channels", "must be an object of channel key to Discord channel id");
+  const entries = Object.entries(value);
+  if (entries.length > MAX_CHANNELS) throw new ConfigError("channels", `must contain at most ${MAX_CHANNELS} entries`);
+  const parsed: Record<string, string> = {};
+  for (const [key, id] of entries) {
+    if (!CHANNEL_KEY.test(key)) throw new ConfigError(`channels.${key}`, "must be a key of lowercase letters, digits and hyphens, such as family-briefs");
+    if (typeof id !== "string" || !DISCORD_ID.test(id.trim())) throw new ConfigError(`channels.${key}`, "must be a numeric Discord channel id");
+    parsed[key] = id.trim();
+  }
+  return parsed;
+}
+
 function unique(values: string[], field: string): void {
   const seen = new Set<string>();
   for (const value of values) {
@@ -326,6 +351,17 @@ export function parseConfig(raw: unknown): Config {
   }
   if (value.garbageIcsUrl !== undefined) {
     config.garbageIcsUrl = feedUrl(value.garbageIcsUrl, "garbageIcsUrl");
+  }
+  const parsedChannels = channels(value.channels);
+  if (parsedChannels) {
+    config.channels = parsedChannels;
+  }
+  if (value.summaryChannel !== undefined) {
+    const key = text(value.summaryChannel, "summaryChannel");
+    if (!parsedChannels || !Object.hasOwn(parsedChannels, key)) {
+      throw new ConfigError("summaryChannel", `"${key}" does not match any key in channels`);
+    }
+    config.summaryChannel = key;
   }
   return config;
 }

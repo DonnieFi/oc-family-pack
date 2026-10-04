@@ -242,3 +242,23 @@ test("the garbage calendar link is marked sensitive, so the Control UI masks it:
   const manifest = JSON.parse(readFileSync(new URL("../openclaw.plugin.json", import.meta.url), "utf8")) as { uiHints: Record<string, { sensitive?: boolean }> };
   assert.equal(manifest.uiHints.garbageIcsUrl?.sensitive, true);
 });
+
+test("summaryChannel names a key in channels; a key that isn't there fails the config at load", () => {
+  const parsed = parseConfig({ timezone: "UTC", channels: { "family-briefs": " 222222222222222222 " }, summaryChannel: "family-briefs" });
+  assert.deepEqual(parsed.channels, { "family-briefs": "222222222222222222" });
+  assert.equal(parsed.summaryChannel, "family-briefs");
+  assert.equal(Object.hasOwn(parseConfig({ timezone: "UTC" }), "summaryChannel"), false);
+  for (const config of [
+    { channels: { "family-briefs": "222222222222222222" }, summaryChannel: "kitchen" },
+    { summaryChannel: "family-briefs" },
+    { channels: { "family-briefs": "222222222222222222" }, summaryChannel: "222222222222222222" },
+  ]) {
+    assert.throws(() => parseConfig({ timezone: "UTC", ...config }), { name: "ConfigError", message: `oc-family-pack config: summaryChannel "${config.summaryChannel}" does not match any key in channels` }, JSON.stringify(config));
+  }
+});
+
+test("channels map short keys to numeric Discord channel ids", () => {
+  assert.throws(() => parseConfig({ channels: { "Family Briefs": "222222222222222222" } }), { message: "oc-family-pack config: channels.Family Briefs must be a key of lowercase letters, digits and hyphens, such as family-briefs" });
+  assert.throws(() => parseConfig({ channels: { briefs: "#family" } }), { message: "oc-family-pack config: channels.briefs must be a numeric Discord channel id" });
+  assert.throws(() => parseConfig({ channels: ["222222222222222222"] }), { message: "oc-family-pack config: channels must be an object of channel key to Discord channel id" });
+});

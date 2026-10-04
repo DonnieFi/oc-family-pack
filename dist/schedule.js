@@ -55,7 +55,8 @@ function classify(event, kind) {
     const due = (homework ?? uniform)?.dueDate;
     return { ...event, section, input, ...(due === undefined ? {} : { due }) };
 }
-async function readEvents(config, shown, span, runGog) {
+/** Events from `shown`: demo events in demo mode, else gog. */
+export async function readEvents(config, shown, span, runGog) {
     if (config.demo) {
         const keys = new Set(shown.map((calendar) => calendar.key));
         return { status: "ok", data: demoEvents(span).filter((event) => keys.has(event.calendarKey)), warnings: [] };

@@ -682,8 +682,8 @@ function assertStoreModes(path: string): void {
   }
 }
 
-/** Inserts a scratch row into a copy of the database and reports which changes the triggers refused. */
-function readWriteLogGuards(path: string): string[] {
+/** Inserts a scratch row into each log in a copy of the database and reports which changes the triggers refused. */
+function readLogGuards(path: string): string[] {
   const copy = `${path}.guard-check`;
   const script = `
     import { DatabaseSync } from "node:sqlite";
@@ -692,8 +692,14 @@ function readWriteLogGuards(path: string): string[] {
     source.close();
     const db = new DatabaseSync(process.env.COPY);
     db.exec("INSERT INTO oc_family_pack_write_log (request_key, base_key, requester, op, calendar_id, status, at) VALUES ('k.0', 'k', 'page', 'create', 'c', 'committed', 1)");
+    db.exec("INSERT INTO oc_family_pack_delivery_log (delivery_key, kind, target, status, at) VALUES ('daily-summary:2026-11-01', 'daily', 'family', 'sent', 1)");
     const blocked = [];
-    for (const [name, sql] of [["update", "UPDATE oc_family_pack_write_log SET status = 'reverted'"], ["delete", "DELETE FROM oc_family_pack_write_log"]]) {
+    for (const [name, sql] of [
+      ["write update", "UPDATE oc_family_pack_write_log SET status = 'reverted'"],
+      ["write delete", "DELETE FROM oc_family_pack_write_log"],
+      ["delivery update", "UPDATE oc_family_pack_delivery_log SET target = 'kitchen'"],
+      ["delivery delete", "DELETE FROM oc_family_pack_delivery_log"],
+    ]) {
       try { db.exec(sql); } catch (error) { if (/append-only/.test(String(error))) blocked.push(name); }
     }
     db.close();
@@ -705,7 +711,7 @@ function readWriteLogGuards(path: string): string[] {
   });
   rmSync(copy, { force: true });
   if (result.status !== 0) {
-    fail("sqlite store", `could not check the write log: ${(result.stderr || "").trim().slice(0, 300)}`);
+    fail("sqlite store", `could not check the logs: ${(result.stderr || "").trim().slice(0, 300)}`);
   }
   return JSON.parse(result.stdout) as string[];
 }
@@ -894,21 +900,21 @@ async function main(): Promise<void> {
   note(`host scheduler surface answers (${jobs.jobs.length} host jobs); the store is a service, and briefs register jobs later`, "service scheduler");
 
   // 8. The plugin-owned store. The service opens the real database, applies
-  // 0001-initial and 0002-write-log, and leaves those rows in place across a Gateway restart, a
+  // 0001-initial to 0003-delivery-log, and leaves those rows in place across a Gateway restart, a
   // forced reinstall, and plugins update. Backup must snapshot it instead of
   // archiving it as opaque bytes. A store that cannot open must not take the Gateway down.
   const pluginStateDir = join(stateDir, "plugins", PLUGIN_ID);
   const opened = await waitForStore(stateDir);
   assertStoreModes(opened);
   const firstRows = readMigrations(opened);
-  if (firstRows.map((row) => row.id).join(",") !== "0001-initial,0002-write-log") {
-    fail("sqlite store", `expected 0001-initial and 0002-write-log, got ${JSON.stringify(firstRows)}`);
+  if (firstRows.map((row) => row.id).join(",") !== "0001-initial,0002-write-log,0003-delivery-log") {
+    fail("sqlite store", `expected 0001-initial, 0002-write-log and 0003-delivery-log, got ${JSON.stringify(firstRows)}`);
   }
-  const writeLogBlocked = readWriteLogGuards(opened);
-  if (writeLogBlocked.join(",") !== "update,delete") {
-    fail("sqlite store", `the write log is not append-only in the Gateway's database: ${JSON.stringify(writeLogBlocked)}`);
+  const logsBlocked = readLogGuards(opened);
+  if (logsBlocked.join(",") !== "write update,write delete,delivery update,delivery delete") {
+    fail("sqlite store", `the logs are not append-only in the Gateway's database: ${JSON.stringify(logsBlocked)}`);
   }
-  note("0002-write-log is applied, and the Gateway's write log refuses UPDATE and DELETE", "sqlite store");
+  note("0002-write-log and 0003-delivery-log are applied, and both logs refuse UPDATE and DELETE", "sqlite store");
   const appliedAt = firstRows[0]?.applied_at ?? 0;
   const readyLine = stripAnsi(readFileSync(logPath, "utf8"))
     .split("\n")

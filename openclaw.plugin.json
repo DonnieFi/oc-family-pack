@@ -55,6 +55,15 @@
       "properties": [
         "garbageIcsUrl"
       ]
+    },
+    {
+      "id": "family-briefs",
+      "title": "Daily and weekly briefs",
+      "order": 50,
+      "properties": [
+        "channels",
+        "summaryChannel"
+      ]
     }
   ],
   "uiHints": {
@@ -80,6 +89,15 @@
       "placeholder": "https://…/events.en.ics",
       "help": "Your city's collection calendar link (.ics), for example from ReCollect. Only curbside pickups are shown.",
       "sensitive": true
+    },
+    "channels": {
+      "label": "Discord channels",
+      "help": "A short name for each Discord channel Family posts to, with its channel id, such as family-briefs."
+    },
+    "summaryChannel": {
+      "label": "Brief channel",
+      "placeholder": "family-briefs",
+      "help": "The channel name from Discord channels that gets the 7:00 AM daily brief and the Sunday 8:00 PM week ahead. Leave empty for no briefs."
     }
   },
   "configSchema": {
@@ -123,6 +141,23 @@
         "type": "string",
         "minLength": 1,
         "maxLength": 2048
+      },
+      "channels": {
+        "type": "object",
+        "patternProperties": {
+          "^[a-z0-9][a-z0-9-]{0,39}$": {
+            "type": "string",
+            "minLength": 17,
+            "maxLength": 20,
+            "pattern": "^\\d{17,20}$"
+          }
+        },
+        "maxProperties": 20,
+        "additionalProperties": false
+      },
+      "summaryChannel": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"
       },
       "gogPath": {
         "type": "string",

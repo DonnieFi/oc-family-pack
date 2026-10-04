@@ -1,0 +1,2020 @@
+{
+ "cases": [
+  {
+   "name": "daily-dst",
+   "kind": "daily",
+   "now": "2026-11-01T11:00:00Z",
+   "events": [
+    {
+     "id": "drop",
+     "title": "School drop-off",
+     "start": "2026-11-01T12:15:00Z",
+     "end": "2026-11-01T12:45:00Z",
+     "allDay": false,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ],
+     "recurringEventId": "drop-s",
+     "originalStart": "2026-11-01T12:15:00Z"
+    },
+    {
+     "id": "swim",
+     "title": "Swim practice",
+     "start": "2026-11-01T22:00:00Z",
+     "end": "2026-11-01T23:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Riley"
+     ],
+     "recurringEventId": "swim-s"
+    },
+    {
+     "id": "dent",
+     "title": "Dentist",
+     "start": "2026-11-01T13:30:00Z",
+     "end": "2026-11-01T14:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex"
+     ],
+     "location": "Family Dental, 12 Main St"
+    },
+    {
+     "id": "bday",
+     "title": "Grandma's birthday",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "trip",
+     "title": "Cottage weekend",
+     "start": "2026-10-31",
+     "end": "2026-11-03",
+     "allDay": true,
+     "calendarKind": "shared",
+     "owners": [
+      "Sam",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "piano",
+     "title": "Piano lesson",
+     "start": "2026-11-01T19:30:00Z",
+     "end": "2026-11-01T20:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Jordan"
+     ],
+     "recurringEventId": "piano-s",
+     "originalStart": "2026-11-01T20:30:00Z"
+    },
+    {
+     "id": "late",
+     "title": "Late call",
+     "start": "2026-11-02T02:30:00Z",
+     "end": "2026-11-02T03:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Sam"
+     ]
+    },
+    {
+     "id": "math",
+     "title": "Math class",
+     "start": "2026-11-01T13:00:00Z",
+     "end": "2026-11-01T14:00:00Z",
+     "allDay": false,
+     "calendarKind": "school",
+     "owners": [
+      "Riley",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "hw1",
+     "title": "Math worksheet",
+     "start": "2026-10-29",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ],
+     "description": "Finish pages 12-14 of the work-book; show all steps for long-division problems and bring the signed permission-slip back tomorrow morning please"
+    },
+    {
+     "id": "hw2",
+     "title": "Reading log",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan"
+     ]
+    },
+    {
+     "id": "hw3",
+     "title": "Spelling quiz",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ],
+     "description": "Words 1-20"
+    },
+    {
+     "id": "uni1",
+     "title": "Spirit Day dress-up",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan",
+      "Riley"
+     ]
+    },
+    {
+     "id": "uni2",
+     "title": "PE uniform",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ]
+    },
+    {
+     "id": "uni3",
+     "title": "Hat day dress",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": []
+    },
+    {
+     "id": "hw4",
+     "title": "Science test",
+     "start": "2026-10-30",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan"
+     ]
+    }
+   ],
+   "weather": {
+    "stationName": "Fixture",
+    "tempC": 6,
+    "windKmh": 35,
+    "condition": "Cloudy",
+    "highC": 8.5,
+    "lowC": 1.5,
+    "forecast": [],
+    "recommendation": {
+     "summary": "Cool and windy · 6°C feels like 2°C · 💨 35 km/h",
+     "clothing": [
+      "Warm jacket"
+     ],
+     "alerts": [
+      "Rain likely after 3 PM",
+      "Second alert never shown"
+     ],
+     "severity": "medium"
+    }
+   },
+   "garbage": {
+    "icon": "♻️",
+    "summary": "recycling and it's green bin week"
+   },
+   "agentName": "Hazel",
+   "expected": {
+    "footer": {
+     "text": "Chat with Hazel anytime to manage events"
+    },
+    "fields": [
+     {
+      "inline": false,
+      "name": "📌 Today",
+      "value": "• **All day** — Cottage weekend (Sam, Jordan)\n• **All day** — Grandma's birthday (Alex, Sam, Riley, Jordan)\n• **All day** — Spelling quiz (Riley)\n• **9:30 AM** — Dentist (Alex) 📍 Family Dental, 12 Main St\n• **3:30 PM** — Piano lesson (Jordan)\n• **10:30 PM** — Late call (Sam)\n_Usual: School drop-off 8:15 AM · Swim practice 6:00 PM_"
+     },
+     {
+      "inline": false,
+      "name": "📚 Homework (Due Today)",
+      "value": "• **Math worksheet** — Finish pages 12-14 of the work-book; show all steps for long-division problems and bring…\n• **Reading log**"
+     },
+     {
+      "inline": false,
+      "name": "👕 Uniforms",
+      "value": "• **Jordan** — Spirit Day dress-up\n• **Kid** — Hat day dress"
+     }
+    ],
+    "color": 15844367,
+    "description": "🌤 Cool and windy · 6°C feels like 2°C · 💨 35 km/h\n⏱ Rain likely after 3 PM\n♻️ **Garbage tomorrow:** Recycling And It'S Green Bin Week",
+    "title": "🌅 Sunday, November 01"
+   },
+   "timezone": "America/Halifax",
+   "date": "2026-11-01"
+  },
+  {
+   "name": "daily-agent-name",
+   "kind": "daily",
+   "now": "2026-11-01T11:00:00Z",
+   "events": [
+    {
+     "id": "drop",
+     "title": "School drop-off",
+     "start": "2026-11-01T12:15:00Z",
+     "end": "2026-11-01T12:45:00Z",
+     "allDay": false,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ],
+     "recurringEventId": "drop-s",
+     "originalStart": "2026-11-01T12:15:00Z"
+    },
+    {
+     "id": "swim",
+     "title": "Swim practice",
+     "start": "2026-11-01T22:00:00Z",
+     "end": "2026-11-01T23:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Riley"
+     ],
+     "recurringEventId": "swim-s"
+    },
+    {
+     "id": "dent",
+     "title": "Dentist",
+     "start": "2026-11-01T13:30:00Z",
+     "end": "2026-11-01T14:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex"
+     ],
+     "location": "Family Dental, 12 Main St"
+    },
+    {
+     "id": "bday",
+     "title": "Grandma's birthday",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "trip",
+     "title": "Cottage weekend",
+     "start": "2026-10-31",
+     "end": "2026-11-03",
+     "allDay": true,
+     "calendarKind": "shared",
+     "owners": [
+      "Sam",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "piano",
+     "title": "Piano lesson",
+     "start": "2026-11-01T19:30:00Z",
+     "end": "2026-11-01T20:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Jordan"
+     ],
+     "recurringEventId": "piano-s",
+     "originalStart": "2026-11-01T20:30:00Z"
+    },
+    {
+     "id": "late",
+     "title": "Late call",
+     "start": "2026-11-02T02:30:00Z",
+     "end": "2026-11-02T03:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Sam"
+     ]
+    },
+    {
+     "id": "math",
+     "title": "Math class",
+     "start": "2026-11-01T13:00:00Z",
+     "end": "2026-11-01T14:00:00Z",
+     "allDay": false,
+     "calendarKind": "school",
+     "owners": [
+      "Riley",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "hw1",
+     "title": "Math worksheet",
+     "start": "2026-10-29",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ],
+     "description": "Finish pages 12-14 of the work-book; show all steps for long-division problems and bring the signed permission-slip back tomorrow morning please"
+    },
+    {
+     "id": "hw2",
+     "title": "Reading log",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan"
+     ]
+    },
+    {
+     "id": "hw3",
+     "title": "Spelling quiz",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ],
+     "description": "Words 1-20"
+    },
+    {
+     "id": "uni1",
+     "title": "Spirit Day dress-up",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan",
+      "Riley"
+     ]
+    },
+    {
+     "id": "uni2",
+     "title": "PE uniform",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ]
+    },
+    {
+     "id": "uni3",
+     "title": "Hat day dress",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": []
+    },
+    {
+     "id": "hw4",
+     "title": "Science test",
+     "start": "2026-10-30",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan"
+     ]
+    }
+   ],
+   "weather": {
+    "stationName": "Fixture",
+    "tempC": 6,
+    "windKmh": 35,
+    "condition": "Cloudy",
+    "highC": 8.5,
+    "lowC": 1.5,
+    "forecast": [],
+    "recommendation": {
+     "summary": "Cool and windy · 6°C feels like 2°C · 💨 35 km/h",
+     "clothing": [
+      "Warm jacket"
+     ],
+     "alerts": [
+      "Rain likely after 3 PM",
+      "Second alert never shown"
+     ],
+     "severity": "medium"
+    }
+   },
+   "garbage": {
+    "icon": "♻️",
+    "summary": "recycling and it's green bin week"
+   },
+   "agentName": "Hazel",
+   "expected": {
+    "footer": {
+     "text": "Chat with Hazel anytime to manage events"
+    },
+    "fields": [
+     {
+      "inline": false,
+      "name": "📌 Today",
+      "value": "• **All day** — Cottage weekend (Sam, Jordan)\n• **All day** — Grandma's birthday (Alex, Sam, Riley, Jordan)\n• **All day** — Spelling quiz (Riley)\n• **9:30 AM** — Dentist (Alex) 📍 Family Dental, 12 Main St\n• **3:30 PM** — Piano lesson (Jordan)\n• **10:30 PM** — Late call (Sam)\n_Usual: School drop-off 8:15 AM · Swim practice 6:00 PM_"
+     },
+     {
+      "inline": false,
+      "name": "📚 Homework (Due Today)",
+      "value": "• **Math worksheet** — Finish pages 12-14 of the work-book; show all steps for long-division problems and bring…\n• **Reading log**"
+     },
+     {
+      "inline": false,
+      "name": "👕 Uniforms",
+      "value": "• **Jordan** — Spirit Day dress-up\n• **Kid** — Hat day dress"
+     }
+    ],
+    "color": 15844367,
+    "description": "🌤 Cool and windy · 6°C feels like 2°C · 💨 35 km/h\n⏱ Rain likely after 3 PM\n♻️ **Garbage tomorrow:** Recycling And It'S Green Bin Week",
+    "title": "🌅 Sunday, November 01"
+   },
+   "timezone": "America/Halifax",
+   "date": "2026-11-01"
+  },
+  {
+   "name": "daily-weather-down",
+   "kind": "daily",
+   "now": "2026-11-01T11:00:00Z",
+   "events": [
+    {
+     "id": "drop",
+     "title": "School drop-off",
+     "start": "2026-11-01T12:15:00Z",
+     "end": "2026-11-01T12:45:00Z",
+     "allDay": false,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ],
+     "recurringEventId": "drop-s",
+     "originalStart": "2026-11-01T12:15:00Z"
+    },
+    {
+     "id": "swim",
+     "title": "Swim practice",
+     "start": "2026-11-01T22:00:00Z",
+     "end": "2026-11-01T23:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Riley"
+     ],
+     "recurringEventId": "swim-s"
+    },
+    {
+     "id": "dent",
+     "title": "Dentist",
+     "start": "2026-11-01T13:30:00Z",
+     "end": "2026-11-01T14:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex"
+     ],
+     "location": "Family Dental, 12 Main St"
+    },
+    {
+     "id": "bday",
+     "title": "Grandma's birthday",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "trip",
+     "title": "Cottage weekend",
+     "start": "2026-10-31",
+     "end": "2026-11-03",
+     "allDay": true,
+     "calendarKind": "shared",
+     "owners": [
+      "Sam",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "piano",
+     "title": "Piano lesson",
+     "start": "2026-11-01T19:30:00Z",
+     "end": "2026-11-01T20:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Jordan"
+     ],
+     "recurringEventId": "piano-s",
+     "originalStart": "2026-11-01T20:30:00Z"
+    },
+    {
+     "id": "late",
+     "title": "Late call",
+     "start": "2026-11-02T02:30:00Z",
+     "end": "2026-11-02T03:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Sam"
+     ]
+    },
+    {
+     "id": "math",
+     "title": "Math class",
+     "start": "2026-11-01T13:00:00Z",
+     "end": "2026-11-01T14:00:00Z",
+     "allDay": false,
+     "calendarKind": "school",
+     "owners": [
+      "Riley",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "hw1",
+     "title": "Math worksheet",
+     "start": "2026-10-29",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ],
+     "description": "Finish pages 12-14 of the work-book; show all steps for long-division problems and bring the signed permission-slip back tomorrow morning please"
+    },
+    {
+     "id": "hw2",
+     "title": "Reading log",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan"
+     ]
+    },
+    {
+     "id": "hw3",
+     "title": "Spelling quiz",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ],
+     "description": "Words 1-20"
+    },
+    {
+     "id": "uni1",
+     "title": "Spirit Day dress-up",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan",
+      "Riley"
+     ]
+    },
+    {
+     "id": "uni2",
+     "title": "PE uniform",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ]
+    },
+    {
+     "id": "uni3",
+     "title": "Hat day dress",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": []
+    },
+    {
+     "id": "hw4",
+     "title": "Science test",
+     "start": "2026-10-30",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan"
+     ]
+    }
+   ],
+   "garbage": {
+    "icon": "♻️",
+    "summary": "recycling and it's green bin week"
+   },
+   "agentName": "Hazel",
+   "expected": {
+    "footer": {
+     "text": "Chat with Hazel anytime to manage events"
+    },
+    "fields": [
+     {
+      "inline": false,
+      "name": "📌 Today",
+      "value": "• **All day** — Cottage weekend (Sam, Jordan)\n• **All day** — Grandma's birthday (Alex, Sam, Riley, Jordan)\n• **All day** — Spelling quiz (Riley)\n• **9:30 AM** — Dentist (Alex) 📍 Family Dental, 12 Main St\n• **3:30 PM** — Piano lesson (Jordan)\n• **10:30 PM** — Late call (Sam)\n_Usual: School drop-off 8:15 AM · Swim practice 6:00 PM_"
+     },
+     {
+      "inline": false,
+      "name": "📚 Homework (Due Today)",
+      "value": "• **Math worksheet** — Finish pages 12-14 of the work-book; show all steps for long-division problems and bring…\n• **Reading log**"
+     },
+     {
+      "inline": false,
+      "name": "👕 Uniforms",
+      "value": "• **Jordan** — Spirit Day dress-up\n• **Kid** — Hat day dress"
+     }
+    ],
+    "color": 15844367,
+    "description": "♻️ **Garbage tomorrow:** Recycling And It'S Green Bin Week",
+    "title": "🌅 Sunday, November 01"
+   },
+   "timezone": "America/Halifax",
+   "date": "2026-11-01"
+  },
+  {
+   "name": "daily-garbage-down",
+   "kind": "daily",
+   "now": "2026-11-01T11:00:00Z",
+   "events": [
+    {
+     "id": "drop",
+     "title": "School drop-off",
+     "start": "2026-11-01T12:15:00Z",
+     "end": "2026-11-01T12:45:00Z",
+     "allDay": false,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ],
+     "recurringEventId": "drop-s",
+     "originalStart": "2026-11-01T12:15:00Z"
+    },
+    {
+     "id": "swim",
+     "title": "Swim practice",
+     "start": "2026-11-01T22:00:00Z",
+     "end": "2026-11-01T23:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Riley"
+     ],
+     "recurringEventId": "swim-s"
+    },
+    {
+     "id": "dent",
+     "title": "Dentist",
+     "start": "2026-11-01T13:30:00Z",
+     "end": "2026-11-01T14:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex"
+     ],
+     "location": "Family Dental, 12 Main St"
+    },
+    {
+     "id": "bday",
+     "title": "Grandma's birthday",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "trip",
+     "title": "Cottage weekend",
+     "start": "2026-10-31",
+     "end": "2026-11-03",
+     "allDay": true,
+     "calendarKind": "shared",
+     "owners": [
+      "Sam",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "piano",
+     "title": "Piano lesson",
+     "start": "2026-11-01T19:30:00Z",
+     "end": "2026-11-01T20:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Jordan"
+     ],
+     "recurringEventId": "piano-s",
+     "originalStart": "2026-11-01T20:30:00Z"
+    },
+    {
+     "id": "late",
+     "title": "Late call",
+     "start": "2026-11-02T02:30:00Z",
+     "end": "2026-11-02T03:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Sam"
+     ]
+    },
+    {
+     "id": "math",
+     "title": "Math class",
+     "start": "2026-11-01T13:00:00Z",
+     "end": "2026-11-01T14:00:00Z",
+     "allDay": false,
+     "calendarKind": "school",
+     "owners": [
+      "Riley",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "hw1",
+     "title": "Math worksheet",
+     "start": "2026-10-29",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ],
+     "description": "Finish pages 12-14 of the work-book; show all steps for long-division problems and bring the signed permission-slip back tomorrow morning please"
+    },
+    {
+     "id": "hw2",
+     "title": "Reading log",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan"
+     ]
+    },
+    {
+     "id": "hw3",
+     "title": "Spelling quiz",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ],
+     "description": "Words 1-20"
+    },
+    {
+     "id": "uni1",
+     "title": "Spirit Day dress-up",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan",
+      "Riley"
+     ]
+    },
+    {
+     "id": "uni2",
+     "title": "PE uniform",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ]
+    },
+    {
+     "id": "uni3",
+     "title": "Hat day dress",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": []
+    },
+    {
+     "id": "hw4",
+     "title": "Science test",
+     "start": "2026-10-30",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan"
+     ]
+    }
+   ],
+   "weather": {
+    "stationName": "Fixture",
+    "tempC": 6,
+    "windKmh": 35,
+    "condition": "Cloudy",
+    "highC": 8.5,
+    "lowC": 1.5,
+    "forecast": [],
+    "recommendation": {
+     "summary": "Cool and windy · 6°C feels like 2°C · 💨 35 km/h",
+     "clothing": [
+      "Warm jacket"
+     ],
+     "alerts": [
+      "Rain likely after 3 PM",
+      "Second alert never shown"
+     ],
+     "severity": "medium"
+    }
+   },
+   "agentName": "Hazel",
+   "expected": {
+    "footer": {
+     "text": "Chat with Hazel anytime to manage events"
+    },
+    "fields": [
+     {
+      "inline": false,
+      "name": "📌 Today",
+      "value": "• **All day** — Cottage weekend (Sam, Jordan)\n• **All day** — Grandma's birthday (Alex, Sam, Riley, Jordan)\n• **All day** — Spelling quiz (Riley)\n• **9:30 AM** — Dentist (Alex) 📍 Family Dental, 12 Main St\n• **3:30 PM** — Piano lesson (Jordan)\n• **10:30 PM** — Late call (Sam)\n_Usual: School drop-off 8:15 AM · Swim practice 6:00 PM_"
+     },
+     {
+      "inline": false,
+      "name": "📚 Homework (Due Today)",
+      "value": "• **Math worksheet** — Finish pages 12-14 of the work-book; show all steps for long-division problems and bring…\n• **Reading log**"
+     },
+     {
+      "inline": false,
+      "name": "👕 Uniforms",
+      "value": "• **Jordan** — Spirit Day dress-up\n• **Kid** — Hat day dress"
+     }
+    ],
+    "color": 15844367,
+    "description": "🌤 Cool and windy · 6°C feels like 2°C · 💨 35 km/h\n⏱ Rain likely after 3 PM",
+    "title": "🌅 Sunday, November 01"
+   },
+   "timezone": "America/Halifax",
+   "date": "2026-11-01"
+  },
+  {
+   "name": "daily-weather-line",
+   "kind": "daily",
+   "now": "2026-11-01T11:00:00Z",
+   "events": [
+    {
+     "id": "drop",
+     "title": "School drop-off",
+     "start": "2026-11-01T12:15:00Z",
+     "end": "2026-11-01T12:45:00Z",
+     "allDay": false,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ],
+     "recurringEventId": "drop-s",
+     "originalStart": "2026-11-01T12:15:00Z"
+    },
+    {
+     "id": "swim",
+     "title": "Swim practice",
+     "start": "2026-11-01T22:00:00Z",
+     "end": "2026-11-01T23:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Riley"
+     ],
+     "recurringEventId": "swim-s"
+    },
+    {
+     "id": "dent",
+     "title": "Dentist",
+     "start": "2026-11-01T13:30:00Z",
+     "end": "2026-11-01T14:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex"
+     ],
+     "location": "Family Dental, 12 Main St"
+    },
+    {
+     "id": "bday",
+     "title": "Grandma's birthday",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "trip",
+     "title": "Cottage weekend",
+     "start": "2026-10-31",
+     "end": "2026-11-03",
+     "allDay": true,
+     "calendarKind": "shared",
+     "owners": [
+      "Sam",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "piano",
+     "title": "Piano lesson",
+     "start": "2026-11-01T19:30:00Z",
+     "end": "2026-11-01T20:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Jordan"
+     ],
+     "recurringEventId": "piano-s",
+     "originalStart": "2026-11-01T20:30:00Z"
+    },
+    {
+     "id": "late",
+     "title": "Late call",
+     "start": "2026-11-02T02:30:00Z",
+     "end": "2026-11-02T03:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Sam"
+     ]
+    },
+    {
+     "id": "math",
+     "title": "Math class",
+     "start": "2026-11-01T13:00:00Z",
+     "end": "2026-11-01T14:00:00Z",
+     "allDay": false,
+     "calendarKind": "school",
+     "owners": [
+      "Riley",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "hw1",
+     "title": "Math worksheet",
+     "start": "2026-10-29",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ],
+     "description": "Finish pages 12-14 of the work-book; show all steps for long-division problems and bring the signed permission-slip back tomorrow morning please"
+    },
+    {
+     "id": "hw2",
+     "title": "Reading log",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan"
+     ]
+    },
+    {
+     "id": "hw3",
+     "title": "Spelling quiz",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ],
+     "description": "Words 1-20"
+    },
+    {
+     "id": "uni1",
+     "title": "Spirit Day dress-up",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan",
+      "Riley"
+     ]
+    },
+    {
+     "id": "uni2",
+     "title": "PE uniform",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ]
+    },
+    {
+     "id": "uni3",
+     "title": "Hat day dress",
+     "start": "2026-11-01",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": []
+    },
+    {
+     "id": "hw4",
+     "title": "Science test",
+     "start": "2026-10-30",
+     "end": "2026-11-02",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan"
+     ]
+    }
+   ],
+   "weather": {
+    "stationName": "Fixture",
+    "windKmh": 12,
+    "condition": "Light rain",
+    "highC": 8.5,
+    "lowC": 2.4,
+    "forecast": []
+   },
+   "agentName": "Hazel",
+   "expected": {
+    "footer": {
+     "text": "Chat with Hazel anytime to manage events"
+    },
+    "fields": [
+     {
+      "inline": false,
+      "name": "📌 Today",
+      "value": "• **All day** — Cottage weekend (Sam, Jordan)\n• **All day** — Grandma's birthday (Alex, Sam, Riley, Jordan)\n• **All day** — Spelling quiz (Riley)\n• **9:30 AM** — Dentist (Alex) 📍 Family Dental, 12 Main St\n• **3:30 PM** — Piano lesson (Jordan)\n• **10:30 PM** — Late call (Sam)\n_Usual: School drop-off 8:15 AM · Swim practice 6:00 PM_"
+     },
+     {
+      "inline": false,
+      "name": "📚 Homework (Due Today)",
+      "value": "• **Math worksheet** — Finish pages 12-14 of the work-book; show all steps for long-division problems and bring…\n• **Reading log**"
+     },
+     {
+      "inline": false,
+      "name": "👕 Uniforms",
+      "value": "• **Jordan** — Spirit Day dress-up\n• **Kid** — Hat day dress"
+     }
+    ],
+    "color": 15844367,
+    "description": "🌤 Light rain · —°C  (H 8° / L 2°)  💨 12 km/h ",
+    "title": "🌅 Sunday, November 01"
+   },
+   "timezone": "America/Halifax",
+   "date": "2026-11-01"
+  },
+  {
+   "name": "daily-quiet",
+   "kind": "daily",
+   "now": "2026-11-01T11:00:00Z",
+   "events": [
+    {
+     "id": "drop",
+     "title": "School drop-off",
+     "start": "2026-11-01T12:15:00Z",
+     "end": "2026-11-01T12:45:00Z",
+     "allDay": false,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ],
+     "recurringEventId": "drop-s",
+     "originalStart": "2026-11-01T12:15:00Z"
+    },
+    {
+     "id": "swim",
+     "title": "Swim practice",
+     "start": "2026-11-01T22:00:00Z",
+     "end": "2026-11-01T23:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Riley"
+     ],
+     "recurringEventId": "swim-s"
+    },
+    {
+     "id": "math",
+     "title": "Math class",
+     "start": "2026-11-01T13:00:00Z",
+     "end": "2026-11-01T14:00:00Z",
+     "allDay": false,
+     "calendarKind": "school",
+     "owners": [
+      "Riley",
+      "Jordan"
+     ]
+    }
+   ],
+   "agentName": "Hazel",
+   "expected": {
+    "footer": {
+     "text": "Chat with Hazel anytime to manage events"
+    },
+    "fields": [
+     {
+      "inline": false,
+      "name": "📌 Today",
+      "value": "_Nothing out of the ordinary._\n_Usual: School drop-off 8:15 AM · Swim practice 6:00 PM_"
+     }
+    ],
+    "color": 15844367,
+    "title": "🌅 Sunday, November 01"
+   },
+   "timezone": "America/Halifax",
+   "date": "2026-11-01"
+  },
+  {
+   "name": "weekly-dst",
+   "kind": "weekly",
+   "now": "2026-11-02T00:00:00Z",
+   "events": [
+    {
+     "id": "w-swim",
+     "title": "Swim practice",
+     "start": "2026-11-02T22:00:00Z",
+     "end": "2026-11-02T23:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Riley"
+     ],
+     "recurringEventId": "swim-s"
+    },
+    {
+     "id": "w-dent",
+     "title": "Dentist",
+     "start": "2026-11-03T13:30:00Z",
+     "end": "2026-11-03T14:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex"
+     ],
+     "location": "Family Dental"
+    },
+    {
+     "id": "w-conf",
+     "title": "Parent-teacher interviews",
+     "start": "2026-11-05T22:00:00Z",
+     "end": "2026-11-05T23:00:00Z",
+     "allDay": false,
+     "calendarKind": "school",
+     "owners": [
+      "Riley",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "w-math",
+     "title": "Math class",
+     "start": "2026-11-04T13:00:00Z",
+     "end": "2026-11-04T14:00:00Z",
+     "allDay": false,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ]
+    },
+    {
+     "id": "w-hw",
+     "title": "Science project",
+     "start": "2026-11-02",
+     "end": "2026-11-06",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Jordan"
+     ]
+    },
+    {
+     "id": "w-uni",
+     "title": "Regular uniform",
+     "start": "2026-11-04",
+     "end": "2026-11-05",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ]
+    },
+    {
+     "id": "w-fair",
+     "title": "Craft fair",
+     "start": "2026-11-06",
+     "end": "2026-11-08",
+     "allDay": true,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ],
+     "location": "Community Hall"
+    },
+    {
+     "id": "w-moved",
+     "title": "Piano lesson",
+     "start": "2026-11-07T15:00:00Z",
+     "end": "2026-11-07T16:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Jordan"
+     ],
+     "recurringEventId": "piano-s",
+     "originalStart": "2026-11-07T14:00:00Z"
+    },
+    {
+     "id": "w-sun",
+     "title": "Flight home",
+     "start": "2026-11-09T01:00:00Z",
+     "end": "2026-11-09T02:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Sam"
+     ]
+    },
+    {
+     "id": "w-sun2",
+     "title": "Brunch",
+     "start": "2026-11-08T15:00:00Z",
+     "end": "2026-11-08T17:00:00Z",
+     "allDay": false,
+     "calendarKind": "shared",
+     "owners": [
+      "Alex",
+      "Sam",
+      "Riley",
+      "Jordan"
+     ]
+    },
+    {
+     "id": "w-mon",
+     "title": "Remembrance Day assembly",
+     "start": "2026-11-02",
+     "end": "2026-11-03",
+     "allDay": true,
+     "calendarKind": "shared",
+     "owners": []
+    },
+    {
+     "id": "w-test",
+     "title": "History test",
+     "start": "2026-11-01",
+     "end": "2026-11-04",
+     "allDay": true,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ]
+    }
+   ],
+   "expected": {
+    "footer": {
+     "text": "Plus 4 routine item(s): classes, lessons, homework, regular uniforms"
+    },
+    "fields": [
+     {
+      "inline": false,
+      "name": "Monday, November 02",
+      "value": "• **All day** — Remembrance Day assembly"
+     },
+     {
+      "inline": false,
+      "name": "Tuesday, November 03",
+      "value": "• **9:30 AM** — Dentist (Alex) 📍 Family Dental"
+     },
+     {
+      "inline": false,
+      "name": "Thursday, November 05",
+      "value": "• **6:00 PM** — Parent-teacher interviews (Riley, Jordan)"
+     },
+     {
+      "inline": false,
+      "name": "Friday, November 06",
+      "value": "• **All day** — Craft fair (Alex, Sam, Riley, Jordan) 📍 Community Hall"
+     },
+     {
+      "inline": false,
+      "name": "Saturday, November 07",
+      "value": "• **11:00 AM** — Piano lesson (Jordan)"
+     },
+     {
+      "inline": false,
+      "name": "Sunday, November 08",
+      "value": "• **11:00 AM** — Brunch (Alex, Sam, Riley, Jordan)\n• **9:00 PM** — Flight home (Sam)"
+     }
+    ],
+    "color": 3447003,
+    "title": "📅 Week Ahead — November 02 to November 08"
+   },
+   "timezone": "America/Halifax",
+   "monday": "2026-11-02"
+  },
+  {
+   "name": "weekly-empty",
+   "kind": "weekly",
+   "now": "2026-11-02T00:00:00Z",
+   "events": [],
+   "expected": {
+    "color": 3447003,
+    "description": "Nothing out of the ordinary this week.",
+    "title": "📅 Week Ahead — November 02 to November 08"
+   },
+   "timezone": "America/Halifax",
+   "monday": "2026-11-02"
+  },
+  {
+   "name": "weekly-routine-only",
+   "kind": "weekly",
+   "now": "2026-11-02T00:00:00Z",
+   "events": [
+    {
+     "id": "w-swim",
+     "title": "Swim practice",
+     "start": "2026-11-02T22:00:00Z",
+     "end": "2026-11-02T23:00:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Riley"
+     ],
+     "recurringEventId": "swim-s"
+    },
+    {
+     "id": "w-math",
+     "title": "Math class",
+     "start": "2026-11-04T13:00:00Z",
+     "end": "2026-11-04T14:00:00Z",
+     "allDay": false,
+     "calendarKind": "school",
+     "owners": [
+      "Riley"
+     ]
+    }
+   ],
+   "expected": {
+    "footer": {
+     "text": "Plus 2 routine item(s): classes, lessons, homework, regular uniforms"
+    },
+    "color": 3447003,
+    "description": "Nothing out of the ordinary this week.",
+    "title": "📅 Week Ahead — November 02 to November 08"
+   },
+   "timezone": "America/Halifax",
+   "monday": "2026-11-02"
+  },
+  {
+   "name": "weekly-near-6000",
+   "kind": "weekly",
+   "now": "2026-11-02T00:00:00Z",
+   "events": [
+    {
+     "id": "n0-0",
+     "title": "Volunteer shift 0-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-02T12:00:00Z",
+     "end": "2026-11-02T12:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n0-1",
+     "title": "Volunteer shift 0-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-02T13:00:00Z",
+     "end": "2026-11-02T13:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n0-2",
+     "title": "Volunteer shift 0-2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-02T14:00:00Z",
+     "end": "2026-11-02T14:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n0-3",
+     "title": "Volunteer shift 0-3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-02T15:00:00Z",
+     "end": "2026-11-02T15:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n0-4",
+     "title": "Volunteer shift 0-4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-02T16:00:00Z",
+     "end": "2026-11-02T16:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n1-0",
+     "title": "Volunteer shift 1-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-03T12:00:00Z",
+     "end": "2026-11-03T12:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n1-1",
+     "title": "Volunteer shift 1-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-03T13:00:00Z",
+     "end": "2026-11-03T13:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n1-2",
+     "title": "Volunteer shift 1-2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-03T14:00:00Z",
+     "end": "2026-11-03T14:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n1-3",
+     "title": "Volunteer shift 1-3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-03T15:00:00Z",
+     "end": "2026-11-03T15:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n1-4",
+     "title": "Volunteer shift 1-4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-03T16:00:00Z",
+     "end": "2026-11-03T16:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n2-0",
+     "title": "Volunteer shift 2-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-04T12:00:00Z",
+     "end": "2026-11-04T12:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n2-1",
+     "title": "Volunteer shift 2-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-04T13:00:00Z",
+     "end": "2026-11-04T13:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n2-2",
+     "title": "Volunteer shift 2-2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-04T14:00:00Z",
+     "end": "2026-11-04T14:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n2-3",
+     "title": "Volunteer shift 2-3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-04T15:00:00Z",
+     "end": "2026-11-04T15:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n2-4",
+     "title": "Volunteer shift 2-4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-04T16:00:00Z",
+     "end": "2026-11-04T16:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n3-0",
+     "title": "Volunteer shift 3-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-05T12:00:00Z",
+     "end": "2026-11-05T12:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n3-1",
+     "title": "Volunteer shift 3-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-05T13:00:00Z",
+     "end": "2026-11-05T13:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n3-2",
+     "title": "Volunteer shift 3-2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-05T14:00:00Z",
+     "end": "2026-11-05T14:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n3-3",
+     "title": "Volunteer shift 3-3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-05T15:00:00Z",
+     "end": "2026-11-05T15:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n3-4",
+     "title": "Volunteer shift 3-4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-05T16:00:00Z",
+     "end": "2026-11-05T16:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n4-0",
+     "title": "Volunteer shift 4-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-06T12:00:00Z",
+     "end": "2026-11-06T12:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n4-1",
+     "title": "Volunteer shift 4-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-06T13:00:00Z",
+     "end": "2026-11-06T13:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n4-2",
+     "title": "Volunteer shift 4-2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-06T14:00:00Z",
+     "end": "2026-11-06T14:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n4-3",
+     "title": "Volunteer shift 4-3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-06T15:00:00Z",
+     "end": "2026-11-06T15:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n4-4",
+     "title": "Volunteer shift 4-4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-06T16:00:00Z",
+     "end": "2026-11-06T16:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n5-0",
+     "title": "Volunteer shift 5-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-07T12:00:00Z",
+     "end": "2026-11-07T12:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n5-1",
+     "title": "Volunteer shift 5-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-07T13:00:00Z",
+     "end": "2026-11-07T13:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n5-2",
+     "title": "Volunteer shift 5-2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-07T14:00:00Z",
+     "end": "2026-11-07T14:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n5-3",
+     "title": "Volunteer shift 5-3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-07T15:00:00Z",
+     "end": "2026-11-07T15:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n5-4",
+     "title": "Volunteer shift 5-4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-07T16:00:00Z",
+     "end": "2026-11-07T16:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n6-0",
+     "title": "Volunteer shift 6-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "start": "2026-11-08T12:00:00Z",
+     "end": "2026-11-08T12:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    },
+    {
+     "id": "n6-1",
+     "title": "Volunteer shift 6-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+     "start": "2026-11-08T13:00:00Z",
+     "end": "2026-11-08T13:30:00Z",
+     "allDay": false,
+     "calendarKind": "personal",
+     "owners": [
+      "Alex",
+      "Sam"
+     ],
+     "location": "Hall"
+    }
+   ],
+   "expected": {
+    "fields": [
+     {
+      "inline": false,
+      "name": "Monday, November 02",
+      "value": "• **8:00 AM** — Volunteer shift 0-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **9:00 AM** — Volunteer shift 0-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **10:00 AM** — Volunteer shift 0-2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **11:00 AM** — Volunteer shift 0-3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **12:00 PM** — Volunteer shift 0-4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall"
+     },
+     {
+      "inline": false,
+      "name": "Tuesday, November 03",
+      "value": "• **8:00 AM** — Volunteer shift 1-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **9:00 AM** — Volunteer shift 1-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **10:00 AM** — Volunteer shift 1-2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **11:00 AM** — Volunteer shift 1-3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **12:00 PM** — Volunteer shift 1-4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall"
+     },
+     {
+      "inline": false,
+      "name": "Wednesday, November 04",
+      "value": "• **8:00 AM** — Volunteer shift 2-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **9:00 AM** — Volunteer shift 2-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **10:00 AM** — Volunteer shift 2-2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **11:00 AM** — Volunteer shift 2-3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **12:00 PM** — Volunteer shift 2-4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall"
+     },
+     {
+      "inline": false,
+      "name": "Thursday, November 05",
+      "value": "• **8:00 AM** — Volunteer shift 3-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **9:00 AM** — Volunteer shift 3-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **10:00 AM** — Volunteer shift 3-2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **11:00 AM** — Volunteer shift 3-3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **12:00 PM** — Volunteer shift 3-4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall"
+     },
+     {
+      "inline": false,
+      "name": "Friday, November 06",
+      "value": "• **8:00 AM** — Volunteer shift 4-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **9:00 AM** — Volunteer shift 4-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **10:00 AM** — Volunteer shift 4-2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **11:00 AM** — Volunteer shift 4-3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **12:00 PM** — Volunteer shift 4-4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall"
+     },
+     {
+      "inline": false,
+      "name": "Saturday, November 07",
+      "value": "• **8:00 AM** — Volunteer shift 5-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **9:00 AM** — Volunteer shift 5-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **10:00 AM** — Volunteer shift 5-2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **11:00 AM** — Volunteer shift 5-3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **12:00 PM** — Volunteer shift 5-4 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall"
+     },
+     {
+      "inline": false,
+      "name": "Sunday, November 08",
+      "value": "• **8:00 AM** — Volunteer shift 6-0 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Alex, Sam) 📍 Hall\n• **9:00 AM** — Volunteer shift 6-1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy (Alex, Sam) 📍 Hall"
+     }
+    ],
+    "color": 3447003,
+    "title": "📅 Week Ahead — November 02 to November 08"
+   },
+   "timezone": "America/Halifax",
+   "monday": "2026-11-02"
+  }
+ ],
+ "shorten": [
+  {
+   "text": "Finish pages 12-14 of the work-book; show all steps for long-division problems and bring the signed permission-slip back tomorrow morning please",
+   "expected": "Finish pages 12-14 of the work-book; show all steps for long-division problems and bring…"
+  },
+  {
+   "text": "",
+   "expected": ""
+  },
+  {
+   "text": "   ",
+   "expected": ""
+  },
+  {
+   "text": "short",
+   "expected": "short"
+  },
+  {
+   "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "expected": "…"
+  },
+  {
+   "text": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word ",
+   "expected": "word word word word word word word word word word word word word word word word word word…"
+  },
+  {
+   "text": "self-contained well-known twenty-first-century ideas everywhere in this long sentence ok",
+   "expected": "self-contained well-known twenty-first-century ideas everywhere in this long sentence ok"
+  },
+  {
+   "text": "tabs\tand\nnewlines and nbsp tabs\tand\nnewlines and nbsp tabs\tand\nnewlines and nbsp tabs\tand\nnewlines and nbsp ",
+   "expected": "tabs and newlines and nbsp tabs and newlines and nbsp tabs and newlines and nbsp tabs and…"
+  },
+  {
+   "text": "--- dashes --- everywhere ----- dashes --- everywhere ----- dashes --- everywhere ----- dashes --- everywhere ----- dashes --- everywhere --",
+   "expected": "--- dashes --- everywhere ----- dashes --- everywhere ----- dashes --- everywhere -----…"
+  },
+  {
+   "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx y",
+   "expected": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…"
+  },
+  {
+   "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "expected": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+   "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "expected": "…"
+  },
+  {
+   "text": "ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-",
+   "expected": "ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-cd-ab-…"
+  },
+  {
+   "text": "émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 ",
+   "expected": "émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉 émoji 🎉…"
+  }
+ ],
+ "title": [
+  {
+   "text": "recycling and it's green bin week",
+   "expected": "Recycling And It'S Green Bin Week"
+  },
+  {
+   "text": "GARBAGE",
+   "expected": "Garbage"
+  },
+  {
+   "text": "green-bin/yard waste",
+   "expected": "Green-Bin/Yard Waste"
+  },
+  {
+   "text": "2nd pickup",
+   "expected": "2Nd Pickup"
+  },
+  {
+   "text": "ÉCOLE day",
+   "expected": "École Day"
+  },
+  {
+   "text": "o'neil's",
+   "expected": "O'Neil'S"
+  },
+  {
+   "text": "mixed CASE words",
+   "expected": "Mixed Case Words"
+  }
+ ]
+}

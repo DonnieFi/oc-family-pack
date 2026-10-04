@@ -56,6 +56,10 @@ export type Config = {
   location?: Location;
   /** The city's collection calendar (ICS). Stays in config; never in a tool reply. */
   garbageIcsUrl?: string;
+  /** Discord channel ids by key. Delivery targets and rows name the key, never the id. */
+  channels?: Record<string, string>;
+  /** The channels key the daily and weekly briefs post to; briefs are off without it. */
+  summaryChannel?: string;
   gogPath: string;
   writes: WriteMode;
   members: MemberConfig[];

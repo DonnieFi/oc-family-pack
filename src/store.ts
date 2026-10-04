@@ -40,6 +40,22 @@ export type WriteLogRow = {
   status: WriteStatus;
 };
 
+export type DeliveryKind = "daily" | "weekly" | "reminder" | "household" | "alert";
+export type DeliveryStatus = "sent" | "partial" | "failed" | "held" | "unknown";
+
+/** One delivery-log row as the caller sends it; the worker stamps `at` and returns the row id. */
+export type DeliveryLogRow = {
+  deliveryKey: string;
+  kind: DeliveryKind;
+  /** A member id or a channels key, never a Discord id. */
+  target: string;
+  status: DeliveryStatus;
+  errorKind?: "no-permission" | "no-channel" | "other";
+  /** Why it was not sent, at most 200 characters. Never shown to the family. */
+  errorDetail?: string;
+  receiptJson?: string;
+};
+
 /** What the log kept of a committed write: enough to answer a retry without asking Google again. */
 export type CommittedWrite = { eventId: string | null; beforeJson: string | null; afterJson: string | null };
 
@@ -51,6 +67,11 @@ export type FamilyStore = {
   committedWrite: (requestKey: string) => Promise<CommittedWrite | undefined>;
   /** `ifAbsent` is INSERT OR IGNORE, for a write found already done; otherwise a plain INSERT. */
   appendWriteLog: (row: WriteLogRow, options: { ifAbsent: boolean }) => Promise<{ inserted: boolean }>;
+  appendDeliveryLog: (row: DeliveryLogRow) => Promise<{ id: number }>;
+  /** True when the key has a sent, partial, held or unknown row: it is never sent again. */
+  deliveryDone: (deliveryKey: string) => Promise<boolean>;
+  /** The first row that was not sent since the last sent row for (kind, target), if any. */
+  deliveryStreakStart: (kind: DeliveryKind, target: string) => Promise<{ id: number; status: DeliveryStatus } | undefined>;
   stop: () => Promise<void>;
   spawned: () => number;
 };
@@ -263,6 +284,18 @@ async function openSession(options: {
     async appendWriteLog(row, { ifAbsent }) {
       await ensureOpen();
       return (await post("writeLog.append", { row, ifAbsent })) as { inserted: boolean };
+    },
+    async appendDeliveryLog(row) {
+      await ensureOpen();
+      return (await post("deliveryLog.append", { row })) as { id: number };
+    },
+    async deliveryDone(deliveryKey) {
+      await ensureOpen();
+      return (await post("deliveryLog.done", { deliveryKey })) === true;
+    },
+    async deliveryStreakStart(kind, target) {
+      await ensureOpen();
+      return ((await post("deliveryLog.streakStart", { kind, target })) as { id: number; status: DeliveryStatus } | null) ?? undefined;
     },
     stop() {
       if (stopPromise) return stopPromise;

@@ -123,6 +123,39 @@ const handlers: Record<string, (input: unknown) => unknown> = {
       );
     return { inserted: Number(result.changes) === 1 };
   },
+  "deliveryLog.append": (input) => {
+    const row = isRecord(input) ? input.row : undefined;
+    const result = db
+      .prepare(
+        "INSERT INTO oc_family_pack_delivery_log (delivery_key, kind, target, status, error_kind, error_detail, receipt_json, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        field(row, "deliveryKey"),
+        field(row, "kind"),
+        field(row, "target"),
+        field(row, "status"),
+        optional(row, "errorKind"),
+        optional(row, "errorDetail"),
+        optional(row, "receiptJson"),
+        Date.now(),
+      );
+    return { id: Number(result.lastInsertRowid) };
+  },
+  // failed is the one status that is tried again: nothing reached the host.
+  "deliveryLog.done": (input) =>
+    db
+      .prepare("SELECT 1 AS found FROM oc_family_pack_delivery_log WHERE delivery_key = ? AND status IN ('sent', 'partial', 'held', 'unknown') LIMIT 1")
+      .get(field(input, "deliveryKey")) !== undefined,
+  "deliveryLog.streakStart": (input) => {
+    const row = db
+      .prepare(
+        `SELECT id, status FROM oc_family_pack_delivery_log WHERE kind = ? AND target = ? AND status <> 'sent'
+         AND id > COALESCE((SELECT MAX(id) FROM oc_family_pack_delivery_log WHERE kind = ? AND target = ? AND status = 'sent'), 0)
+         ORDER BY id LIMIT 1`,
+      )
+      .get(field(input, "kind"), field(input, "target"), field(input, "kind"), field(input, "target")) as { id: number; status: string } | undefined;
+    return row ? { id: Number(row.id), status: row.status } : null;
+  },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -131,7 +164,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function field(input: unknown, name: string): string {
   const value = isRecord(input) ? input[name] : undefined;
-  if (typeof value !== "string" || value.length === 0) throw new Error(`oc-family-pack: write log needs ${name}`);
+  if (typeof value !== "string" || value.length === 0) throw new Error(`oc-family-pack: store call needs ${name}`);
   return value;
 }
 

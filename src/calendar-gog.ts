@@ -36,6 +36,8 @@ export type GoogleEventFields = {
   recurringEventId?: string;
   /** The instance's slot in its series, in the same form as `start`; present only on recurring instances. */
   originalStart?: string;
+  /** The event's notes, for the daily brief's homework line; never on the wire. */
+  description?: string;
 };
 
 export type GogEvent = FamilyEvent & { google: GoogleEventFields };
@@ -133,6 +135,8 @@ function googleFields(eventId: string, item: Record<string, unknown>): GoogleEve
   if (etag) fields.etag = etag;
   if (recurringEventId) fields.recurringEventId = recurringEventId;
   if (originalStart) fields.originalStart = originalStart;
+  const description = nonEmpty(item.description);
+  if (description) fields.description = description;
   return fields;
 }
 
