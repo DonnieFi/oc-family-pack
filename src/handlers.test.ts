@@ -172,8 +172,30 @@ test("family.garbage reports a failed read to the plugin log, without the link",
 });
 
 test("family.weather reads rain hours in the household's zone and reuses a reading for 30 minutes", async () => {
-  const golden = JSON.parse(readFileSync(new URL("./fixtures/weather-golden.json", import.meta.url), "utf8")) as { cases: { name: string; feature: unknown }[] };
-  const feature = golden.cases.find((c) => c.name === "rain this evening (6pm)")!.feature;
+  const golden = JSON.parse(readFileSync(new URL("./fixtures/weather-golden.json", import.meta.url), "utf8")) as {
+    cases: { name: string; observed: string; condition: string; temp: number; wind: number; hourly: [string, number][] }[];
+  };
+  const rain = golden.cases.find((c) => c.name === "rain this evening (6pm)")!;
+  const feature = {
+    type: "Feature",
+    geometry: { type: "Point", coordinates: [0, 0] },
+    properties: {
+      name: { en: "Fixture" },
+      currentConditions: {
+        timestamp: { en: rain.observed },
+        condition: { en: rain.condition },
+        temperature: { value: { en: rain.temp } },
+        wind: { speed: { value: { en: rain.wind } } },
+      },
+      hourlyForecastGroup: {
+        hourlyForecasts: rain.hourly.map(([timestamp, precip]) => ({
+          timestamp,
+          temperature: { value: { en: 0 } },
+          ...(precip ? { lop: { value: { en: precip } } } : {}),
+        })),
+      },
+    },
+  };
   const config = parseConfig({ timezone: "America/Halifax", location: { lat: 44.65, lon: -63.57 } });
   let clock = Date.parse("2026-10-04T12:30:00Z");
   let calls = 0;

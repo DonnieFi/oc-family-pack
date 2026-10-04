@@ -61,15 +61,47 @@ test("a location outside Canada explains that weather covers Canada only", async
 
 /** What Bernie's own _parse_ec_current and get_recommendations returned (~/ocfp-share/runs/s5k.20-bernie-golden.py). */
 type Advice = { summary: string; clothing: string[]; alerts: string[]; severity: string };
+type GoldenCase = {
+  name: string;
+  observed?: string;
+  condition?: string;
+  temp?: number;
+  wind?: number;
+  /** [timestamp, precip percent]. A missing precip is 0. The hour is kept only when Bernie had a temperature. */
+  hourly: [string, number][];
+  parsed: { wind_kmh: number };
+  bernie: Advice;
+  intended?: Advice & { why: string };
+};
 const GOLDEN = JSON.parse(readFileSync(new URL("./fixtures/weather-golden.json", import.meta.url), "utf8")) as {
   timezone: string;
-  cases: { name: string; feature: { geometry: { coordinates: [number, number] }; properties: Record<string, unknown> }; parsed: { wind_kmh: number }; bernie: Advice; intended?: Advice & { why: string } }[];
+  cases: GoldenCase[];
 };
-const asFeature = (raw: (typeof GOLDEN.cases)[number]["feature"]): EcFeature => ({ lon: raw.geometry.coordinates[0], lat: raw.geometry.coordinates[1], properties: raw.properties });
+/** The citypage shape parseCityPage reads. No station coordinates: the live card does not publish them either. */
+const asFeature = (golden: GoldenCase): EcFeature => ({
+  lon: 0,
+  lat: 0,
+  properties: {
+    name: { en: "Fixture" },
+    currentConditions: {
+      ...(golden.observed ? { timestamp: { en: golden.observed } } : {}),
+      ...(golden.condition ? { condition: { en: golden.condition } } : {}),
+      ...(golden.temp !== undefined ? { temperature: { value: { en: golden.temp } } } : {}),
+      ...(golden.wind !== undefined ? { wind: { speed: { value: { en: golden.wind } } } } : {}),
+    },
+    hourlyForecastGroup: {
+      hourlyForecasts: golden.hourly.map(([timestamp, precip]) => ({
+        timestamp,
+        temperature: { value: { en: 0 } },
+        ...(precip ? { lop: { value: { en: precip } } } : {}),
+      })),
+    },
+  },
+});
 
 test("the recommendation on the card is what Bernie's engine said for every golden case but one", () => {
   for (const golden of GOLDEN.cases) {
-    const card = parseCityPage(asFeature(golden.feature), GOLDEN.timezone);
+    const card = parseCityPage(asFeature(golden), GOLDEN.timezone);
     const { why: _why, ...intended } = golden.intended ?? { why: "" };
     assert.deepEqual(card.recommendation, golden.intended ? intended : golden.bernie, golden.name);
     assert.equal(card.windKmh ?? 0, golden.parsed.wind_kmh, golden.name);
@@ -92,13 +124,13 @@ test("readings round half to even, as Python's round() does", () => {
 
 test("rain hours are read in the household's zone, not the Gateway's or UTC", () => {
   const evening = GOLDEN.cases.find((golden) => golden.name === "rain this evening (6pm)")!;
-  assert.deepEqual(parseCityPage(asFeature(evening.feature), "America/Halifax").recommendation?.alerts, ["Rain likely this evening (6pm) (~61% chance)"]);
-  assert.deepEqual(parseCityPage(asFeature(evening.feature), "America/Vancouver").recommendation?.alerts, ["Rain likely this afternoon (2pm) (~61% chance)"]);
-  assert.deepEqual(parseCityPage(asFeature(evening.feature), "UTC").recommendation?.alerts, ["Rain likely tonight (9pm) (~61% chance)"]);
+  assert.deepEqual(parseCityPage(asFeature(evening), "America/Halifax").recommendation?.alerts, ["Rain likely this evening (6pm) (~61% chance)"]);
+  assert.deepEqual(parseCityPage(asFeature(evening), "America/Vancouver").recommendation?.alerts, ["Rain likely this afternoon (2pm) (~61% chance)"]);
+  assert.deepEqual(parseCityPage(asFeature(evening), "UTC").recommendation?.alerts, ["Rain likely tonight (9pm) (~61% chance)"]);
 });
 
 test("wind speed comes as a number or the numeric string the citypage schema declares; anything else is no reading", () => {
-  const base = asFeature(GOLDEN.cases.find((golden) => golden.name === "wind 41 (the one intended difference)")!.feature);
+  const base = asFeature(GOLDEN.cases.find((golden) => golden.name === "wind 41 (the one intended difference)")!);
   const withWind = (value: unknown) => {
     const current = structuredClone(base.properties.currentConditions) as { wind: { speed: { value: { en: unknown } } } };
     current.wind.speed.value.en = value;

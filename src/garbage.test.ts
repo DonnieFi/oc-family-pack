@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { test } from "node:test";
 import { Value } from "typebox/value";
 import { GarbageOutputSchema } from "./contract.ts";
-import { createGarbageFeed, garbageSchedule, GARBAGE_BODY_MAX, GARBAGE_DOWN, GARBAGE_NONE, GARBAGE_UNSET, isLocalHost, parseIcs, type GarbageFetch } from "./garbage.ts";
+import { createGarbageFeed, garbageBriefLine, garbageSchedule, GARBAGE_BODY_MAX, GARBAGE_DOWN, GARBAGE_NONE, GARBAGE_UNSET, isLocalHost, parseIcs, type GarbageFetch } from "./garbage.ts";
 
 const ICS = readFileSync(new URL("./fixtures/garbage-recollect.ics", import.meta.url), "utf8");
 /** What Bernie's own garbage_service.py returned for this fixture (~/ocfp-share/runs/s5k.21-bernie-golden.py). */
@@ -92,7 +92,10 @@ test("for every day in the golden, the next 14 days and tomorrow match Bernie's 
   const feed = createGarbageFeed(stub(ICS).fetcher);
   for (const golden of GOLDEN.cases) {
     assert.deepEqual(await feed.next(URL_, TZ, at(golden.now), 14), golden.next14, golden.now);
-    assert.deepEqual(await feed.tomorrow(URL_, TZ, at(golden.now)), golden.tomorrow ?? undefined, golden.now);
+    const tomorrow = await feed.tomorrow(URL_, TZ, at(golden.now));
+    assert.deepEqual(tomorrow, golden.tomorrow ?? undefined, golden.now);
+    // embeds.py titles the summary: "Garbage and Recycling" is "Garbage And Recycling" on the brief.
+    assert.equal(garbageBriefLine(tomorrow) ?? null, golden.briefLine, golden.now);
   }
 });
 

@@ -4,7 +4,7 @@ import { buildWeekPayload } from "./payload.js";
 import { buildSchedule, scheduleCaller } from "./schedule.js";
 import { readEcWeather } from "./weather-ec.js";
 import { resolveMembers } from "./week.js";
-/** The Environment Canada card for the configured location, in the household's zone, cached for the configured minutes. */
+/** The Environment Canada card for the configured location, in the household's zone, cached for 30 minutes. */
 function weatherReader(config, deps, now) {
     return () => readEcWeather(config.location, deps.fetchWeather, now(), { timezone: config.timezone });
 }

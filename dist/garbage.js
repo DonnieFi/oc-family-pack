@@ -270,6 +270,24 @@ function decode(bytes) {
         throw new FeedFailure("did not send UTF-8 text");
     }
 }
+/**
+ * Python's str.title(), which Bernie's brief applies to the cleaned summary (bot/ui/embeds.py:75).
+ * A cased letter is upper after anything uncased and lower after a cased one, so "and" becomes "And".
+ */
+function pyTitle(text) {
+    let out = "";
+    let previousCased = false;
+    for (const char of text) {
+        const cased = char.toLowerCase() !== char.toUpperCase();
+        out += cased ? (previousCased ? char.toLowerCase() : char.toUpperCase()) : char;
+        previousCased = cased;
+    }
+    return out;
+}
+/** The daily-brief garbage line. Undefined when there is no pickup, so the brief leaves the line out. */
+export function garbageBriefLine(collection) {
+    return collection === undefined ? undefined : `${collection.icon} **Garbage tomorrow:** ${pyTitle(collection.summary)}`;
+}
 const dayFormat = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long", month: "short", day: "2-digit" });
 /** Bernie's "%A, %b %d": "Monday, Oct 05". */
 function dayLabel(date) {

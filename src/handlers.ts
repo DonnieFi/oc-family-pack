@@ -25,7 +25,7 @@ export type FamilyHandlerDeps = {
   log?: (line: string) => void;
 };
 
-/** The Environment Canada card for the configured location, in the household's zone, cached for the configured minutes. */
+/** The Environment Canada card for the configured location, in the household's zone, cached for 30 minutes. */
 function weatherReader(config: Config, deps: FamilyHandlerDeps, now: () => number) {
   return () => readEcWeather(config.location, deps.fetchWeather, now(), { timezone: config.timezone });
 }
