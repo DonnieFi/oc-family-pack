@@ -750,6 +750,62 @@
   text-decoration: underline;
 }
 
+.ocfp-dialog-note,
+.ocfp-dialog-edit {
+  margin: -8px 20px 20px;
+}
+
+.ocfp-dialog-note {
+  color: var(--muted);
+}
+
+.ocfp-dialog-edit {
+  display: grid;
+  gap: 10px;
+}
+
+.ocfp-field {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ocfp-input {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md, 8px);
+  background: var(--card);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 14px;
+}
+
+.ocfp-dialog-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ocfp-dialog-status {
+  margin: 0;
+  color: var(--text-strong);
+}
+
+.ocfp-dialog-status:empty {
+  display: none;
+}
+
+/* Delete sits apart from Save, under a rule, so the two are never side by side. */
+.ocfp-dialog-danger {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.ocfp-btn-danger {
+  color: var(--danger, #c0392b);
+}
+
 .ocfp-dialog-link svg {
   width: 15px;
   height: 15px;

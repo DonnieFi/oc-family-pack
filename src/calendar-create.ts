@@ -1,24 +1,29 @@
 import type { FeatureInvocationContext } from "openclaw/plugin-sdk/feature-plugin";
 import type { OpenClawPluginToolContext } from "openclaw/plugin-sdk/plugin-entry";
-import { Type } from "typebox";
-import { createStamper, STAMP_PARAM, type Stamper } from "./approval-stamp.ts";
+import { Type, type TObject, type TSchema } from "typebox";
+import { STAMP_PARAM, type Stamper } from "./approval-stamp.ts";
 import type { RunGog } from "./calendar-gog.ts";
 import {
   baseKey,
+  changedWhileWaitingLine,
   checkKey,
   END_BEFORE_START,
   loggedFields,
   normalizeCreate,
+  OP_VERB,
   requesterTag,
   requestKey,
+  somethingWrongLine,
   submitCreate,
   unreachableLine,
   type CreateFields,
+  type WriteFailure,
   type WriteLog,
+  type WriteOp,
 } from "./calendar-write.ts";
 import type { GrantHolder } from "./grant.ts";
 import { toolWriteFacts, writeRequesterFromFacts, type CallFacts, type Requester } from "./requester.ts";
-import type { WriteStatus } from "./store.ts";
+import type { WriteLogRow, WriteStatus } from "./store.ts";
 import type { CalendarConfig, Config, MemberConfig } from "./types.ts";
 import { gateWrite, READ_ONLY } from "./write-gate.ts";
 import { approvers } from "./write-permissions.ts";
@@ -37,19 +42,22 @@ export const APPROVAL_TITLE_MAX = 80;
 export const APPROVAL_DESCRIPTION_MAX = 512;
 
 /** What the model sees. No series scope, and never the stamp parameter. */
-export const CalendarCreateInputSchema = Type.Object({
-  calendar: Type.String({ minLength: 1, maxLength: 100, description: "Which calendar, by the name listed in this tool's description." }),
-  title: Type.String({ minLength: 1, maxLength: 200, description: "The event's name, such as Sleepover." }),
-  start: Type.String({
-    minLength: 1,
-    maxLength: 40,
-    description: "A date and time with its UTC offset, such as 2026-10-09T16:30:00-03:00, or YYYY-MM-DD for an all-day event.",
-  }),
-  end: Type.Optional(Type.String({ minLength: 1, maxLength: 40, description: "Same format as start. A timed event needs one; an all-day event defaults to one day." })),
-  allDay: Type.Optional(Type.Boolean({ description: "True for an all-day event." })),
-  location: Type.Optional(Type.String({ maxLength: 200 })),
-  description: Type.Optional(Type.String({ maxLength: 2000 })),
-});
+export const CalendarCreateInputSchema = Type.Object(
+  {
+    calendar: Type.String({ minLength: 1, maxLength: 100, description: "Which calendar, by the name listed in this tool's description." }),
+    title: Type.String({ minLength: 1, maxLength: 200, description: "The event's name, such as Sleepover." }),
+    start: Type.String({
+      minLength: 1,
+      maxLength: 40,
+      description: "A date and time with its UTC offset, such as 2026-10-09T16:30:00-03:00, or YYYY-MM-DD for an all-day event.",
+    }),
+    end: Type.Optional(Type.String({ minLength: 1, maxLength: 40, description: "Same format as start. A timed event needs one; an all-day event defaults to one day." })),
+    allDay: Type.Optional(Type.Boolean({ description: "True for an all-day event." })),
+    location: Type.Optional(Type.String({ maxLength: 200 })),
+    description: Type.Optional(Type.String({ maxLength: 2000 })),
+  },
+  { additionalProperties: false },
+);
 
 export type CalendarWriteDeps = {
   config: Pick<Config, "gogPath" | "timezone" | "writes" | "members" | "calendars">;
@@ -87,7 +95,7 @@ export type CalendarTool = {
   name: string;
   label: string;
   description: string;
-  parameters: typeof CalendarCreateInputSchema;
+  parameters: TSchema;
   execute: (toolCallId: string, params: unknown) => Promise<ToolResult>;
 };
 
@@ -127,6 +135,16 @@ export function withoutStamp(params: unknown): Record<string, unknown> {
   return rest;
 }
 
+/**
+ * Fields a closed tool schema doesn't name. The agent loop checks a call against the schema
+ * before the hook runs, but tools.invoke runs the hook and the tool without that check, so the
+ * hook and the tool hold the schema's shape themselves.
+ */
+export function extraFields(schema: TObject, params: Record<string, unknown>): string[] {
+  if ((schema as TObject & { additionalProperties?: unknown }).additionalProperties !== false) return [];
+  return Object.keys(params).filter((key) => !Object.hasOwn(schema.properties, key));
+}
+
 function text(params: Record<string, unknown>, name: string): string | undefined {
   const value = params[name];
   return typeof value === "string" ? value : undefined;
@@ -144,6 +162,7 @@ function findCalendar(calendars: readonly CalendarConfig[], name: string): Calen
  */
 export function prepareCreate(setup: Pick<Config, "members" | "calendars">, facts: KeyFacts, params: unknown): PreparedCreate {
   const input = withoutStamp(params);
+  if (extraFields(CalendarCreateInputSchema, input).length > 0) throw new CreateInputError(somethingWrongLine("create", undefined));
   const calendarName = text(input, "calendar");
   const title = text(input, "title")?.trim();
   const start = text(input, "start");
@@ -167,14 +186,14 @@ export function prepareCreate(setup: Pick<Config, "members" | "calendars">, fact
   }
   // writeScope's rule for a tool call: the session key, never the tool call id.
   const scope = facts.sessionKey && facts.sessionKey.trim() ? facts.sessionKey : undefined;
-  if (scope === undefined) throw new CreateInputError(`Something went wrong checking that, so I didn't add **${title}**.`);
+  if (scope === undefined) throw new CreateInputError(somethingWrongLine("create", title));
   const requester = writeRequesterFromFacts(setup.members, facts);
   const tag = requesterTag(requester);
   let base: string;
   try {
     base = baseKey({ requester: tag, op: "create", calendarId: calendar.id, fields: normalized, scope: checkKey(scope) });
   } catch {
-    throw new CreateInputError(`Something went wrong checking that, so I didn't add **${title}**.`);
+    throw new CreateInputError(somethingWrongLine("create", title));
   }
   return { base, tag, requester, calendar, fields, normalized };
 }
@@ -187,16 +206,16 @@ export function deriveBaseKey(setup: Pick<Config, "members" | "calendars">, fact
 // ---- What people read ----
 
 /** Control and format characters would be escaped by the host's sanitizer and grow the text. */
-function clean(value: string): string {
+export function clean(value: string): string {
   return value.replace(/[\p{Cc}\p{Cf}]/gu, "").replace(/\s+/g, " ").trim();
 }
 
-function points(value: string): number {
+export function points(value: string): number {
   return [...value].length;
 }
 
 /** Cuts to `max` code points, ending with … when anything was cut. */
-function fit(value: string, max: number): string {
+export function fit(value: string, max: number): string {
   if (points(value) <= max) return value;
   if (max <= 0) return "";
   return `${[...value].slice(0, max - 1).join("")}…`;
@@ -246,7 +265,7 @@ function partsOf(format: Intl.DateTimeFormat, iso: string): Record<string, strin
 }
 
 /** Who asked, by roster name only: never an id, a session key, or a requester tag. */
-function asker(requester: Requester): { who: string; asked: string } {
+export function asker(requester: Requester): { who: string; asked: string } {
   if (requester.from === "discord") {
     const name = requester.member ? clean(requester.member.displayName) : "Someone";
     return { who: name, asked: `${name} asked on Discord.` };
@@ -254,23 +273,41 @@ function asker(requester: Requester): { who: string; asked: string } {
   return { who: "Someone", asked: "Asked outside Discord." };
 }
 
-export function approvalTitle(who: string, name: string, place: string): string {
-  const build = (event: string, where: string) => `${who} wants to add **${event}** to ${where}`;
+const TITLE_PLACE: Record<WriteOp, string> = { create: "to", update: "on", move: "to", delete: "from" };
+
+/** "Donnie wants to add **Dentist** to Donnie's calendar"; a move names where it goes. */
+export function approvalTitle(who: string, name: string, place: string, op: WriteOp = "create"): string {
+  const build = (event: string, where: string) => `${who} wants to ${OP_VERB[op]} **${event}** ${TITLE_PLACE[op]} ${where}`;
   const room = APPROVAL_TITLE_MAX - points(build("", place));
   if (room >= 1) return build(fit(name, room), place);
   return build("…", fit(place, APPROVAL_TITLE_MAX - points(build("…", ""))));
 }
 
-export function approvalDescription(asked: string, name: string, when: string, place: string): string {
-  const build = (event: string) => `${asked} ${event}, ${when}, on ${place}.`;
+/** "Penny asked on Discord. Dentist, Wednesday October 14 at 10:00 AM, on Donnie's calendar."; an update to the time adds where it would move to. */
+export function approvalDescription(asked: string, name: string, when: string, place: string, movesTo?: string): string {
+  const build = (event: string) => `${asked} ${event}, ${when}, on ${place}.${movesTo ? ` It would move to ${movesTo}.` : ""}`;
+  return build(fit(name, APPROVAL_DESCRIPTION_MAX - points(build(""))));
+}
+
+/** "Penny asked on Discord. Dentist, Wednesday October 14 at 10:00 AM. Moving from Donnie's calendar to Calla's calendar." */
+export function moveApprovalDescription(asked: string, name: string, when: string, from: string, to: string): string {
+  const build = (event: string) => `${asked} ${event}, ${when}. Moving from ${from} to ${to}.`;
   return build(fit(name, APPROVAL_DESCRIPTION_MAX - points(build(""))));
 }
 
 export const createdLine = (name: string, place: string, when: string) => `Added **${name}** to ${place}, ${when}.`;
-export const notApprovedLine = (name: string, approver: string) => `That didn't get approved, so I didn't add **${name}**. Ask again when ${approver} is around.`;
-export const timedOutLine = (name: string, approver: string) =>
-  `Nobody answered in ${APPROVAL_TIMEOUT_MS / 60_000} minutes, so I didn't add **${name}**. Ask again when ${approver} is around.`;
-export const somethingWrongLine = (name: string) => `Something went wrong checking that, so I didn't add **${name}**.`;
+export const notApprovedLine = (name: string, approver: string, op: WriteOp = "create") =>
+  `That didn't get approved, so I didn't ${OP_VERB[op]} **${name}**. Ask again when ${approver} is around.`;
+export const timedOutLine = (name: string, approver: string, op: WriteOp = "create") =>
+  `Nobody answered in ${APPROVAL_TIMEOUT_MS / 60_000} minutes, so I didn't ${OP_VERB[op]} **${name}**. Ask again when ${approver} is around.`;
+
+/** The line for a write that didn't happen. None of gog's or the store's own text. */
+export function failedLine(op: WriteOp, reason: WriteFailure, name: string | undefined): string {
+  if (reason === "readonly") return READ_ONLY;
+  if (reason === "store") return somethingWrongLine(op, name);
+  if (reason === "stale") return changedWhileWaitingLine(op, name);
+  return unreachableLine(op, name);
+}
 
 /** The model relays deny and cancel itself: the host's result for those is its own text. */
 export function calendarCreateDescription(config: Pick<Config, "members" | "calendars">): string {
@@ -287,21 +324,31 @@ export function calendarCreateDescription(config: Pick<Config, "members" | "cale
 
 // ---- The hook and the tool ----
 
-async function logOutcome(deps: CalendarWriteDeps, prepared: PreparedCreate, status: Exclude<WriteStatus, "committed" | "reverted">): Promise<void> {
+export type OutcomeStatus = Exclude<WriteStatus, "committed" | "reverted">;
+
+/**
+ * An outcome row is history only. With no store, or a store that throws, the row is skipped
+ * and the person still gets their line.
+ */
+export async function logOutcome(deps: Pick<CalendarWriteDeps, "log">, row: (log: WriteLog) => Promise<Omit<WriteLogRow, "status">>, status: OutcomeStatus): Promise<void> {
   const log = deps.log();
-  if (!log) throw new Error("oc-family-pack: the family store is not running");
-  await log.appendWriteLog(
-    {
-      requestKey: requestKey(prepared.base, await log.countCommittedWrites(prepared.base)),
-      baseKey: prepared.base,
-      requester: prepared.tag,
-      op: "create",
-      calendarId: prepared.calendar.id,
-      afterJson: loggedFields(prepared.normalized),
-      status,
-    },
-    { ifAbsent: false },
-  );
+  if (!log) return;
+  try {
+    await log.appendWriteLog({ ...(await row(log)), status }, { ifAbsent: false });
+  } catch {
+    // The outcome stands without its row.
+  }
+}
+
+function createOutcome(prepared: PreparedCreate) {
+  return async (log: WriteLog) => ({
+    requestKey: requestKey(prepared.base, await log.countCommittedWrites(prepared.base)),
+    baseKey: prepared.base,
+    requester: prepared.tag,
+    op: "create" as const,
+    calendarId: prepared.calendar.id,
+    afterJson: loggedFields(prepared.normalized),
+  });
 }
 
 const OUTCOME: Partial<Record<ApprovalResolution, "denied" | "timed-out" | "failed">> = { deny: "denied", timeout: "timed-out", cancelled: "failed" };
@@ -347,14 +394,14 @@ export function calendarCreateHook(deps: CalendarWriteDeps, stamper: Stamper) {
         allowedDecisions: ["allow-once", "deny"],
         async onResolution(decision) {
           const status = OUTCOME[decision];
-          if (status) await logOutcome(deps, prepared, status);
+          if (status) await logOutcome(deps, createOutcome(prepared), status);
         },
       },
     };
   };
 }
 
-function reply(textValue: string, status: string): ToolResult {
+export function reply(textValue: string, status: string): ToolResult {
   return { content: [{ type: "text", text: textValue }], details: { status } };
 }
 
@@ -382,37 +429,21 @@ export function calendarCreateTool(deps: CalendarWriteDeps, stamper: Stamper, ct
       const name = clean(prepared.normalized.title);
       const table = stamper.verify(stamp, prepared.base, CALENDAR_CREATE_TOOL);
       if (table === undefined) {
-        await logOutcome(deps, prepared, "failed");
-        return reply(somethingWrongLine(name), "refused");
+        await logOutcome(deps, createOutcome(prepared), "failed");
+        return reply(somethingWrongLine("create", name), "refused");
       }
       const log = deps.log();
-      if (!log) throw new Error("oc-family-pack: the family store is not running");
+      if (!log) return reply(somethingWrongLine("create", name), "failed");
       const context = { source: "tool", tool: ctx, toolCallId } as unknown as FeatureInvocationContext;
       const result = await submitCreate(
         { config: deps.config, runGog: deps.runGog, log, grant: deps.grant },
         { context, calendar: prepared.calendar, fields: prepared.fields, table },
       );
-      // gog failed: calendar-write has logged `failed` and, for the read-only grant, flipped it.
-      if (result.status === "failed") return reply(result.reason === "readonly" ? READ_ONLY : unreachableLine("create", name), "failed");
+      // calendar-write has logged `failed` where it could and, for the read-only grant, flipped it.
+      if (result.status === "failed") return reply(failedLine("create", result.reason, name), "failed");
       if (result.status === "refused") return reply(result.message, "refused");
-      if (result.status === "needs-approval") return reply(somethingWrongLine(name), "refused");
+      if (result.status === "needs-approval") return reply(somethingWrongLine("create", name), "refused");
       return reply(createdLine(name, calendarPlace(deps.config.members, prepared.calendar), bernieWhen(prepared.normalized, deps.config.timezone)), result.status);
     },
   };
-}
-
-export type CalendarWriteApi = {
-  on: (
-    hookName: "before_tool_call",
-    handler: (event: HookEvent, ctx: HookContext) => Promise<HookResult | undefined>,
-    opts: { priority: number; matcher: readonly [string, ...string[]] },
-  ) => void;
-  registerTool: (factory: (ctx: ToolContext) => CalendarTool, opts: { name: string }) => void;
-};
-
-/** The hook and the tool, always together, sharing one stamp secret made here. No hook, no tool. */
-export function registerCalendarWrite(api: CalendarWriteApi, deps: CalendarWriteDeps): void {
-  const stamper = createStamper();
-  api.on("before_tool_call", calendarCreateHook(deps, stamper), { priority: CALENDAR_HOOK_PRIORITY, matcher: [CALENDAR_CREATE_TOOL] });
-  api.registerTool((ctx) => calendarCreateTool(deps, stamper, ctx), { name: CALENDAR_CREATE_TOOL });
 }

@@ -1476,9 +1476,9 @@ async function scheduleTool(configPath: string, port: number): Promise<void> {
     return result as Record<string, unknown>;
   };
   const owner = await invoke({});
-  const expected = { sections: [{ name: "not the usual", items: [{ title: "Dentist", time: "12:00 PM", owners: [] }] }], usual: "Usual: Swim 5:00 PM" };
+  const expected = { sections: [{ name: "not the usual", items: [{ id: "c0/dentist", title: "Dentist", time: "12:00 PM", owners: [] }] }], usual: "Usual: Swim 5:00 PM" };
   if (JSON.stringify(owner) !== JSON.stringify(expected)) fail(step, `family_schedule returned ${JSON.stringify(owner)}, expected ${JSON.stringify(expected)}`);
-  note("the agent tool, called with the shared password, put Dentist under not the usual and Swim in the usual line", step);
+  note("the agent tool, called with the shared password, put Dentist (with the id the change tools take) under not the usual and Swim in the usual line", step);
   const claimed = await invoke({ member: "me" }, { "x-openclaw-message-channel": "discord" });
   if (JSON.stringify(claimed) !== JSON.stringify({ error: "I can't tell who 'me' is here. Name the person." })) {
     fail(step, `a Discord caller with no roster sender id asked for "me" and got ${JSON.stringify(claimed)}`);

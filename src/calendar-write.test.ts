@@ -8,9 +8,20 @@ import type { FeatureInvocationContext } from "openclaw/plugin-sdk/feature-plugi
 import type { RunGog } from "./calendar-gog.ts";
 import {
   baseKey,
+  changeEvent,
   checkKey,
   createEvent,
+  NOTHING_TO_CHANGE,
+  normalizeChange,
+  somethingWrongLine,
+  changedWhileWaitingLine,
+  submitChange,
+  type ChangeRequest,
+  type ChangeResult,
+  type SubmitChangeResult,
+  type WriteLog,
   END_BEFORE_START,
+  END_BEFORE_START_CHANGE,
   normalizeCreate,
   requesterTag,
   submitCreate,
@@ -59,18 +70,23 @@ type FakeEvent = {
   description?: string;
   status: "confirmed" | "cancelled";
   private: Record<string, string>;
+  recurringEventId?: string;
+  originalStart?: string;
+  recurrence?: string[];
 };
 
 // --send-updates is not here: it must be one `--send-updates=none` element, so the two-element form fails to parse.
 const VALUE_FLAGS = new Set(["--max"]);
-const BOOL_FLAGS = new Set(["--all-day", "--all-pages", "--json", "--no-input"]);
+const BOOL_FLAGS = new Set(["--all-day", "--all-pages", "--json", "--no-input", "--force"]);
+/** How many ids each command takes after `--`. */
+const POSITIONALS: Record<string, number> = { "calendar events": 1, "calendar create": 1, "calendar event": 2, "calendar update": 2, "calendar delete": 2, "calendar move": 3 };
 const REPEATED = new Set(["--private-prop"]);
 
-/** Reads argv the way gog's parser does: `--name=value`, a short list of two-element flags, then `--` and one id. */
-function parseArgs(args: string[]): { command: string; flags: Map<string, string[]>; id: string } {
+/** Reads argv the way gog's parser does: `--name=value`, a short list of two-element flags, then `--` and the command's ids. */
+function parseArgs(args: string[]): { command: string; flags: Map<string, string[]>; id: string; ids: string[] } {
   const command = `${args[0]} ${args[1]}`;
   const dash = args.indexOf("--");
-  assert.equal(dash, args.length - 2, `-- must sit just before the one calendar id: ${JSON.stringify(args)}`);
+  assert.equal(dash, args.length - 1 - (POSITIONALS[command] ?? 1), `-- must sit just before the ids: ${JSON.stringify(args)}`);
   const flags = new Map<string, string[]>();
   const add = (name: string, value: string) => {
     if (flags.has(name) && !REPEATED.has(name)) throw new Error(`flag ${name} given twice`);
@@ -91,7 +107,7 @@ function parseArgs(args: string[]): { command: string; flags: Map<string, string
       throw new Error(`unknown flag ${arg}`);
     }
   }
-  return { command, flags, id: args[dash + 1] ?? "" };
+  return { command, flags, id: args[dash + 1] ?? "", ids: args.slice(dash + 1) };
 }
 
 function one(flags: Map<string, string[]>, name: string): string | undefined {
@@ -107,11 +123,43 @@ function fakeGog({ listsCancelled = false, ignoresFilter = false, failCreate }: 
   const calls: string[][] = [];
   let onCreate: (() => Promise<void>) | undefined;
   const yieldTurn = () => new Promise<void>((resolve) => setImmediate(resolve));
+  /** A failure for the next calls of one subcommand (event, update, move, delete). */
+  const fail = new Map<string, () => Error>();
+  const find = (calendarId: string, eventId: string) => events.find((event) => event.id === eventId && event.calendarId === calendarId);
   const run: RunGog = async (file, args) => {
     assert.equal(file, gogPath);
     calls.push(args);
-    const { command, flags, id } = parseArgs(args);
+    const { command, flags, id, ids } = parseArgs(args);
     await yieldTurn();
+    const failure = fail.get(args[1] ?? "");
+    if (failure) throw failure();
+    if (command === "calendar event") {
+      const event = find(ids[0] ?? "", ids[1] ?? "");
+      if (!event) throw gogError("Error: googleapi: Error 404: Not Found, notFound");
+      return { stdout: JSON.stringify({ event: resource(event) }) };
+    }
+    if (command === "calendar update" || command === "calendar move" || command === "calendar delete") {
+      assert.equal(one(flags, "--send-updates"), "none");
+      const event = find(ids[0] ?? "", ids[1] ?? "");
+      if (!event) throw gogError("Error: googleapi: Error 404: Not Found, notFound");
+      if (event.status === "cancelled") throw gogError("Error: googleapi: Error 410: Resource has been deleted, deleted");
+      if (command === "calendar move") event.calendarId = ids[2] ?? "";
+      else if (command === "calendar delete") event.status = "cancelled";
+      else {
+        const summary = one(flags, "--summary");
+        const from = one(flags, "--from");
+        const to = one(flags, "--to");
+        const location = one(flags, "--location");
+        const description = one(flags, "--description");
+        if (summary !== undefined) event.summary = summary;
+        if (from !== undefined) event.start = from;
+        if (to !== undefined) event.end = to;
+        if (from !== undefined) event.allDay = flags.has("--all-day");
+        if (location !== undefined) event.location = location;
+        if (description !== undefined) event.description = description;
+      }
+      return { stdout: JSON.stringify({ event: resource(event) }) };
+    }
     if (command === "calendar events") {
       const filter = one(flags, "--private-prop-filter") ?? "";
       const eq = filter.indexOf("=");
@@ -162,6 +210,8 @@ function fakeGog({ listsCancelled = false, ignoresFilter = false, failCreate }: 
     run,
     events,
     calls,
+    fail,
+    writes: () => calls.filter((args) => ["create", "update", "move", "delete"].includes(args[1] ?? "")),
     live: () => events.filter((event) => event.status !== "cancelled"),
     remove: (eventId: string) => {
       const event = events.find((entry) => entry.id === eventId);
@@ -181,6 +231,11 @@ function resource(event: FakeEvent): Record<string, unknown> {
     start: event.allDay ? { date: event.start } : { dateTime: event.start },
     end: event.allDay ? { date: event.end } : { dateTime: event.end },
     extendedProperties: { private: event.private },
+    ...(event.location ? { location: event.location } : {}),
+    ...(event.description ? { description: event.description } : {}),
+    ...(event.recurringEventId ? { recurringEventId: event.recurringEventId } : {}),
+    ...(event.originalStart ? { originalStartTime: { dateTime: event.originalStart } } : {}),
+    ...(event.recurrence ? { recurrence: event.recurrence } : {}),
   };
 }
 
@@ -264,13 +319,13 @@ test("the same create twice makes one event and one committed row", async () => 
   });
 });
 
-test("a crash after gog created the event but before the log row leaves one event and one committed row after the retry", async () => {
+test("a store that stops after gog created the event still answers created, and the retry leaves one event and one committed row", async () => {
   await withStore(async ({ stateDir, store, open }) => {
     const gog = fakeGog();
     const request = dentist();
     // The store worker goes away between gog's success and the log write.
     gog.afterNextCreate(() => store.stop());
-    await assert.rejects(createEvent(deps(gog, store), request), /stopp/);
+    assert.equal((await createEvent(deps(gog, store), request)).status, "created");
     assert.equal(gog.events.length, 1);
     assert.deepEqual(logRows(stateDir), []);
 
@@ -336,7 +391,7 @@ test("a live event whose ocfpKey is not under this request's base logs the compu
       if (event) event.private.ocfpKey = "someone-else.0";
       await store.stop();
     });
-    await assert.rejects(createEvent(deps(gog, store), request), /stopp/);
+    assert.equal((await createEvent(deps(gog, store), request)).status, "created");
     const restarted = await open({ stateDir });
     try {
       const retry = await createEvent(deps(gog, restarted), request);
@@ -371,7 +426,7 @@ test("the log keeps only summary, start, end, allDay and location", async () => 
   });
 });
 
-test("a committed row already under the key when gog has just created fails loudly instead of being ignored", async () => {
+test("a committed row already under the key when gog has just created: the plain INSERT is refused, no second row lands, the create still answers", async () => {
   await withStore(async ({ stateDir, store }) => {
     const gog = fakeGog();
     gog.afterNextCreate(async () => {
@@ -383,7 +438,8 @@ test("a committed row already under the key when gog has just created fails loud
       );
       assert.equal(planted.status, 0, planted.stderr);
     });
-    await assert.rejects(createEvent(deps(gog, store), dentist()), /UNIQUE/);
+    assert.equal((await createEvent(deps(gog, store), dentist())).status, "created");
+    assert.deepEqual(logRows(stateDir).map((row) => [row.op, row.calendar_id]), [["create", "c"]]);
   });
 });
 
@@ -827,6 +883,7 @@ function failedRowsThrow() {
   return {
     committed,
     countCommittedWrites: async () => 0,
+    committedWrite: async () => undefined,
     appendWriteLog: async (row: { status: string; requestKey: string }) => {
       if (row.status === "failed") throw new Error("oc-family-pack: the family store stopped");
       committed.push(row.requestKey);
@@ -882,4 +939,342 @@ test("every off-Discord tool caller is `tool` in the key's requester tag, owner 
   assert.equal(requesterTag({ from: "tool", senderIsOwner: false }), "tool");
   assert.equal(requesterTag({ from: "discord", member: household.members[1]! }), "discord:calla");
   assert.equal(requesterTag({ from: "discord" }), "discord:unmatched");
+});
+
+// ---- update, move, delete ----
+
+const FAMILY_ID = "family@group.calendar.google.com";
+const CALLA_ID = "calla@group.calendar.google.com";
+
+/** An event already in Google, as the change tests start from. */
+function seed(gog: ReturnType<typeof fakeGog>, overrides: { [K in keyof FakeEvent]?: FakeEvent[K] | undefined } = {}): FakeEvent {
+  const event = {
+    id: `seed${gog.events.length + 1}`,
+    calendarId: FAMILY_ID,
+    summary: "Dentist",
+    start: "2026-10-14T13:00:00.000Z",
+    end: "2026-10-14T14:00:00.000Z",
+    allDay: false,
+    location: "Main St",
+    status: "confirmed",
+    private: {},
+    ...overrides,
+  } as FakeEvent;
+  if (event.location === undefined) delete event.location;
+  gog.events.push(event);
+  return event;
+}
+
+let changeCounter = 0;
+function change(op: ChangeRequest["op"], eventId: string, overrides: Partial<ChangeRequest> = {}): ChangeRequest {
+  changeCounter += 1;
+  return { requester: "discord:britta", scope: `agent:main:discord:channel:change-${changeCounter}`, op, calendarId: FAMILY_ID, eventId, ...overrides };
+}
+
+type JsonRow = { key: string; status: string; op: string; event_id: string | null; before_json: string | null; after_json: string | null };
+function jsonRows(stateDir: string): JsonRow[] {
+  const result = sqlite(stateDir, "SELECT request_key AS key, status, op, event_id, before_json, after_json FROM oc_family_pack_write_log ORDER BY id");
+  assert.equal(result.status, 0, result.stderr);
+  return result.rows as JsonRow[];
+}
+const parsed = (json: string | null) => (json === null ? null : (JSON.parse(json) as Record<string, unknown>));
+
+function done(result: ChangeResult | SubmitChangeResult): Extract<ChangeResult, { before: unknown }> {
+  assert.ok(result.status === "changed" || result.status === "existing", JSON.stringify(result));
+  return result as Extract<ChangeResult, { before: unknown }>;
+}
+
+const FIVE = { summary: "Dentist", start: "2026-10-14T13:00:00.000Z", end: "2026-10-14T14:00:00.000Z", allDay: false, location: "Main St" };
+
+test("an update passes only the changed fields, keeps the event's length, and logs the five fields before and after", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    const event = seed(gog, { description: "Bring the card" });
+    const result = done(await changeEvent(deps(gog, store), change("update", event.id, { fields: { start: "2026-10-15T17:00:00Z" } })));
+    assert.equal(result.status, "changed");
+    assert.deepEqual(result.before, { title: "Dentist", start: FIVE.start, end: FIVE.end, allDay: false, location: "Main St" });
+    assert.deepEqual(result.after, { title: "Dentist", start: "2026-10-15T17:00:00.000Z", end: "2026-10-15T18:00:00.000Z", allDay: false, location: "Main St" });
+    const [update] = gog.writes();
+    assert.deepEqual(update, ["calendar", "update", "--from=2026-10-15T17:00:00.000Z", "--to=2026-10-15T18:00:00.000Z", "--send-updates=none", "--json", "--no-input", "--", FAMILY_ID, event.id]);
+    assert.equal(event.description, "Bring the card");
+    const rows = jsonRows(stateDir);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.op, "update");
+    assert.equal(rows[0]?.status, "committed");
+    assert.equal(rows[0]?.event_id, event.id);
+    assert.deepEqual(parsed(rows[0]?.before_json ?? null), FIVE);
+    assert.deepEqual(parsed(rows[0]?.after_json ?? null), { ...FIVE, start: "2026-10-15T17:00:00.000Z", end: "2026-10-15T18:00:00.000Z" });
+  });
+});
+
+test("each op logs its exact key set, and event_id is always set", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    const a = seed(gog);
+    const b = seed(gog);
+    const c = seed(gog);
+    done(await changeEvent(deps(gog, store), change("update", a.id, { fields: { title: "Dentist (Calla)" } })));
+    done(await changeEvent(deps(gog, store), change("move", b.id, { destinationId: CALLA_ID })));
+    done(await changeEvent(deps(gog, store), change("delete", c.id)));
+    const rows = jsonRows(stateDir);
+    const keys = (json: string | null) => (json === null ? null : Object.keys(JSON.parse(json) as object).sort());
+    assert.deepEqual(
+      rows.map((row) => [row.op, row.event_id, keys(row.before_json), keys(row.after_json)]),
+      [
+        ["update", a.id, ["allDay", "end", "location", "start", "summary"], ["allDay", "end", "location", "start", "summary"]],
+        ["move", b.id, ["allDay", "end", "location", "start", "summary"], ["calendarId"]],
+        ["delete", c.id, ["allDay", "end", "location", "start", "summary"], null],
+      ],
+    );
+    assert.deepEqual(parsed(rows[1]?.after_json ?? null), { calendarId: CALLA_ID });
+    assert.equal(gog.events.find((event) => event.id === b.id)?.calendarId, CALLA_ID);
+    assert.equal(gog.events.find((event) => event.id === c.id)?.status, "cancelled");
+  });
+});
+
+test("the same change twice is one gog write and one row; the retry answers from the log without asking gog", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    const event = seed(gog);
+    const request = change("update", event.id, { fields: { title: "Dentist (Calla)" } });
+    const first = done(await changeEvent(deps(gog, store), request));
+    const calls = gog.calls.length;
+    const second = done(await changeEvent(deps(gog, store), request));
+    assert.equal(first.status, "changed");
+    assert.equal(second.status, "existing");
+    assert.deepEqual(second.before, first.before);
+    assert.deepEqual(second.after, first.after);
+    assert.equal(gog.calls.length, calls);
+    assert.equal(jsonRows(stateDir).length, 1);
+  });
+});
+
+test("an update the event already matches is existing, with no gog write and an INSERT OR IGNORE row", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    const event = seed(gog);
+    const result = done(await changeEvent(deps(gog, store), change("update", event.id, { fields: { title: " Dentist ", location: "Main St" } })));
+    assert.equal(result.status, "existing");
+    assert.equal(gog.writes().length, 0);
+    assert.deepEqual(jsonRows(stateDir).map((row) => row.status), ["committed"]);
+  });
+});
+
+test("a 404 is not found: no gog write and no row, for every op", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    for (const request of [change("update", "nope", { fields: { title: "X" } }), change("move", "nope", { destinationId: CALLA_ID }), change("delete", "nope")]) {
+      assert.deepEqual(await changeEvent(deps(gog, store), request), { status: "not-found" }, request.op);
+    }
+    assert.equal(gog.writes().length, 0);
+    assert.deepEqual(jsonRows(stateDir), []);
+  });
+});
+
+test("deleting an event Google already deleted: not found with no row when it was gone at the first look, existing once a parent approved it or after a 410 from the delete", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    const cancelled = seed(gog, { status: "cancelled" });
+    assert.deepEqual(await changeEvent(deps(gog, store), change("delete", cancelled.id)), { status: "not-found", title: "Dentist" });
+    assert.deepEqual(jsonRows(stateDir), []);
+    const result = done(await changeEvent(deps(gog, store), change("delete", cancelled.id, { approved: { version: '"v1"', title: "Dentist" } })));
+    assert.equal(result.status, "existing");
+    assert.equal(result.before.title, "Dentist");
+    assert.equal(gog.writes().length, 0);
+    const racing = seed(gog);
+    gog.fail.set("delete", () => gogError("Error: googleapi: Error 410: Resource has been deleted, deleted"));
+    assert.equal(done(await changeEvent(deps(gog, store), change("delete", racing.id))).status, "existing");
+    const rows = jsonRows(stateDir);
+    assert.deepEqual(rows.map((row) => [row.status, row.event_id]), [["committed", cancelled.id], ["committed", racing.id]]);
+    // A cancelled event is not found for an update, by its name.
+    assert.deepEqual(await changeEvent(deps(gog, store), change("update", cancelled.id, { fields: { title: "X" } })), { status: "not-found", title: "Dentist" });
+  });
+});
+
+test("a 410 on the read is not found for a delete with nothing to say what it was", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    gog.fail.set("event", () => gogError("Error: googleapi: Error 410: Resource has been deleted, deleted"));
+    assert.deepEqual(await changeEvent(deps(gog, store), change("delete", "gone1")), { status: "not-found" });
+    assert.deepEqual(jsonRows(stateDir), []);
+  });
+});
+
+test("a move that already happened is found on the destination and answered as existing", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    const event = seed(gog, { calendarId: CALLA_ID });
+    const result = done(await changeEvent(deps(gog, store), change("move", event.id, { destinationId: CALLA_ID })));
+    assert.equal(result.status, "existing");
+    assert.equal(gog.writes().length, 0);
+    assert.deepEqual(jsonRows(stateDir).map((row) => [row.op, row.status, parsed(row.after_json)]), [["move", "committed", { calendarId: CALLA_ID }]]);
+  });
+});
+
+test("every change argv says --send-updates=none once and keeps user text in one element", async () => {
+  await withStore(async ({ store }) => {
+    const gog = fakeGog();
+    const a = seed(gog);
+    const b = seed(gog);
+    const c = seed(gog);
+    const title = "--to=2030-01-01 -- x";
+    done(await changeEvent(deps(gog, store), change("update", a.id, { fields: { title, location: "-x", description: "line\nline" } })));
+    done(await changeEvent(deps(gog, store), change("move", b.id, { destinationId: CALLA_ID })));
+    done(await changeEvent(deps(gog, store), change("delete", c.id)));
+    const writes = gog.writes();
+    assert.equal(writes.length, 3);
+    for (const args of writes) assert.equal(args.filter((arg) => arg.startsWith("--send-updates")).join(), "--send-updates=none", JSON.stringify(args));
+    assert.ok(writes[0]?.includes(`--summary=${title}`));
+    assert.equal(gog.events.find((event) => event.id === a.id)?.summary, title);
+    assert.deepEqual(writes[1], ["calendar", "move", "--send-updates=none", "--json", "--no-input", "--", FAMILY_ID, b.id, CALLA_ID]);
+    assert.deepEqual(writes[2], ["calendar", "delete", "--send-updates=none", "--force", "--no-input", "--", FAMILY_ID, c.id]);
+  });
+});
+
+test("a gog failure on a change logs a failed row with the event id; the read-only error flips the grant", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    for (const op of ["update", "move", "delete"] as const) {
+      const gog = fakeGog();
+      const event = seed(gog);
+      const grant = grantHolder();
+      const request = change(op, event.id, { fields: { title: "X" }, destinationId: CALLA_ID });
+      gog.fail.set(op, () => gogError("Error: googleapi: Error 500: Backend Error"));
+      assert.deepEqual(await changeEvent(deps(gog, store, grant), request), { status: "failed", reason: "unreachable", title: "Dentist" }, op);
+      assert.equal(grant.get(), "unknown");
+      gog.fail.set(op, () => gogError(READONLY_STDERR));
+      assert.deepEqual(await changeEvent(deps(gog, store, grant), request), { status: "failed", reason: "readonly", title: "Dentist" }, op);
+      assert.equal(grant.get(), "read-only", op);
+    }
+    const rows = jsonRows(stateDir);
+    assert.equal(rows.length, 6);
+    for (const row of rows) {
+      assert.equal(row.status, "failed");
+      assert.ok(row.event_id);
+      assert.deepEqual(parsed(row.before_json), FIVE);
+    }
+  });
+});
+
+test("a repeating event's later occurrences go through the series with --scope and --original-start, and the log keeps the recurrence", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    seed(gog, { id: "swim", summary: "Swim", location: undefined, start: "2026-10-06T21:00:00.000Z", end: "2026-10-06T22:00:00.000Z", recurrence: ["RRULE:FREQ=WEEKLY;BYDAY=TU", "EXDATE:20261020T210000Z"] });
+    seed(gog, { id: "swim_1013", summary: "Swim", location: undefined, start: "2026-10-13T21:00:00.000Z", end: "2026-10-13T22:00:00.000Z", recurringEventId: "swim", originalStart: "2026-10-13T21:00:00.000Z" });
+    const future = done(await changeEvent(deps(gog, store), change("update", "swim_1013", { fields: { location: "Pool" }, series: "future" })));
+    assert.equal(future.seriesFrom, "2026-10-13T21:00:00.000Z");
+    assert.deepEqual(gog.writes()[0], ["calendar", "update", "--location=Pool", "--scope=future", "--original-start=2026-10-13T21:00:00.000Z", "--send-updates=none", "--json", "--no-input", "--", FAMILY_ID, "swim"]);
+    const all = done(await changeEvent(deps(gog, store), change("delete", "swim_1013", { series: "all" })));
+    assert.equal(all.seriesFrom, "2026-10-06T21:00:00.000Z");
+    assert.deepEqual(gog.writes()[1], ["calendar", "delete", "--scope=all", "--send-updates=none", "--force", "--no-input", "--", FAMILY_ID, "swim"]);
+    const rows = jsonRows(stateDir);
+    const keys = (json: string | null) => (json === null ? null : Object.keys(JSON.parse(json) as object).sort());
+    assert.deepEqual(rows.map((row) => [row.op, keys(row.before_json), keys(row.after_json)]), [
+      ["update", ["allDay", "end", "recurrence", "seriesStart", "start", "summary"], ["allDay", "end", "location", "originalStart", "scope", "start", "summary"]],
+      ["delete", ["allDay", "end", "recurrence", "seriesStart", "start", "summary"], ["originalStart", "scope"]],
+    ]);
+    assert.deepEqual(parsed(rows[0]?.before_json ?? null)?.recurrence, ["RRULE:FREQ=WEEKLY;BYDAY=TU", "EXDATE:20261020T210000Z"]);
+    // One occurrence is the instance itself, with no series flags.
+    seed(gog, { id: "swim_1027", summary: "Swim", location: undefined, start: "2026-10-27T21:00:00.000Z", end: "2026-10-27T22:00:00.000Z", recurringEventId: "swim", originalStart: "2026-10-27T21:00:00.000Z" });
+    const single = done(await changeEvent(deps(gog, store), change("delete", "swim_1027")));
+    assert.equal(single.seriesFrom, undefined);
+    assert.deepEqual(gog.writes()[2], ["calendar", "delete", "--send-updates=none", "--force", "--no-input", "--", FAMILY_ID, "swim_1027"]);
+  });
+});
+
+test("an update needs something to change, and an end at or before the start is refused before gog writes", async () => {
+  assert.throws(() => normalizeChange({ title: "  " }), new RegExp(NOTHING_TO_CHANGE));
+  assert.deepEqual(normalizeChange({ start: "2026-10-15" }), { start: "2026-10-15", allDay: true });
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    const event = seed(gog);
+    assert.deepEqual(await changeEvent(deps(gog, store), change("update", event.id, { fields: { end: "2026-10-14T12:00:00Z" } })), { status: "invalid", message: END_BEFORE_START_CHANGE });
+    assert.equal(gog.writes().length, 0);
+    assert.deepEqual(jsonRows(stateDir), []);
+  });
+});
+
+/** A write log that records each append and can be told to fail at one step. */
+function recordingLog(failAt: { lookup?: boolean; committed?: boolean } = {}) {
+  const appends: { status: string; ifAbsent: boolean }[] = [];
+  const stopped = () => new Error("oc-family-pack: the family store stopped: SQLITE_IOERR disk I/O error");
+  const log: WriteLog = {
+    countCommittedWrites: async () => {
+      if (failAt.lookup) throw stopped();
+      return 0;
+    },
+    committedWrite: async () => {
+      if (failAt.lookup) throw stopped();
+      return undefined;
+    },
+    appendWriteLog: async (row, { ifAbsent }) => {
+      appends.push({ status: row.status, ifAbsent });
+      if (failAt.committed && row.status === "committed") throw stopped();
+      return { inserted: true };
+    },
+  };
+  return { log, appends };
+}
+
+test("store failure before gog: no gog write, a failed row where the store takes one, and the reason is `store`", async () => {
+  for (const op of ["create", "update", "move", "delete"] as const) {
+    const gog = fakeGog();
+    const event = seed(gog);
+    const { log, appends } = recordingLog({ lookup: true });
+    const result =
+      op === "create" ? await createEvent(deps(gog, log), dentist()) : await changeEvent(deps(gog, log), change(op, event.id, { fields: { title: "X" }, destinationId: CALLA_ID }));
+    assert.deepEqual(result, { status: "failed", reason: "store", ...(op === "create" ? {} : { title: "Dentist" }) }, op);
+    assert.deepEqual(gog.writes(), [], op);
+    assert.deepEqual(appends, [{ status: "failed", ifAbsent: false }], op);
+  }
+  assert.equal(somethingWrongLine("delete", "Dentist"), "Something went wrong checking that, so I didn't delete **Dentist**.");
+  assert.equal(somethingWrongLine("move", undefined), "Something went wrong checking that, so I didn't move that event.");
+});
+
+test("ux's changed-while-waiting line names the event as approved, or says that event", () => {
+  assert.equal(changedWhileWaitingLine("delete", "Dentist"), "**Dentist** was changed while it was waiting for approval, so I didn't delete it. Ask again if you still want to.");
+  assert.equal(changedWhileWaitingLine("move", undefined), "That event was changed while it was waiting for approval, so I didn't move it. Ask again if you still want to.");
+});
+
+test("store failure after gog wrote: the write still answers as done, and a real write was a plain INSERT", async () => {
+  for (const op of ["create", "update", "move", "delete"] as const) {
+    const gog = fakeGog();
+    const event = seed(gog);
+    const { log, appends } = recordingLog({ committed: true });
+    const result =
+      op === "create" ? await createEvent(deps(gog, log), dentist()) : await changeEvent(deps(gog, log), change(op, event.id, { fields: { title: "X" }, destinationId: CALLA_ID }));
+    assert.equal(result.status, op === "create" ? "created" : "changed", op);
+    assert.equal(gog.writes().length, 1, op);
+    assert.deepEqual(appends, [{ status: "committed", ifAbsent: false }], op);
+  }
+});
+
+test("a change goes through the same gate: guest page, writes off and read-only are refused before gog, a kid on a shared calendar needs approval", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    const event = seed(gog);
+    const base = { op: "delete" as const, calendar: FAMILY, eventId: event.id };
+    const page = (scopes: string[]) => ({ ...pageSubmit({ connId: "p", scopes }), ...base });
+    assert.deepEqual(await submitChange(submitDeps(gog, store), page(["operator.read"])), { status: "refused", message: VIEW_ONLY });
+    assert.deepEqual(await submitChange(submitDeps(gog, store, "off"), page(PARENT_SCOPES)), { status: "refused", message: WRITES_OFF });
+    assert.deepEqual(await submitChange(submitDeps(gog, store, "on", grantHolder("read-only")), page(PARENT_SCOPES)), { status: "refused", message: READ_ONLY });
+    const tool = { context: { source: "tool", api: {}, toolCallId: "call-1", tool: { sessionKey: "agent:main:x", senderIsOwner: false, conversationReadOrigin: "direct-operator" } } as unknown as FeatureInvocationContext, ...base };
+    assert.deepEqual(await submitChange(submitDeps(gog, store), tool), { status: "needs-approval", approvers: ["Britta"] });
+    assert.equal(gog.calls.length, 0);
+    assert.deepEqual(logRows(stateDir), []);
+    assert.equal(done(await submitChange(submitDeps(gog, store), page(PARENT_SCOPES))).status, "changed");
+  });
+});
+
+test("two page submits of the same change are two requests: the second finds it already done", async () => {
+  await withStore(async ({ stateDir, store }) => {
+    const gog = fakeGog();
+    const event = seed(gog);
+    const submit = () => ({ ...pageSubmit({ connId: "p", scopes: PARENT_SCOPES }), op: "update" as const, calendar: FAMILY, eventId: event.id, fields: { title: "Dentist (Calla)" } });
+    assert.equal(done(await submitChange(submitDeps(gog, store), submit())).status, "changed");
+    assert.equal(done(await submitChange(submitDeps(gog, store), submit())).status, "existing");
+    const rows = jsonRows(stateDir);
+    assert.equal(rows.length, 2);
+    assert.notEqual(rows[0]?.key, rows[1]?.key);
+    assert.equal(gog.writes().length, 1);
+  });
 });

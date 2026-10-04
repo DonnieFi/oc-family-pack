@@ -55,7 +55,7 @@ function readCalendar(config, shown, week) {
 function calendarRef({ key, label, kind, owners }) {
     return { key, label, kind, ownerIds: owners };
 }
-export async function buildWeekPayload(config, requestedStart, now, readWeather, viewer) {
+export async function buildWeekPayload(config, requestedStart, now, readWeather, viewer, access = { canEdit: false, grantReadOnly: false }) {
     let week;
     try {
         // A start in the last week of year 9999 makes addDays throw: the range end is not a four-digit date.
@@ -84,5 +84,8 @@ export async function buildWeekPayload(config, requestedStart, now, readWeather,
         calendars: shown.map(calendarRef),
         calendar,
         weather,
+        // The demo has no Google calendar to write to.
+        canEdit: access.canEdit && !config.demo,
+        calendarsReadOnly: access.canEdit && !config.demo && access.grantReadOnly,
     });
 }

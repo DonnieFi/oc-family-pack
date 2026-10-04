@@ -6,7 +6,10 @@ import { resolveMembers } from "./week.js";
 /** The week `viewer` may see, for the `family.week` Gateway method. */
 export function familyWeek(config, deps = {}) {
     const now = deps.now ?? Date.now;
-    return ({ start }, viewer) => buildWeekPayload(config, start, now(), () => readEcWeather(config.location, deps.fetchWeather), viewer);
+    return ({ start }, viewer, canEdit = false) => buildWeekPayload(config, start, now(), () => readEcWeather(config.location, deps.fetchWeather), viewer, {
+        canEdit,
+        grantReadOnly: deps.grant?.get() === "read-only",
+    });
 }
 /** Handlers for the registered queries. `family.schedule` is also the agent's `family_schedule` tool. */
 export function familyHandlers(config, deps = {}) {

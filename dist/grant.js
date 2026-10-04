@@ -1,6 +1,6 @@
 import { grantFromAuthList, READONLY_GRANT } from "./gog-setup.js";
 /** gog's stderr only: execFile's message repeats the argv, and an event title must never flip the grant. */
-function stderrOf(error) {
+export function stderrOf(error) {
     if (typeof error !== "object" || error === null)
         return "";
     const stderr = error.stderr;

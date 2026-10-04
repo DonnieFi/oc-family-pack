@@ -272,15 +272,18 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/5fd8fd267ef679e72513317705bb7906e07a26d2d846303f74dc8e080ef81d16/index.js",
+    "entry": "dist/control-ui/49a3a18c898fac9788f14d7c35ee8a865c6f0f43b4c681875aa5a59ebb05fdf1/index.js",
     "styles": [
-      "dist/control-ui/5fd8fd267ef679e72513317705bb7906e07a26d2d846303f74dc8e080ef81d16/index.css"
+      "dist/control-ui/49a3a18c898fac9788f14d7c35ee8a865c6f0f43b4c681875aa5a59ebb05fdf1/index.css"
     ]
   },
   "contracts": {
     "tools": [
       "family_schedule",
-      "calendar_create"
+      "calendar_create",
+      "calendar_update",
+      "calendar_move",
+      "calendar_delete"
     ]
   }
 }

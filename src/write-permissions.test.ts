@@ -141,6 +141,8 @@ test("a write from HTTP /tools/invoke is `tool` whatever its channel header says
       { messageChannel: "discord", senderIsOwner: owner },
       { messageChannel: "discord", agentAccountId: DONNIE_DISCORD, senderIsOwner: owner },
       { messageChannel: "Discord ", requesterSenderId: DONNIE_DISCORD, senderIsOwner: owner },
+      { messageChannel: "discord", requesterSenderId: DONNIE_DISCORD, senderIsOwner: owner },
+      { messageChannel: "discord", requesterSenderId: CALLA_DISCORD, agentAccountId: DONNIE_DISCORD, senderIsOwner: owner },
     ]) {
       assert.deepEqual(resolveWriteRequester(members, http(fields)), { from: "tool", senderIsOwner: owner });
     }
@@ -156,6 +158,10 @@ test("a write from HTTP /tools/invoke is `tool` whatever its channel header says
       const fields = senderId === undefined ? { messageChannel: "discord", senderIsOwner: owner } : { messageChannel: "discord", requesterSenderId: senderId, senderIsOwner: owner };
       assert.deepEqual(resolveWriteRequester(members, tool(fields)), { from: "tool", senderIsOwner: owner }, JSON.stringify(senderId));
     }
+  }
+  // A host sender on any other channel doesn't count, even when it matches a roster Discord id.
+  for (const channel of ["telegram", "webchat", "discord-bridge"]) {
+    assert.deepEqual(resolveWriteRequester(members, tool({ messageChannel: channel, requesterSenderId: DONNIE_DISCORD })), { from: "tool", senderIsOwner: false }, channel);
   }
   assert.deepEqual(resolveWriteRequester(members, FROM["a parent's page"]), { from: "page", client: { scopes: PARENT_SCOPES } });
   assert.deepEqual(resolveWriteRequester(members, FROM["a command"]), { from: "other" });

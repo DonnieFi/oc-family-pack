@@ -179,6 +179,10 @@ async function openSession(options) {
             await ensureOpen();
             return (await post("writeLog.countCommitted", { baseKey }));
         },
+        async committedWrite(requestKey) {
+            await ensureOpen();
+            return (await post("writeLog.committed", { requestKey })) ?? undefined;
+        },
         async appendWriteLog(row, { ifAbsent }) {
             await ensureOpen();
             return (await post("writeLog.append", { row, ifAbsent }));

@@ -24,9 +24,11 @@ export function gateWrite(input) {
         return { decision: "refused", message: READ_ONLY };
     if (input.table !== undefined)
         return { decision: "write" };
-    const right = writeRight(input.members, input.requester, input.calendar);
-    if (right.right === "needs-approval")
-        return { decision: "needs-approval", approvers: right.approvers };
+    for (const calendar of input.destination ? [input.calendar, input.destination] : [input.calendar]) {
+        const right = writeRight(input.members, input.requester, calendar);
+        if (right.right === "needs-approval")
+            return { decision: "needs-approval", approvers: right.approvers };
+    }
     if (input.writes === "confirm")
         return { decision: "needs-approval", approvers: approvers(input.members) };
     return { decision: "write" };

@@ -82,6 +82,12 @@ const handlers = {
             .get(baseKey);
         return typeof row?.n === "number" ? row.n : 0;
     },
+    "writeLog.committed": (input) => {
+        const row = db
+            .prepare("SELECT event_id AS eventId, before_json AS beforeJson, after_json AS afterJson FROM oc_family_pack_write_log WHERE request_key = ? AND status = 'committed'")
+            .get(field(input, "requestKey"));
+        return row ? { eventId: row.eventId, beforeJson: row.beforeJson, afterJson: row.afterJson } : null;
+    },
     // A path that wrote uses a plain INSERT, so a second committed row for one key fails
     // loudly. Only the live-match path, which found the event already in Google, ignores
     // a row that is already there.

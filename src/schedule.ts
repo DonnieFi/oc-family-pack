@@ -160,6 +160,7 @@ export async function buildSchedule(
     .sort((a, b) => (sortKey(a.event) < sortKey(b.event) ? -1 : sortKey(a.event) > sortKey(b.event) ? 1 : a.event.title.localeCompare(b.event.title)));
 
   const item = ({ event, due, owners }: (typeof merged)[number]): Item => ({
+    id: event.id,
     title: event.title,
     ...(event.allDay ? { allDay: true as const } : { time: clockTime(event.start, timezone) }),
     ...(days > 1 ? { date: dayLabel(dayOf(event)) } : {}),

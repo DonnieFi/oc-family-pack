@@ -4,6 +4,7 @@ import { ConfigError } from "./config.ts";
 import { WeekInputSchema } from "./contract.ts";
 import type { WeekPayload } from "./types.ts";
 import type { Viewer } from "./visibility.ts";
+import { pageRole } from "./write-permissions.ts";
 
 type Client = GatewayRequestHandlerOptions["client"];
 
@@ -29,15 +30,20 @@ export function viewerOf(client: Client): Viewer {
   return { kind: "person", username: undefined };
 }
 
+/** Whether the page shows edit controls: the same scope rule as the write gate, from the connection's granted scopes. */
+export function canEditOf(client: Client): boolean {
+  return pageRole({ scopes: client?.connect?.scopes ?? [] }) === "parent";
+}
+
 /** The `family.week` Gateway method: the week, filtered for whoever is asking. */
-export function weekMethod(week: (input: { start?: string }, viewer: Viewer) => Promise<WeekPayload>) {
+export function weekMethod(week: (input: { start?: string }, viewer: Viewer, canEdit: boolean) => Promise<WeekPayload>) {
   return async ({ params, client, respond }: Pick<GatewayRequestHandlerOptions, "params" | "client" | "respond">): Promise<void> => {
     if (!Value.Check(WeekInputSchema, params)) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "family.week takes only an optional start date"));
       return;
     }
     try {
-      respond(true, await week(params, viewerOf(client)));
+      respond(true, await week(params, viewerOf(client), canEditOf(client)));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       respond(false, undefined, errorShape(error instanceof ConfigError ? ErrorCodes.INVALID_REQUEST : ErrorCodes.UNAVAILABLE, message));

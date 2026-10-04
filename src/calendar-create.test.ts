@@ -16,16 +16,15 @@ import {
   deriveBaseKey,
   factsFromHook,
   factsFromTool,
-  registerCalendarWrite,
   type ApprovalResolution,
   type CalendarTool,
-  type CalendarWriteApi,
   type CalendarWriteDeps,
   type HookContext,
   type HookEvent,
   type HookResult,
   type ToolContext,
 } from "./calendar-create.ts";
+import { registerCalendarWrite, type CalendarWriteApi } from "./calendar-tools.ts";
 import { parseConfig } from "./config.ts";
 import { grantHolder, type GrantHolder } from "./grant.ts";
 import type { FamilyStore, WriteLogRow } from "./store.ts";
@@ -103,6 +102,10 @@ function memoryLog() {
   return {
     rows,
     countCommittedWrites: async (base: string) => rows.filter((row) => row.baseKey === base && row.status === "committed").length,
+    committedWrite: async (key: string) => {
+      const row = rows.find((entry) => entry.requestKey === key && entry.status === "committed");
+      return row ? { eventId: row.eventId ?? null, beforeJson: row.beforeJson ?? null, afterJson: row.afterJson ?? null } : undefined;
+    },
     appendWriteLog: async (row: WriteLogRow) => {
       rows.push(row);
       return { inserted: true };
@@ -231,13 +234,14 @@ const statuses = (s: Setup) => s.log.rows.map((row) => row.status);
 
 // ---- Registration ----
 
-test("registerCalendarWrite registers the before_tool_call hook at the highest priority together with calendar_create", () => {
+test("registerCalendarWrite registers one before_tool_call hook at the highest priority together with the four write tools", () => {
   const s = setup();
   assert.equal(s.hooks.length, 1);
   assert.equal(s.hooks[0]!.hookName, "before_tool_call");
   assert.equal(s.hooks[0]!.priority, CALENDAR_HOOK_PRIORITY);
-  assert.deepEqual(s.hooks[0]!.matcher, [CALENDAR_CREATE_TOOL]);
-  assert.deepEqual(s.tools.map((tool) => tool.name), [CALENDAR_CREATE_TOOL]);
+  const all = [CALENDAR_CREATE_TOOL, "calendar_update", "calendar_move", "calendar_delete"];
+  assert.deepEqual(s.hooks[0]!.matcher, all);
+  assert.deepEqual(s.tools.map((tool) => tool.name), all);
   assert.ok(Number.isFinite(CALENDAR_HOOK_PRIORITY) && CALENDAR_HOOK_PRIORITY >= 1_000_000_000, "the hook must run first");
 });
 
@@ -426,11 +430,12 @@ test("tools.invoke has no requester: Someone, and 'Asked outside Discord.'; neve
 
 test("HTTP /tools/invoke with a discord channel header and Donnie's id everywhere a caller can put it is `tool`: one key, approval first, then one write", async () => {
   // The header set (tools-invoke-http-DsV9C_z1.mjs:52-55) has no sender header, so Donnie's id
-  // goes in the account header, a Discord-shaped session key in the body, and claims in the args.
+  // goes in the account header and a Discord-shaped session key in the body. Claims in the args
+  // are extra fields, refused in "no tool parameter changes the decision".
   const s = setup();
   sessionCounter += 1;
   const caller = httpInvoke({ channel: "discord", account: DONNIE_ID }, `agent:main:discord:channel:${DONNIE_ID}-${sessionCounter}`);
-  const claims = { ...SLEEPOVER, channel: "discord", senderId: DONNIE_ID, requesterSenderId: DONNIE_ID, senderIsOwner: true };
+  const claims = SLEEPOVER;
   const hookKey = deriveBaseKey(s.config, factsFromHook(caller.hook), claims);
   assert.equal(deriveBaseKey(s.config, factsFromTool(caller.tool), claims), hookKey);
   let atDecision: { gog: number; rows: number } | undefined;
@@ -465,6 +470,38 @@ test("an agent-RPC call with channel discord and no host sender is `tool` on bot
     assert.equal(s.log.rows[0]!.requester, "tool");
     assert.equal(s.log.rows[0]!.baseKey, hookKey);
     assert.ok(!JSON.stringify(s.log.rows).includes("discord:"), "no row is tagged discord:*");
+  }
+});
+
+/**
+ * An agent run on a channel other than Discord whose host sender id happens to match a roster
+ * person's Discord id: the hook's requester and the tool context both carry the channel and the
+ * sender, and only a Discord channel makes the sender count.
+ */
+function otherChannel(channel: string, senderId: string): Caller {
+  sessionCounter += 1;
+  const sessionKey = `agent:main:${channel}:direct:${sessionCounter}`;
+  return {
+    hook: { toolName: CALENDAR_CREATE_TOOL, sessionKey, requester: { channel, senderId, senderIsOwner: false } },
+    tool: { sessionKey, messageChannel: channel, requesterSenderId: senderId, senderIsOwner: false },
+  };
+}
+
+test("a sender on a channel that isn't Discord is `tool` in the hook and the tool: one key, approval first, never a discord:* row", async () => {
+  for (const channel of ["telegram", "webchat", "discord-bridge"]) {
+    for (const senderId of [DONNIE_ID, PENNY_ID]) {
+      const s = setup();
+      const caller = otherChannel(channel, senderId);
+      const hookKey = deriveBaseKey(s.config, factsFromHook(caller.hook), SLEEPOVER);
+      assert.equal(hookKey, deriveBaseKey(s.config, { sessionKey: caller.hook.sessionKey }, SLEEPOVER), `${channel}: the hook keys it like any off-Discord call`);
+      assert.equal(deriveBaseKey(s.config, factsFromTool(caller.tool), SLEEPOVER), hookKey, channel);
+      const outcome = await hostCall(s, caller, SLEEPOVER);
+      assert.equal(outcome.approval?.title, "Someone wants to add **Sleepover** to Donnie's calendar", `${channel} ${senderId}`);
+      assert.equal(outcome.text, CREATED);
+      assert.deepEqual(statuses(s), ["committed"]);
+      assert.equal(s.log.rows[0]!.requester, "tool");
+      assert.equal(s.log.rows[0]!.baseKey, hookKey);
+    }
   }
 });
 
@@ -543,7 +580,7 @@ test("writes confirm sends a parent's call for approval too", async () => {
   assert.deepEqual(statuses(s), ["denied"]);
 });
 
-test("no tool parameter changes the decision: claims of role, table, approval or sender are ignored", async () => {
+test("no tool parameter changes the decision: claims of role, table, approval or sender are refused as extra fields", async () => {
   const claims = {
     ...SLEEPOVER,
     table: "write",
@@ -557,16 +594,13 @@ test("no tool parameter changes the decision: claims of role, table, approval or
     writes: "on",
   };
   const s = setup();
-  const caller = discord(PENNY_ID);
-  assert.equal(deriveBaseKey(s.config, factsFromHook(caller.hook), claims), deriveBaseKey(s.config, factsFromHook(caller.hook), SLEEPOVER));
-  const outcome = await hostCall(s, caller, claims, { decide: () => "deny" });
-  assert.equal(outcome.approval!.title, TITLE);
-  assert.equal(s.gog.calls.length, 0);
-  // Straight to the tool, with every claim and no stamp: refused.
+  const refused = "Something went wrong checking that, so I didn't add that event.";
+  const outcome = await hostCall(s, discord(PENNY_ID), claims, { decide: () => "allow-once" });
+  assert.deepEqual(outcome, { blocked: refused });
+  // Straight to the tool, with every claim and no stamp: refused too.
   const direct = await s.tools[0]!.factory(discord(PENNY_ID).tool).execute("call-x", claims);
-  assert.equal(direct.content[0]!.text, WRONG);
+  assert.equal(direct.content[0]!.text, refused);
   assert.equal(s.gog.calls.length, 0);
-  assert.deepEqual(statuses(s), ["denied", "failed"]);
 });
 
 // ---- The stamp ----

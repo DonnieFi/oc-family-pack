@@ -101,3 +101,13 @@ test("a table decision from the hook skips the table and confirm, but never gate
     assert.deepEqual(run("on", { from: "page", client: { scopes: ["operator.read"] } }), { decision: "refused", message: VIEW_ONLY });
   }
 });
+
+test("a move needs the table to allow the source and the destination", () => {
+  const kid: Requester = { from: "discord", member: calla! };
+  const move = (from: typeof family, to: typeof family) => gateWrite({ writes: "on", grant: "unknown", members: config.members, requester: kid, calendar: from, destination: to });
+  assert.deepEqual(move(callaCalendar, callaCalendar), { decision: "write" });
+  assert.deepEqual(move(callaCalendar, family), { decision: "needs-approval", approvers: ["Donnie"] });
+  assert.deepEqual(move(family, callaCalendar), { decision: "needs-approval", approvers: ["Donnie"] });
+  const parent: Requester = { from: "discord", member: donnie! };
+  assert.deepEqual(gateWrite({ writes: "on", grant: "unknown", members: config.members, requester: parent, calendar: callaCalendar, destination: family }), { decision: "write" });
+});

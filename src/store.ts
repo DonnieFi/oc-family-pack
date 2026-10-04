@@ -40,11 +40,16 @@ export type WriteLogRow = {
   status: WriteStatus;
 };
 
+/** What the log kept of a committed write: enough to answer a retry without asking Google again. */
+export type CommittedWrite = { eventId: string | null; beforeJson: string | null; afterJson: string | null };
+
 export type FamilyStore = {
   ready: StoreReady;
   status: () => Promise<StoreStatus>;
   countCommittedWrites: (baseKey: string) => Promise<number>;
-  /** `ifAbsent` is INSERT OR IGNORE, for the live-match path only; otherwise a plain INSERT. */
+  /** The committed row for one request key, if there is one. */
+  committedWrite: (requestKey: string) => Promise<CommittedWrite | undefined>;
+  /** `ifAbsent` is INSERT OR IGNORE, for a write found already done; otherwise a plain INSERT. */
   appendWriteLog: (row: WriteLogRow, options: { ifAbsent: boolean }) => Promise<{ inserted: boolean }>;
   stop: () => Promise<void>;
   spawned: () => number;
@@ -250,6 +255,10 @@ async function openSession(options: {
     async countCommittedWrites(baseKey) {
       await ensureOpen();
       return (await post("writeLog.countCommitted", { baseKey })) as number;
+    },
+    async committedWrite(requestKey) {
+      await ensureOpen();
+      return ((await post("writeLog.committed", { requestKey })) as CommittedWrite | null) ?? undefined;
     },
     async appendWriteLog(row, { ifAbsent }) {
       await ensureOpen();

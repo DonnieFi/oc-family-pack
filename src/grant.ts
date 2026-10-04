@@ -21,7 +21,7 @@ export type GrantHolder = {
 };
 
 /** gog's stderr only: execFile's message repeats the argv, and an event title must never flip the grant. */
-function stderrOf(error: unknown): string {
+export function stderrOf(error: unknown): string {
   if (typeof error !== "object" || error === null) return "";
   const stderr = (error as { stderr?: unknown }).stderr;
   return typeof stderr === "string" ? stderr : Buffer.isBuffer(stderr) ? stderr.toString("utf8") : "";
