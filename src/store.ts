@@ -73,6 +73,8 @@ export type FamilyStore = {
   deliveryDone: (deliveryKey: string) => Promise<boolean>;
   /** The first row that was not sent since the last sent row for (kind, target), if any. */
   deliveryStreakStart: (kind: DeliveryKind, target: string) => Promise<{ id: number; status: DeliveryStatus } | undefined>;
+  /** The newest delivery row. The page matches `target` to a roster profile id and does not show it. */
+  latestDelivery: () => Promise<{ kind: DeliveryKind; status: DeliveryStatus; target: string } | undefined>;
   /** Records a chat change of one person's reminder mode. The latest row wins. */
   appendReminderMode: (profileId: string, mode: ReminderMode) => Promise<{ id: number }>;
   /** The latest saved mode for each person who has changed it. */
@@ -302,6 +304,10 @@ async function openSession(options: {
       await ensureOpen();
       return ((await post("deliveryLog.streakStart", { kind, target })) as { id: number; status: DeliveryStatus } | null) ?? undefined;
     },
+    async latestDelivery() {
+      await ensureOpen();
+      return readLatestDelivery(await post("deliveryLog.latest", {}));
+    },
     async appendReminderMode(profileId, mode) {
       await ensureOpen();
       return (await post("reminderMode.append", { profileId, mode })) as { id: number };
@@ -347,6 +353,22 @@ async function openSession(options: {
 
   await ensureOpen();
   return api;
+}
+
+function readLatestDelivery(value: unknown): { kind: DeliveryKind; status: DeliveryStatus; target: string } | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const kind = (value as { kind?: unknown }).kind;
+  const status = (value as { status?: unknown }).status;
+  const target = (value as { target?: unknown }).target;
+  if (
+    (kind !== "daily" && kind !== "weekly" && kind !== "reminder" && kind !== "household" && kind !== "alert") ||
+    (status !== "sent" && status !== "partial" && status !== "failed" && status !== "held" && status !== "unknown") ||
+    typeof target !== "string" ||
+    target === ""
+  ) {
+    return undefined;
+  }
+  return { kind, status, target };
 }
 
 function readReady(record: Record<string, unknown>): StoreReady | undefined {

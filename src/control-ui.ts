@@ -10,6 +10,7 @@ import {
 } from "openclaw/plugin-sdk/control-ui";
 import { createFeatureClient } from "openclaw/plugin-sdk/feature-contract";
 import { CALENDAR_WRITE_ACTION, contract, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.ts";
+import { DELIVERY_STATUS_METHOD } from "./delivery-status.ts";
 import { mixTowardInk } from "./contrast.ts";
 import { roundHalfEven } from "./recommendation.ts";
 import type { CalendarRef, FamilyEvent, Member, WeekPayload } from "./types.ts";
@@ -211,6 +212,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   const host: ControlUiHost = initial.host;
   const content = h("div", { class: "ocfp-stack" });
   const chatStrip = h("section", { class: "ocfp-chat-strip ocfp-panel", "aria-label": "Chat with an agent" });
+  const deliveryLine = h("p", { class: "ocfp-delivery" });
   const dialogHolder = h("div");
   const root = h("div", { class: "oc-family-pack" }, h("div", { class: "ocfp-app" }, content, chatStrip), dialogHolder);
   container.append(root);
@@ -313,24 +315,53 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     });
   }
 
+  /** The brief line stays off during the first load and when the week is denied. */
+  let showDelivery = false;
+  let deliveryView: { line: string; failed: boolean } | undefined;
+
+  function paintDelivery(view: { line: string; failed: boolean }) {
+    deliveryLine.classList.toggle("is-failed", view.failed);
+    if (view.failed) {
+      deliveryLine.setAttribute("role", "alert");
+      deliveryLine.replaceChildren(icon("alert"), ` ${view.line}`);
+      return;
+    }
+    deliveryLine.setAttribute("role", "status");
+    deliveryLine.replaceChildren(view.line);
+  }
+
+  function syncDelivery() {
+    if (!showDelivery || deliveryView === undefined) {
+      deliveryLine.remove();
+      return;
+    }
+    paintDelivery(deliveryView);
+    content.append(deliveryLine);
+  }
+
   function render(load: Load) {
     if (!alive()) return;
     root.removeAttribute("aria-busy");
     if (load.kind === "loading") {
+      showDelivery = false;
       content.replaceChildren(
         h("header", { class: "ocfp-masthead" }, h("div", {}, h("p", { class: "ocfp-kicker" }, "Family week"), h("h1", { class: "ocfp-title" }, "This week"))),
         h("div", { class: "ocfp-notice ocfp-panel", role: "status" }, emptyState("calendar", "Loading the week", "Reading calendars and weather.")),
       );
+      syncDelivery();
       return;
     }
     if (load.kind === "denied") {
+      showDelivery = false;
       content.replaceChildren(
         h("header", { class: "ocfp-masthead" }, h("div", {}, h("p", { class: "ocfp-kicker" }, "Family week"), h("h1", { class: "ocfp-title" }, "This week"))),
         h("div", { class: "ocfp-notice ocfp-panel", role: "status" }, h("p", {}, "You need read access to see the family week.")),
       );
+      syncDelivery();
       return;
     }
     if (load.kind === "failed") {
+      showDelivery = true;
       const retry = on(h("button", { type: "button", class: "ocfp-btn ocfp-btn-today" }, "Try again"), "click", watchWeek);
       content.replaceChildren(
         h("header", { class: "ocfp-masthead" }, h("div", {}, h("p", { class: "ocfp-kicker" }, "Family week"), h("h1", { class: "ocfp-title" }, "This week"))),
@@ -346,6 +377,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
           retry,
         ),
       );
+      syncDelivery();
       return;
     }
     renderWeek(load.week);
@@ -611,11 +643,13 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     applyFilter();
 
     const focused = focusTarget(content);
+    showDelivery = true;
     content.replaceChildren(
       masthead,
       filters,
       h("div", { class: weather ? "ocfp-layout" : "ocfp-layout is-single" }, weather, h("section", { class: "ocfp-week-area", "aria-label": title }, notice, tabs, grid)),
     );
+    syncDelivery();
     focused?.(content);
   }
 
@@ -885,9 +919,27 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     }
   }
 
+  const loadDelivery = () => {
+    if (!alive() || !host.connection.canRead) return;
+    host.request<{ line?: unknown; failed?: unknown }>(DELIVERY_STATUS_METHOD, {}).then(
+      (result) => {
+        if (!alive()) return;
+        const line = typeof result?.line === "string" && result.line !== "" ? result.line : "Couldn't check the last brief.";
+        deliveryView = { line, failed: result?.failed === true };
+        syncDelivery();
+      },
+      () => {
+        if (!alive()) return;
+        deliveryView = { line: "Couldn't check the last brief.", failed: false };
+        syncDelivery();
+      },
+    );
+  };
+
   const stopHost = host.subscribe(renderAgents);
   renderAgents();
   watchWeek();
+  loadDelivery();
 
   return {
     update(next: ControlUiViewContext) {

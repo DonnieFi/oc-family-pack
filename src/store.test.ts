@@ -134,6 +134,9 @@ test("the delivery log is strict and append-only, and a key is sent at most once
     }
     await store.appendDeliveryLog({ ...base, deliveryKey: "daily-summary:2026-11-01", status: "sent", receiptJson: "{}" });
     assert.equal(await store.deliveryDone("daily-summary:2026-11-01"), true);
+    assert.deepEqual(await store.latestDelivery(), { kind: "daily", status: "sent", target: "family" });
+    await store.appendDeliveryLog({ ...base, kind: "reminder", deliveryKey: "reminder:later", status: "failed", errorKind: "other", errorDetail: "not for the page" });
+    assert.deepEqual(await store.latestDelivery(), { kind: "reminder", status: "failed", target: "family" });
     await assert.rejects(store.appendDeliveryLog({ ...base, deliveryKey: "daily-summary:2026-11-01", status: "sent" }), /UNIQUE/);
     await assert.rejects(store.appendDeliveryLog({ ...base, deliveryKey: "k", status: "sent", errorKind: "other" }), /CHECK/, "a sent row has no error_kind");
     await assert.rejects(store.appendDeliveryLog({ ...base, deliveryKey: "k", status: "unknown" }), /CHECK/, "every other row has one");
@@ -391,6 +394,7 @@ test("the family-store service opens the database, and discovery does not regist
     on() {},
     registerGatewayMethod() {},
     registerCli() {},
+    session: { controls: { registerControlUiDescriptor() {} } },
   });
   // The SDK registers its own event relay whenever the contract declares events; the family-store and calendar-watch services stay out of discovery.
   assert.deepEqual(discovery.map((service) => service.id), ["oc-family-pack:feature-events"]);
@@ -413,6 +417,7 @@ test("the family-store service opens the database, and discovery does not regist
     on() {},
     registerGatewayMethod() {},
     registerCli() {},
+    session: { controls: { registerControlUiDescriptor() {} } },
   });
   assert.deepEqual(services.map((entry) => entry.id).sort(), ["calendar-watch", "family-reminders", "family-store", "oc-family-pack:feature-events"]);
   const service = services.find((entry) => entry.id === "family-store");

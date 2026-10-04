@@ -122,7 +122,10 @@ test("queries are operator.read session actions, the page write is operator.writ
     { name: "family_today" },
   ]);
   assert.deepEqual(hooks, [{ name: "before_tool_call", priority: CALENDAR_HOOK_PRIORITY, matcher: writes }]);
-  assert.deepEqual(methods, [{ method: "family.week", scope: "operator.read" }]);
+  assert.deepEqual(methods, [
+    { method: "family.week", scope: "operator.read" },
+    { method: "family.deliveryStatus", scope: "operator.read" },
+  ]);
   assert.deepEqual(widgets, [{ surface: "widget", id: "family-today", label: "Today", requiredScopes: ["operator.read"] }]);
   assert.equal(commands, 0);
   assert.deepEqual(cliCommands, ["family"]);

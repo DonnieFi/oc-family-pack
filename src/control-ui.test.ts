@@ -608,6 +608,68 @@ describe("family page", { concurrency: 1 }, () => {
   });
 });
 
+test("the latest brief is one quiet line at the end of the stack, above the chat strip", async () => {
+  let releaseWeek: (value: unknown) => void = () => {};
+  const weekGate = new Promise((resolve) => {
+    releaseWeek = resolve;
+  });
+  const waiting = mountPage({
+    request: (method) => (method === "family.deliveryStatus" ? Promise.resolve({ line: "Daily brief sent to Alex.", failed: false }) : weekGate),
+  });
+  await flush();
+  assert.equal(waiting.container.querySelector(".ocfp-delivery"), null, "hidden while the week is still loading");
+  assert.equal(waiting.container.textContent?.includes("Loading the week"), true);
+  releaseWeek(week());
+  await flush();
+  const line = waiting.container.querySelector<HTMLElement>(".ocfp-delivery");
+  const strip = waiting.container.querySelector(".ocfp-chat-strip");
+  assert.ok(line);
+  assert.equal(line.getAttribute("role"), "status");
+  assert.equal(line.classList.contains("is-failed"), false);
+  assert.equal(line.textContent, "Daily brief sent to Alex.");
+  assert.equal(line.parentElement?.classList.contains("ocfp-stack"), true);
+  assert.equal(line.nextElementSibling, null);
+  assert.equal(line.parentElement?.nextElementSibling, strip);
+  assert.equal(waiting.container.querySelector(".ocfp-today"), null);
+  assert.equal(waiting.container.querySelector<HTMLElement>(".ocfp-stale")?.hidden, true);
+
+  const missed = mountPage({
+    request: (method) => Promise.resolve(method === "family.deliveryStatus" ? { line: "Daily brief did not send to Alex.", failed: true } : week()),
+  });
+  await flush();
+  const failedLine = missed.container.querySelector<HTMLElement>(".ocfp-delivery");
+  assert.equal(failedLine?.getAttribute("role"), "alert");
+  assert.equal(failedLine?.classList.contains("is-failed"), true);
+  assert.equal(failedLine?.querySelector("svg")?.getAttribute("aria-hidden"), "true");
+  assert.equal(failedLine?.textContent?.includes("Daily brief did not send to Alex."), true);
+  assert.equal(failedLine?.textContent?.includes("discord"), false);
+
+  const empty = mountPage({
+    request: (method) => Promise.resolve(method === "family.deliveryStatus" ? { line: "No brief has been sent yet.", failed: false } : week()),
+  });
+  await flush();
+  assert.equal(empty.container.querySelector(".ocfp-delivery")?.textContent, "No brief has been sent yet.");
+
+  const unread = mountPage({
+    request: (method) => (method === "family.deliveryStatus" ? Promise.reject(new Error("disk")) : Promise.resolve(week())),
+  });
+  await flush();
+  const unreadLine = unread.container.querySelector(".ocfp-delivery");
+  assert.equal(unreadLine?.textContent, "Couldn't check the last brief.");
+  assert.equal(unreadLine?.textContent?.includes("disk"), false);
+
+  const weekDown = mountPage({
+    request: (method) => (method === "family.deliveryStatus" ? Promise.resolve({ line: "Weekly brief sent.", failed: false }) : Promise.reject(new Error("calendar down"))),
+  });
+  await flush();
+  assert.equal(weekDown.container.textContent?.includes("Couldn't load the week."), true);
+  assert.equal(weekDown.container.querySelector(".ocfp-delivery")?.textContent, "Weekly brief sent.");
+
+  const denied = mountPage({ canRead: false });
+  await flush();
+  assert.equal(denied.container.querySelector(".ocfp-delivery"), null);
+});
+
 test("the today widget is a second surface and renders only the highlight lines", async () => {
   const widgets: { id: string; label: string }[] = [];
   familyUi.activate({
@@ -784,7 +846,7 @@ describe("calendar freshness", { concurrency: 1 }, () => {
       if (answer.calendar.status === "ok") answer.calendar.data[0]!.title = "Dentist (moved)";
       page.fire(CHANGED, { reason: "external", calendarKeys: [], at: "2026-09-30T14:00:00.000Z" });
       await flush();
-      assert.equal(page.counts().requests, 2);
+      assert.equal(page.counts().requests, 3);
       const card = page.container.querySelector<HTMLElement>("[data-event-id='e-alex']");
       assert.equal(card?.querySelector(".ocfp-event-title")?.textContent, "Dentist (moved)");
       assert.ok(active !== null && active === card, "focus moves to the re-rendered card");

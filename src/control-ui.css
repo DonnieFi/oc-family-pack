@@ -115,6 +115,18 @@
   display: none;
 }
 
+.ocfp-delivery {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.ocfp-delivery.is-failed {
+  color: var(--danger, #c0392b);
+}
+
 .ocfp-today-frame {
   --family-display: "Iowan Old Style", "Palatino Linotype", Palatino, Charter, "Bitstream Charter", "Noto Serif", Georgia, serif;
   container: ocfp-today / inline-size;

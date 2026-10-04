@@ -199,6 +199,10 @@ async function openSession(options) {
             await ensureOpen();
             return (await post("deliveryLog.streakStart", { kind, target })) ?? undefined;
         },
+        async latestDelivery() {
+            await ensureOpen();
+            return readLatestDelivery(await post("deliveryLog.latest", {}));
+        },
         async appendReminderMode(profileId, mode) {
             await ensureOpen();
             return (await post("reminderMode.append", { profileId, mode }));
@@ -246,6 +250,20 @@ async function openSession(options) {
     };
     await ensureOpen();
     return api;
+}
+function readLatestDelivery(value) {
+    if (!value || typeof value !== "object")
+        return undefined;
+    const kind = value.kind;
+    const status = value.status;
+    const target = value.target;
+    if ((kind !== "daily" && kind !== "weekly" && kind !== "reminder" && kind !== "household" && kind !== "alert") ||
+        (status !== "sent" && status !== "partial" && status !== "failed" && status !== "held" && status !== "unknown") ||
+        typeof target !== "string" ||
+        target === "") {
+        return undefined;
+    }
+    return { kind, status, target };
 }
 function readReady(record) {
     if (!Array.isArray(record.appliedNow) || !Array.isArray(record.applied) || !Array.isArray(record.unknown))

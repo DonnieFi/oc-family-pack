@@ -111,6 +111,19 @@ const handlers = {
     "deliveryLog.done": (input) => db
         .prepare("SELECT 1 AS found FROM oc_family_pack_delivery_log WHERE delivery_key = ? AND status IN ('sent', 'partial', 'held', 'unknown') LIMIT 1")
         .get(field(input, "deliveryKey")) !== undefined,
+    "deliveryLog.latest": () => {
+        const row = db.prepare("SELECT kind, status, target FROM oc_family_pack_delivery_log ORDER BY id DESC LIMIT 1").get();
+        const kind = row?.kind;
+        const status = row?.status;
+        const target = row?.target;
+        if ((kind !== "daily" && kind !== "weekly" && kind !== "reminder" && kind !== "household" && kind !== "alert") ||
+            (status !== "sent" && status !== "partial" && status !== "failed" && status !== "held" && status !== "unknown") ||
+            typeof target !== "string" ||
+            target === "") {
+            return null;
+        }
+        return { kind, status, target };
+    },
     "deliveryLog.streakStart": (input) => {
         const row = db
             .prepare(`SELECT id, status FROM oc_family_pack_delivery_log WHERE kind = ? AND target = ? AND status <> 'sent'

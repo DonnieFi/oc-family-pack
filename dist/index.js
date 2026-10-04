@@ -2,6 +2,7 @@ import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { ConfigSchema, parseConfig } from "./config.js";
 import { CALENDAR_WRITE_ACTION, contract, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.js";
+import { DELIVERY_STATUS_METHOD, deliveryStatusMethod } from "./delivery-status.js";
 import { execGog } from "./calendar-gog.js";
 import { watchCalendars } from "./calendar-watch.js";
 import { registerFamilyCli } from "./gog-setup.js";
@@ -17,6 +18,7 @@ import { briefDirectory, startBriefs } from "./briefs.js";
 import { deliver } from "./discord-delivery.js";
 import { SET_REMINDER_MODE_TOOL, SetReminderModeSchema, reminderTool, startReminders } from "./reminders.js";
 import { startHouseholds } from "./households.js";
+import { DEMO_MEMBERS } from "./demo.js";
 import { createGarbageFeed } from "./garbage.js";
 import { readEcWeather } from "./weather-ec.js";
 function configuredGogPath(raw) {
@@ -181,6 +183,7 @@ const plugin = defineFeaturePlugin({
             requiredScopes: ["operator.read"],
         });
         api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant })), { scope: "operator.read" });
+        api.registerGatewayMethod(DELIVERY_STATUS_METHOD, deliveryStatusMethod(() => store, () => (config.demo ? DEMO_MEMBERS : config.members)), { scope: "operator.read" });
         return {
             ...familyHandlers(config, { log: (line) => api.logger.warn(line) }),
             [CALENDAR_WRITE_ACTION]: pageWrite({
