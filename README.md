@@ -70,7 +70,7 @@ Weather uses Environment Canada's public API, so it needs no key and covers Cana
 openclaw plugins install git:https://github.com/DonnieFi/oc-family-pack.git --accept-capabilities
 ```
 
-The repository ships its built `dist/`, so a git install does not build. `--accept-capabilities` confirms the plugin's native Control UI page, which runs with the signed-in operator's Gateway permissions.
+The repository ships its built `dist/`, so a git install does not build. A different host build than the one this repo was tested against must rebuild `dist/` with that host. `--accept-capabilities` confirms the plugin's native Control UI page, which runs with the signed-in operator's Gateway permissions.
 
 Calendar sign-in is `gog`, including on a headless Gateway. Run `openclaw family gog` and follow what it prints. A headless host takes two `gog auth add` commands: the first prints a URL, and the second exchanges the browser redirect (`openclaw family gog --auth-url '…'`). Repeat until it tells you to list calendars, then put those ids in the config below. The commands never pass `--readonly`. On a machine with a browser, `openclaw family gog --desktop` prints that sign-in instead of the two remote steps. If the Gateway service cannot see `gog` on `PATH`, set `gogPath` to the full path of the binary.
 

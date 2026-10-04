@@ -422,7 +422,10 @@ test("the family-store service opens the database, and discovery does not regist
   assert.deepEqual(services.map((entry) => entry.id).sort(), ["calendar-watch", "family-reminders", "family-store", "oc-family-pack:feature-events"]);
   const service = services.find((entry) => entry.id === "family-store");
   assert.ok(service);
-  assert.deepEqual(service.reload?.configPrefixes, ["plugins.entries.oc-family-pack.config"]);
+  for (const entry of services) {
+    if (entry.id.startsWith("oc-family-pack:")) continue;
+    assert.equal(entry.reload, undefined, entry.id);
+  }
   const stateDir = tempState();
   const failures: unknown[] = [];
   const logs: string[] = [];

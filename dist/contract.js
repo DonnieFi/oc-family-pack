@@ -164,10 +164,10 @@ export const TodayPayloadSchema = Type.Object({
         ownerIds: Type.Array(Text(LABEL_MAX), { maxItems: MAX_MEMBERS }),
     }, { additionalProperties: false }), { maxItems: MAX_WEEK_EVENTS }),
 }, { additionalProperties: false });
-/** Payload for `calendar-changed`, emitted after a write or an external calendar change. Guests receive it too, so the poller always sends no keys. */
+/** Payload for `calendar-changed`, emitted after a write or an external calendar change. Guests receive it, so the poller and a page write both send no keys. */
 export const CalendarChangedSchema = Type.Object({
     reason: Type.Union([Type.Literal("write"), Type.Literal("external")]),
-    /** Wire keys of calendars that changed. Empty means every open view should refresh. */
+    /** Empty on the wire. The page ignores keys and refetches the week. */
     calendarKeys: Type.Array(NonEmpty(8), { maxItems: MAX_CALENDARS }),
     at: NonEmpty(32),
 }, { additionalProperties: false });

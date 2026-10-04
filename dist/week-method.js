@@ -6,7 +6,8 @@ import { pageRole } from "./write-permissions.js";
 /**
  * Who signed in, read only from fields the published Gateway client type
  * carries, never from request params. A Gateway-attested user (the household
- * proxy's username) is that person. With no user, a session on the shared
+ * proxy's username, trimmed and lowercased to match a roster profileId) is
+ * that person. With no user, a session on the shared
  * Gateway secret (token, password, or a device token issued to one) is the
  * owner, since whoever holds it runs the Gateway. The host refuses a proxy
  * connection without a username, so a proxy session never reaches the owner
@@ -19,7 +20,7 @@ import { pageRole } from "./write-permissions.js";
  */
 export function viewerOf(client) {
     if (client?.authenticatedUserId !== undefined) {
-        return { kind: "person", username: client.authenticatedUserId.trim() || undefined };
+        return { kind: "person", username: client.authenticatedUserId.trim().toLowerCase() || undefined };
     }
     if (client?.usesSharedGatewayAuth === true)
         return { kind: "owner" };

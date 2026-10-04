@@ -457,6 +457,9 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(block.includes("gap"), false);
     assert.equal(phone.includes("nth-child(n + 3)"), false);
     assert.equal(phone.includes("mask-image"), true);
+    const filtersHidden = css.slice(css.indexOf(".ocfp-filters[hidden]"));
+    const hiddenBody = filtersHidden.slice(0, filtersHidden.indexOf("}"));
+    assert.equal(hiddenBody.includes("display: none"), true);
     const disabled = css.slice(css.indexOf(".ocfp-agent:disabled"));
     const disabledBody = disabled.slice(0, disabled.indexOf("}"));
     assert.equal(disabledBody.includes("opacity"), false);

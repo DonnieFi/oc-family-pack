@@ -18,6 +18,8 @@ test("the shared secret with no signed-in user is the owner; an attested user is
   assert.deepEqual(viewerOf(TOKEN), { kind: "owner" });
   assert.deepEqual(viewerOf(client({ usesSharedGatewayAuth: true, isDeviceTokenAuth: true, authPolicy: { generation: "g" } })), { kind: "owner" });
   assert.deepEqual(viewerOf(proxied("alex")), { kind: "person", username: "alex" });
+  assert.deepEqual(viewerOf(proxied("Alex")), { kind: "person", username: "alex" });
+  assert.deepEqual(viewerOf(proxied("  Alex  ")), { kind: "person", username: "alex" });
   assert.deepEqual(viewerOf(client({ usesSharedGatewayAuth: false, authenticatedUserId: "alex" })), { kind: "person", username: "alex" });
   for (const other of [
     client({ usesSharedGatewayAuth: false, authPolicy: { generation: "g" } }),

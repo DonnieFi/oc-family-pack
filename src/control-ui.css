@@ -250,6 +250,10 @@
   scrollbar-width: thin;
 }
 
+.ocfp-filters[hidden] {
+  display: none;
+}
+
 .ocfp-chip {
   --ocfp-chip: var(--family-neutral);
   display: inline-flex;

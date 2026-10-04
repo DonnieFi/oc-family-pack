@@ -338,12 +338,12 @@ async function openSession(options: {
         };
         worker.once("exit", finish);
         timer = schedule(() => {
-          void worker.terminate();
+          void worker.terminate().catch(() => undefined);
         }, closeTimeoutMs);
         try {
           worker.postMessage({ type: "close" });
         } catch {
-          void worker.terminate();
+          void worker.terminate().catch(() => undefined);
         }
       });
       return stopPromise;

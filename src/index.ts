@@ -46,11 +46,15 @@ const plugin = defineFeaturePlugin({
     });
     // Discovery loads the plugin without starting it. The worker belongs to the
     // service start, which the host only calls in a live Gateway.
+    // Services omit reload.configPrefixes. A plugin-config edit matches the
+    // host's plugins rule, which reloads the plugin and runs setup again, so
+    // parseConfig sees the new config and family-household is registered the
+    // first time a clock time is set. A service-only restart would keep this
+    // closure and would not register that service.
     let store: FamilyStore | undefined;
     if (api.registrationMode === "full") {
       api.registerService({
         id: "family-store",
-        reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
         async start(ctx) {
           const opened = await openFamilyStore({
             stateDir: ctx.stateDir,
@@ -75,7 +79,6 @@ const plugin = defineFeaturePlugin({
       let stopWatch: (() => void) | undefined;
       api.registerService({
         id: "calendar-watch",
-        reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
         start(ctx) {
           stopWatch = watchCalendars({ config, runGog: execGog(), events, logger: ctx.logger, grant: familyGrant });
         },
@@ -91,7 +94,6 @@ const plugin = defineFeaturePlugin({
       let stopBriefs: (() => void) | undefined;
       api.registerService({
         id: "family-briefs",
-        reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
         async start(ctx) {
           const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
           const { resolveAgentIdentity, resolveDefaultAgentId } = await import("openclaw/plugin-sdk/agent-runtime");
@@ -124,7 +126,6 @@ const plugin = defineFeaturePlugin({
       let stopReminders: (() => void) | undefined;
       api.registerService({
         id: "family-reminders",
-        reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
         async start(ctx) {
           const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
           const directory = briefDirectory(config);
@@ -149,7 +150,6 @@ const plugin = defineFeaturePlugin({
       let stopHousehold: (() => void) | undefined;
       api.registerService({
         id: "family-household",
-        reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
         async start(ctx) {
           const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
           const directory = briefDirectory(config);
@@ -207,9 +207,10 @@ const plugin = defineFeaturePlugin({
         runGog: execGog(),
         grant: familyGrant,
         log: () => store,
-        changed: (calendarKeys) => {
+        changed: () => {
           try {
-            events.emit("calendar-changed", { reason: "write", calendarKeys, at: new Date().toISOString() });
+            // Guests receive this event, so it carries no calendar keys. The page refetches the week.
+            events.emit("calendar-changed", { reason: "write", calendarKeys: [], at: new Date().toISOString() });
           } catch {
             // The write stands; open pages catch up on the next poll.
           }
