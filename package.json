@@ -1,7 +1,7 @@
 {
   "name": "oc-family-pack",
-  "version": "0.1.0",
-  "description": "OpenClaw plugin that adds a calm family week view to the Control UI: shared calendars, local weather, and one-tap chats with your agents.",
+  "version": "0.2.0",
+  "description": "A calm family week in the Control UI: shared calendars, today's highlights, weather, briefs, and chat with your agents.",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -23,6 +23,7 @@
     "README.md",
     "FAQ.md",
     "HOUSEHOLD-LAN.md",
+    "CHANGELOG.md",
     "skills"
   ],
   "peerDependencies": {

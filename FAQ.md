@@ -13,11 +13,13 @@ says so instead of showing stale or wrong data. Other providers may come later.
 refresh, and multiple accounts on the Gateway host. Reusing it means the plugin
 stores no Google credentials of its own. The plugin runs
 `gog calendar events <id> --from ... --to ... --json` once per configured
-calendar, with a 20 second timeout and no shell.
+calendar, with a 20 second timeout and no shell. Adding, changing, moving, and
+deleting an event use that same sign-in.
 
-If gog is missing or not signed in, the Family page shows the setup steps. If
-the Gateway runs as a service without your shell `PATH`, set `gogPath` to the
-full path of the binary.
+If gog is missing or not signed in, the Family page shows the next step. With
+no people yet, that step is `openclaw family setup`. When calendars are not
+connected, it is `openclaw family gog`. If the Gateway runs as a service
+without your shell `PATH`, set `gogPath` to the full path of the binary.
 
 ## Why doesn't the Family page appear?
 
@@ -43,16 +45,25 @@ installer asks you to accept the plugin's capabilities first.
 
 ## Where does my family data go?
 
-Calendar events are read by gog on your Gateway host and rendered in your
-Control UI. Each page load reads the week again. The plugin also keeps a SQLite
-database on the Gateway host at
+On a live Gateway, gog runs on that host and reads and writes Google Calendar.
+The Control UI renders the week, and each page load reads the week again.
+Demo mode (`demo: true`) does not read real calendars. It shows a sample week.
+
+The plugin also keeps a SQLite database on the Gateway host at
 `$OPENCLAW_STATE_DIR/plugins/oc-family-pack/oc-family-pack.sqlite`. When
-`OPENCLAW_STATE_DIR` is unset, that path is under `~/.openclaw`. Right now it only
-records which updates have run. Features that save family data will add their
-own tables, and this answer will list what each one keeps. The only
-outside request the plugin makes is the Environment Canada weather lookup.
-That lookup sends a search box around your configured coordinates.
-The page loads no fonts, scripts, or images from other sites.
+`OPENCLAW_STATE_DIR` is unset, that path is under `~/.openclaw`. The file holds:
+
+- which schema updates have run
+- an append-only log of calendar write outcomes
+- an append-only log of brief and reminder delivery attempts
+- each person's reminder-mode changes (`dm`, `channel`, or `off`). The latest change wins.
+
+The page never shows the stored delivery target. It shows a sentence such as
+"Daily brief sent."
+
+Weather sends a box around your configured coordinates to Environment Canada.
+If you set a collection calendar, the plugin fetches that link. The page loads
+no fonts, scripts, or images from other sites.
 
 ## Does uninstall delete the family database?
 
@@ -72,21 +83,64 @@ Pack builds one archive file. The family store loads `dist/store-worker.js`
 next to the main plugin file, and pack rejects that layout, so a pack artifact
 does not run. A git install or an npm install keeps both files and works.
 
-## Why is it read-only?
+## Is the calendar read-only?
 
-A family calendar is shared, trusted state, and a wrong write is expensive:
-a moved pickup or a deleted appointment. The first version shows the week
-accurately and leaves edits to your calendar app. Reminders and chores are
-planned, and they will be explicit actions.
+No. The page and chat can add, change, move, and delete events.
+
+A write from the page needs `operator.write`. The kid role does not have it, so
+a kid cannot change events on the page. From chat, a kid can change their own
+personal calendar. A shared calendar, a school calendar, or someone else's
+calendar waits for a parent.
+
+Undo is not available. A change that already went through is not undone from
+the page or from chat.
+
+Chores are later. They are not in this version.
 
 ## Who can see the Family page?
 
-Everyone signed in to the Control UI with at least `operator.read`, once
-custom plugin UI is on, sees every configured calendar. The member chips only
-filter the view; they do not hide anyone's events from anyone. Roles don't
-limit what anyone can see. If a calendar should stay
-private, leave it out of the config. The Chat with strip uses that person's
-own agent list, so it only shows agents they can already open.
+Anyone signed in with at least `operator.read` can open it, once custom plugin
+UI is on. What they see is scoped.
+
+Parents, and the shared-token owner, see every calendar. Everyone sees shared
+calendars. A school or personal calendar also goes to its owners when that
+person is a member and not a guest. Guests, and people who are not on the
+roster, see shared calendars only.
+
+The member chips dim events. They are not a privacy control. A calendar that
+even parents should not see does not belong in the config.
+
+The Chat with strip uses that person's own agent list, so it only shows agents
+they can already open.
+
+## When do briefs and reminders go out?
+
+This version posts them through Discord, using OpenClaw's existing bot. The
+Family page works without Discord. There is no messaging-service picker.
+
+The daily brief goes to the summary channel at 07:00 household time, until
+noon. The weekly brief goes out Sunday at 20:00, until Monday noon. Both
+require `summaryChannel`. Without it, they stay off.
+
+A morning parent DM, an after-school post, and a weekend preview are separate
+optional times. Each stays off until that time is set. The weekend preview
+runs on Friday unless you set another day.
+
+Reminders fire the lead time before a timed event, 15 minutes if you leave
+that unset. Quiet hours default to 22:00–07:00. A reminder that comes due
+during quiet hours waits, and goes out in the hour after they end. All-day
+events are not reminders. Each person gets a direct message, a mention in the summary
+channel, or nothing. The default is a direct message. `set_reminder_mode`
+changes your own. Changing someone else's needs a parent.
+
+## Do the family commands change config?
+
+No.
+
+`openclaw family setup` prints a config patch and never writes it.
+`openclaw family gog` never passes `--readonly`.
+`openclaw family access` changes nothing. It reports the sign-in mode, or
+prints the steps for one.
 
 ## What can a kid ask?
 
@@ -94,7 +148,7 @@ A kid can ask what is on, whose class it is, what is due, when the bins go out, 
 
 Changing a shared calendar, a school calendar, or someone else's calendar waits for a parent to approve it. A kid can change their own personal calendar. Changing how someone else gets reminders also needs a parent.
 
-Undo is not available yet. A change that already went through is not undone from chat.
+A change that already went through is not undone from chat.
 
 ## Why can't I sign out?
 

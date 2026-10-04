@@ -32,7 +32,7 @@ function configuredGogPath(raw) {
 const plugin = defineFeaturePlugin({
     contract,
     name: "Family",
-    description: "A calm family week view in the Control UI: shared calendars, local weather, and quick chats with your agents.",
+    description: "A calm family week in the Control UI: shared calendars, today's highlights, weather, briefs, and chat with your agents.",
     // Queries are operator.read; defineFeaturePlugin sets that scope on every query.
     // Family commands are not registered here. The contract commands adapter always
     // sets requiredScopes, which the shipped command gate then limits to the owner.
@@ -41,7 +41,7 @@ const plugin = defineFeaturePlugin({
             registerFamilyCli(program, { run: execGog(), gogPath: configuredGogPath(api.pluginConfig), gateway: config.gateway, host: config });
         }, {
             commands: ["family"],
-            descriptors: [{ name: "family", description: "Family Pack setup", hasSubcommands: true }],
+            descriptors: [{ name: "family", description: "Set up family calendars, members, and household access", hasSubcommands: true }],
         });
         // Discovery loads the plugin without starting it. The worker belongs to the
         // service start, which the host only calls in a live Gateway.

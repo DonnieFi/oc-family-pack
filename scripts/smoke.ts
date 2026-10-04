@@ -393,7 +393,7 @@ async function freePort(): Promise<number> {
 }
 
 /** The files a git install would have, so the smoke exercises the shipped shape. */
-const SHIPPED = ["package.json", "package-lock.json", "openclaw.plugin.json", "dist", "src", "README.md", "FAQ.md", "HOUSEHOLD-LAN.md", "LICENSE"];
+const SHIPPED = ["package.json", "package-lock.json", "openclaw.plugin.json", "dist", "src", "README.md", "FAQ.md", "HOUSEHOLD-LAN.md", "CHANGELOG.md", "LICENSE", "skills"];
 
 /**
  * Copies the shipping files into a fresh directory and installs the one runtime

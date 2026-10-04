@@ -1,8 +1,8 @@
 {
   "id": "oc-family-pack",
   "name": "Family",
-  "description": "A calm family week view in the Control UI: shared calendars, local weather, and quick chats with your agents.",
-  "version": "0.1.0",
+  "description": "A calm family week in the Control UI: shared calendars, today's highlights, weather, briefs, and chat with your agents.",
+  "version": "0.2.0",
   "categories": [
     "scheduling"
   ],
@@ -13,6 +13,13 @@
   ],
   "skills": [
     "./skills"
+  ],
+  "cliCommands": [
+    {
+      "name": "family",
+      "description": "Set up family calendars, members, and household access",
+      "hasSubcommands": true
+    }
   ],
   "activation": {
     "onStartup": true
@@ -451,9 +458,9 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/976383da2f05ec23d04f84e994f3a05144b483eb839cc6d7e70080926f8b7623/index.js",
+    "entry": "dist/control-ui/8618d8ab63eba868f0a6e0b96b1ab12d28ac3d31234ea06ec3299554522b7d38/index.js",
     "styles": [
-      "dist/control-ui/976383da2f05ec23d04f84e994f3a05144b483eb839cc6d7e70080926f8b7623/index.css"
+      "dist/control-ui/8618d8ab63eba868f0a6e0b96b1ab12d28ac3d31234ea06ec3299554522b7d38/index.css"
     ]
   },
   "contracts": {

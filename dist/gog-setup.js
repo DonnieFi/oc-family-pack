@@ -247,7 +247,7 @@ function gatewayPort(gateway) {
  */
 export function registerFamilyCli(program, deps) {
     const write = deps.write ?? ((text) => console.log(text));
-    const family = program.command("family").description("Family Pack setup");
+    const family = program.command("family").description("Set up family calendars, members, and household access");
     family
         .command("gog")
         .description("Print the next gog command for this host")

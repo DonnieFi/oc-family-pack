@@ -274,7 +274,7 @@ export function registerFamilyCli(
   deps: { run: RunGog; gogPath?: string; gateway?: unknown; host?: unknown; hostZone?: string; write?: (text: string) => void },
 ): void {
   const write = deps.write ?? ((text: string) => console.log(text));
-  const family = program.command("family").description("Family Pack setup");
+  const family = program.command("family").description("Set up family calendars, members, and household access");
   family
     .command("gog")
     .description("Print the next gog command for this host")
