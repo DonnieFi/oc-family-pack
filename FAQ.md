@@ -88,6 +88,14 @@ limit what anyone can see. If a calendar should stay
 private, leave it out of the config. The Chat with strip uses that person's
 own agent list, so it only shows agents they can already open.
 
+## What can a kid ask?
+
+A kid can ask what is on, whose class it is, what is due, when the bins go out, and what is urgent today. The answer comes from the calendars that kid can see.
+
+Changing a shared calendar, a school calendar, or someone else's calendar waits for a parent to approve it. A kid can change their own personal calendar. Changing how someone else gets reminders also needs a parent.
+
+Undo is not available yet. A change that already went through is not undone from chat.
+
 ## Why can't I sign out?
 
 LAN mode uses Caddy basic auth, which has no sign-out and no way to switch

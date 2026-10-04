@@ -22,7 +22,8 @@
     "openclaw.plugin.json",
     "README.md",
     "FAQ.md",
-    "HOUSEHOLD-LAN.md"
+    "HOUSEHOLD-LAN.md",
+    "skills"
   ],
   "peerDependencies": {
     "openclaw": ">=2026.9.7"

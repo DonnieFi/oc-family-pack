@@ -10,6 +10,9 @@
     "page",
     "navigation"
   ],
+  "skills": [
+    "./skills"
+  ],
   "activation": {
     "onStartup": true
   },
