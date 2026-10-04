@@ -106,6 +106,33 @@
     "quietHours": {
       "label": "Quiet hours",
       "help": "Hours in the household timezone when reminders wait. They go out when the window ends. 22:00 to 07:00 if left empty."
+    },
+    "morningTime": {
+      "label": "Morning brief",
+      "placeholder": "07:00",
+      "help": "Weekday time, 24-hour HH:MM, when parents get a direct message of today's and tomorrow's calendar items. Leave empty for no morning brief."
+    },
+    "afterSchoolTime": {
+      "label": "After-school brief",
+      "placeholder": "15:30",
+      "help": "Weekday time, 24-hour HH:MM, when the brief channel gets the afternoon exceptions and pack list. Leave empty to skip it. A day that matches a closed-day phrase stays quiet."
+    },
+    "weekendPreviewTime": {
+      "label": "Weekend preview",
+      "placeholder": "16:00",
+      "help": "Time, 24-hour HH:MM, when the brief channel gets the preview through Sunday. Leave empty to skip it."
+    },
+    "weekendPreviewWeekday": {
+      "label": "Weekend preview day",
+      "help": "Which day the preview goes out: 0 is Sunday through 6 is Saturday. Friday if left empty."
+    },
+    "schoolHints": {
+      "label": "School phrases",
+      "help": "Words that mark a school event, so the morning brief leaves it for the after-school post. Empty includes those events in the morning."
+    },
+    "closedDayPhrases": {
+      "label": "Closed-day phrases",
+      "help": "Words that mark a weekday closed, such as a day off school. The after-school post stays quiet. Empty means only weekends are quiet."
     }
   },
   "configSchema": {
@@ -200,6 +227,41 @@
           }
         },
         "additionalProperties": false
+      },
+      "morningTime": {
+        "type": "string",
+        "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+      },
+      "afterSchoolTime": {
+        "type": "string",
+        "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+      },
+      "weekendPreviewTime": {
+        "type": "string",
+        "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+      },
+      "weekendPreviewWeekday": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 6
+      },
+      "schoolHints": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "maxItems": 16
+      },
+      "closedDayPhrases": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "maxItems": 16
       },
       "gogPath": {
         "type": "string",

@@ -8,6 +8,9 @@ const WRITE_MODES: readonly WriteMode[] = ["on", "confirm", "off"];
 const REMINDER_MODES: readonly ReminderMode[] = ["dm", "channel", "off"];
 const MAX_LEADS = 8;
 const MAX_LEAD_MINUTES = 7 * 24 * 60;
+const MAX_PHRASES = 16;
+const MAX_PHRASE = 40;
+const CLOCK = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
 // Colors land in CSS custom properties, so only accept plain color syntax.
 const CSS_COLOR = /^(?:#[0-9a-fA-F]{3,8}|(?:rgb|rgba|hsl|hsla|oklch|oklab)\([0-9.,%\s/-]+\)|[a-zA-Z]+)$/;
 /** Discord user ids are snowflakes. A mention like `<@…>` is not an id. */
@@ -57,6 +60,12 @@ export const ConfigSchema = Type.Object(
         { additionalProperties: false },
       ),
     ),
+    morningTime: Type.Optional(Type.String({ pattern: CLOCK.source })),
+    afterSchoolTime: Type.Optional(Type.String({ pattern: CLOCK.source })),
+    weekendPreviewTime: Type.Optional(Type.String({ pattern: CLOCK.source })),
+    weekendPreviewWeekday: Type.Optional(Type.Integer({ minimum: 0, maximum: 6 })),
+    schoolHints: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_PHRASE }), { maxItems: MAX_PHRASES })),
+    closedDayPhrases: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_PHRASE }), { maxItems: MAX_PHRASES })),
     gogPath: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
     writes: Type.Optional(Type.Union(WRITE_MODES.map((mode) => Type.Literal(mode)), { default: "on" })),
     members: Type.Optional(
@@ -311,6 +320,33 @@ function leadMinutes(value: unknown): number[] {
   return leads;
 }
 
+function clock(value: unknown, field: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !CLOCK.test(value.trim())) {
+    throw new ConfigError(field, "must be HH:MM in 24-hour time, such as 07:00");
+  }
+  return value.trim();
+}
+
+function weekdayNumber(value: unknown, field: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 6) {
+    throw new ConfigError(field, "must be a weekday number from 0 (Sunday) to 6 (Saturday)");
+  }
+  return value;
+}
+
+function phrases(value: unknown, field: string): string[] {
+  const items = atMost(list(value, field), field, MAX_PHRASES);
+  const parsed = items.map((item, index) => {
+    const phrase = text(item, `${field}[${index}]`).toLowerCase();
+    if ([...phrase].length > MAX_PHRASE) throw new ConfigError(`${field}[${index}]`, `must be at most ${MAX_PHRASE} characters`);
+    return phrase;
+  });
+  if (new Set(parsed).size !== parsed.length) throw new ConfigError(field, "must not repeat a phrase");
+  return parsed;
+}
+
 function quietHours(value: unknown): { startHour: number; endHour: number } {
   if (value === undefined) return { startHour: 22, endHour: 7 };
   if (!isRecord(value)) throw new ConfigError("quietHours", "must be an object with startHour and endHour");
@@ -407,5 +443,15 @@ export function parseConfig(raw: unknown): Config {
   }
   config.reminderLeadMinutes = leadMinutes(value.reminderLeadMinutes);
   config.quietHours = quietHours(value.quietHours);
+  const morningTime = clock(value.morningTime, "morningTime");
+  if (morningTime !== undefined) config.morningTime = morningTime;
+  const afterSchoolTime = clock(value.afterSchoolTime, "afterSchoolTime");
+  if (afterSchoolTime !== undefined) config.afterSchoolTime = afterSchoolTime;
+  const weekendPreviewTime = clock(value.weekendPreviewTime, "weekendPreviewTime");
+  if (weekendPreviewTime !== undefined) config.weekendPreviewTime = weekendPreviewTime;
+  const weekendPreviewWeekday = weekdayNumber(value.weekendPreviewWeekday, "weekendPreviewWeekday");
+  if (weekendPreviewWeekday !== undefined) config.weekendPreviewWeekday = weekendPreviewWeekday;
+  config.schoolHints = phrases(value.schoolHints, "schoolHints");
+  config.closedDayPhrases = phrases(value.closedDayPhrases, "closedDayPhrases");
   return config;
 }

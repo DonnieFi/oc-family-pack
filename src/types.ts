@@ -68,6 +68,18 @@ export type Config = {
   reminderLeadMinutes?: number[];
   /** Hours when reminders wait, in the household zone. Omitted means 22:00–07:00. */
   quietHours?: { startHour: number; endHour: number };
+  /** Weekday morning parent DMs, HH:MM. Omitted means the job is off. */
+  morningTime?: string;
+  /** Weekday after-school channel post, HH:MM. Omitted means the job is off. */
+  afterSchoolTime?: string;
+  /** Weekend preview channel post, HH:MM. Omitted means the job is off. */
+  weekendPreviewTime?: string;
+  /** Weekday of the preview, 0 Sunday through 6 Saturday. Omitted means Friday. */
+  weekendPreviewWeekday?: number;
+  /** Phrases that mark a school-logistics event. Empty sends those events with everything else. */
+  schoolHints?: string[];
+  /** Phrases that mark a weekday closed, so the after-school post stays quiet. Empty means only weekends. */
+  closedDayPhrases?: string[];
   gogPath: string;
   writes: WriteMode;
   members: MemberConfig[];

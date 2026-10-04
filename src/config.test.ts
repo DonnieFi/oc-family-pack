@@ -22,6 +22,8 @@ test("a minimal live config fills defaults and keys calendars by position", () =
       writes: "on",
       reminderLeadMinutes: [15],
       quietHours: { startHour: 22, endHour: 7 },
+      schoolHints: [],
+      closedDayPhrases: [],
       members: [{ ...member, devices: [], reminders: "dm" }],
       calendars: [
         { key: "c0", id: "family@group.calendar.google.com", label: "Family", kind: "shared", owners: [] },
@@ -254,6 +256,28 @@ test("reminders default to a 15 minute lead, quiet hours 22:00 to 07:00, and a d
   assert.throws(() => parseConfig({ timezone: "UTC", reminderLeadMinutes: [15, 15] }), /must not repeat/);
   assert.throws(() => parseConfig({ timezone: "UTC", quietHours: { startHour: 24, endHour: 7 } }), /quietHours.startHour/);
   assert.throws(() => parseConfig({ timezone: "UTC", members: [{ profileId: "alex", displayName: "Alex", role: "kid", reminders: "sms" }] }), /reminders must be one of/);
+});
+
+test("household jobs take a clock time and ship with empty phrase lists", () => {
+  const parsed = parseConfig({
+    timezone: "UTC",
+    morningTime: "07:15",
+    afterSchoolTime: "15:30",
+    weekendPreviewTime: "18:00",
+    weekendPreviewWeekday: 5,
+    schoolHints: ["Field Trip"],
+    closedDayPhrases: ["No School"],
+  });
+  assert.equal(parsed.morningTime, "07:15");
+  assert.equal(parsed.afterSchoolTime, "15:30");
+  assert.equal(parsed.weekendPreviewTime, "18:00");
+  assert.equal(parsed.weekendPreviewWeekday, 5);
+  assert.deepEqual(parsed.schoolHints, ["field trip"]);
+  assert.deepEqual(parsed.closedDayPhrases, ["no school"]);
+  assert.deepEqual(parseConfig({ timezone: "UTC" }).schoolHints, []);
+  assert.throws(() => parseConfig({ timezone: "UTC", morningTime: "7am" }), /morningTime/);
+  assert.throws(() => parseConfig({ timezone: "UTC", weekendPreviewWeekday: 7 }), /weekendPreviewWeekday/);
+  assert.throws(() => parseConfig({ timezone: "UTC", schoolHints: ["trip", "Trip"] }), /must not repeat/);
 });
 
 test("summaryChannel names a key in channels; a key that isn't there fails the config at load", () => {

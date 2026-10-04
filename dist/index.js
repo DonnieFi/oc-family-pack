@@ -16,6 +16,7 @@ import { pageWrite } from "./page-write.js";
 import { briefDirectory, startBriefs } from "./briefs.js";
 import { deliver } from "./discord-delivery.js";
 import { SET_REMINDER_MODE_TOOL, SetReminderModeSchema, reminderTool, startReminders } from "./reminders.js";
+import { startHouseholds } from "./households.js";
 import { createGarbageFeed } from "./garbage.js";
 import { readEcWeather } from "./weather-ec.js";
 function configuredGogPath(raw) {
@@ -132,6 +133,30 @@ const plugin = defineFeaturePlugin({
                 stop() {
                     stopReminders?.();
                     stopReminders = undefined;
+                },
+            });
+        }
+        if (api.registrationMode === "full" &&
+            (config.morningTime !== undefined || config.afterSchoolTime !== undefined || config.weekendPreviewTime !== undefined)) {
+            // Morning, after-school, and weekend briefs. Off unless a clock time is set. Calendar only: no mail account.
+            let stopHousehold;
+            api.registerService({
+                id: "family-household",
+                reload: { configPrefixes: ["plugins.entries.oc-family-pack.config"] },
+                async start(ctx) {
+                    const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
+                    const directory = briefDirectory(config);
+                    stopHousehold = startHouseholds({
+                        config,
+                        store: () => store,
+                        deliver: (target, messages, key) => deliver(sendDurableMessageBatch, ctx.config, directory, target, messages, key),
+                        runGog: execGog(),
+                        log: (line) => ctx.logger.warn(line),
+                    });
+                },
+                stop() {
+                    stopHousehold?.();
+                    stopHousehold = undefined;
                 },
             });
         }
