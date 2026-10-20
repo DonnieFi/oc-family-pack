@@ -173,6 +173,16 @@ In Discord, a kid can change their own personal calendar. A change to a shared c
 
 Undo is not available. A change that already went through is not undone from the page or from chat.
 
+The agent can't change the calendar until you allow it. `calendar_create`, `calendar_update`, `calendar_move`, `calendar_delete`, and `set_reminder_mode` are optional tools, so OpenClaw only offers them to a model you list them for in `tools.allow`:
+
+```json5
+{
+  tools: { allow: ["oc-family-pack"] }, // every tool from this plugin, or name the tools one by one
+}
+```
+
+Without that, agents can still answer what's on with `family_today`, `family_schedule`, and `garbage_schedule`, and the Family page can still change events.
+
 ## Briefs, reminders, and garbage
 
 The daily brief posts at 07:00 in the household time zone. The send window runs until noon. If the Gateway is down at 07:00 and back before noon, that brief still goes out once. After noon it does not. The weekly brief posts Sunday at 20:00 (8:00 PM) for the coming week, and the window runs until Monday noon. Both post to the Discord summary channel, and only when `summaryChannel` is set.
