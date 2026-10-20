@@ -174,7 +174,7 @@ token; OpenClaw uses its own bot.
 
 ## Architecture rules
 
-- Feature plugin on OpenClaw 2026.9.7 or newer, using only the public
+- Feature plugin on OpenClaw 2026.10.5 or newer, before 2026.11, using only the public
   `openclaw/plugin-sdk/*` imports (`feature-contract`, `feature-plugin`,
   `control-ui`, and `tool-plugin` only for the config-schema bridge in
   `src/index.ts` until s5k.31.2 lands). These APIs are experimental: pin and test against the host

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Calendar writes from the agent now default to `confirm`. If you never set `writes`, the agent will ask for a parent's approval before it changes a calendar. Set `writes: "on"` to keep the old behaviour.
+- Needs OpenClaw 2026.10.5 or newer, before 2026.11. Tested on 2026.10.5. An install on OpenClaw 2026.9.x has to upgrade OpenClaw first.
 
 ## 0.2.0 — 2026-10-04
 

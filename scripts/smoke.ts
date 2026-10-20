@@ -376,7 +376,20 @@ function hostDistDir(): string {
   );
 }
 
+/** Ports the live Gateway holds: its own and the sidecar it opens 10 above it. */
+const LIVE_PORTS = [LIVE_GATEWAY_PORT, LIVE_GATEWAY_PORT + 10];
+
 async function freePort(): Promise<number> {
+  const pinned = process.env.OCFP_SMOKE_PORT?.trim();
+  if (pinned) {
+    const port = Number(pinned);
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) fail("plugin load", `OCFP_SMOKE_PORT must be a port number, not ${pinned}`);
+    for (const taken of [port, port + 10]) {
+      if (LIVE_PORTS.includes(taken)) fail("plugin load", `OCFP_SMOKE_PORT ${port} would use ${taken}, which belongs to the live Gateway`);
+      if (!(await portIsFree(taken))) fail("plugin load", `OCFP_SMOKE_PORT ${port} needs ${taken}, and something already listens there`);
+    }
+    return port;
+  }
   return new Promise((resolve, reject) => {
     const server = createServer();
     server.once("error", (error) => reject(new Error(`smoke: plugin load failed: could not reserve a local port: ${error.message}`)));
@@ -384,11 +397,19 @@ async function freePort(): Promise<number> {
       const address = server.address();
       const port = typeof address === "object" && address ? address.port : 0;
       server.close(() =>
-        port === LIVE_GATEWAY_PORT
-          ? reject(new Error(`smoke: plugin load failed: refused to use the live Gateway port ${LIVE_GATEWAY_PORT}`))
+        LIVE_PORTS.includes(port)
+          ? reject(new Error(`smoke: plugin load failed: refused to use the live Gateway port ${port}`))
           : resolve(port),
       );
     });
+  });
+}
+
+function portIsFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.once("error", () => resolve(false));
+    probe.listen(port, "127.0.0.1", () => probe.close(() => resolve(true)));
   });
 }
 

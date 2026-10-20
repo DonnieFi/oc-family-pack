@@ -9,7 +9,7 @@ Version 0.2.0.
 [![Version](https://img.shields.io/github/package-json/v/DonnieFi/oc-family-pack?label=version&color=e08a3a)](package.json)
 [![Status](https://img.shields.io/badge/status-0.2.0-orange)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/github/license/DonnieFi/oc-family-pack?color=4ea674)](LICENSE)
-[![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%89%A5%202026.9.7-ff5c5c)](https://docs.openclaw.ai/plugins/feature-plugins)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%89%A5%202026.10.5-ff5c5c)](https://docs.openclaw.ai/plugins/feature-plugins)
 [![Plugin type](https://img.shields.io/badge/plugin-feature-14b8a6)](https://docs.openclaw.ai/plugins/feature-plugins)
 [![Node](https://img.shields.io/badge/node-%E2%89%A5%2024.16-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
@@ -71,7 +71,7 @@ The pictures below are the demo week (Alex, Sam, Riley, and Jordan). Demo mode d
 
 | Requirement | Why |
 | --- | --- |
-| OpenClaw `2026.9.7` or newer | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Tested on `2026.9.7`; see [Development](#development) for the post-update smoke. |
+| OpenClaw `2026.10.5` or newer, before `2026.11` | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Tested on `2026.10.5`; see [Development](#development) for the post-update smoke. |
 | Node.js `>=24.16.0 <25` or `>=26.1.0` | Matches the OpenClaw runtime |
 | [`gog`](https://github.com/openclaw/gogcli) with Calendar access | Reads and writes Google Calendar using your existing sign-in. `gog` runs on the Gateway host |
 | **Custom plugin UI** lab enabled | Required for native pages from non-bundled plugins |
@@ -270,7 +270,7 @@ npm run check      # typecheck, script typecheck, tests, validate, build --check
 
 After browser-only changes, rebuild and use **Plugins → Advanced → Customize UI → Reload plugin UI**. Backend changes need a plugin reload.
 
-OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Tested on OpenClaw `2026.9.7`.** After you run `openclaw update`, run the smoke to check this plugin against your new host:
+OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Tested on OpenClaw `2026.10.5`.** After you run `openclaw update`, run the smoke to check this plugin against your new host:
 
 ```bash
 npm run smoke

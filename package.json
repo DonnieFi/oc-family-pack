@@ -37,7 +37,7 @@
     "SECURITY.md"
   ],
   "peerDependencies": {
-    "openclaw": ">=2026.9.7"
+    "openclaw": ">=2026.10.5 <2026.11"
   },
   "peerDependenciesMeta": {
     "openclaw": {
@@ -50,7 +50,7 @@
   "devDependencies": {
     "@types/node": "24.19.0",
     "esbuild": "0.28.2",
-    "openclaw": "2026.9.7",
+    "openclaw": "2026.10.5",
     "typescript": "7.0.2"
   },
   "engines": {
@@ -62,13 +62,13 @@
     ],
     "controlUi": "./src/control-ui.ts",
     "install": {
-      "minHostVersion": ">=2026.9.7"
+      "minHostVersion": ">=2026.10.5"
     },
     "compat": {
-      "pluginApi": ">=2026.9.7"
+      "pluginApi": ">=2026.10.5"
     },
     "build": {
-      "openclawVersion": "2026.9.7"
+      "openclawVersion": "2026.10.5"
     }
   }
 }
