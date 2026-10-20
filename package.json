@@ -33,7 +33,8 @@
     "HOUSEHOLD-LAN.md",
     "SETUP.md",
     "CHANGELOG.md",
-    "skills"
+    "skills",
+    "SECURITY.md"
   ],
   "peerDependencies": {
     "openclaw": ">=2026.9.7"
