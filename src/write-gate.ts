@@ -21,7 +21,8 @@ export type GateDecision = { decision: "refused"; message: string } | { decision
  *    operator.read before a write action runs; this is the wall behind it.
  * 1. `writes: "off"` refuses everything.
  * 2. a read-only gog grant refuses everything; `unknown` lets the write through.
- * 3. the permission table, and `writes: "confirm"` sends every write for approval.
+ * 3. the permission table, and `writes: "confirm"` sends what the agent proposes for approval.
+ *    A parent's Save on the page skips confirm: the signed-in click is the approval.
  * A `table` decision from the before_tool_call hook replaces step 3, so an approved write
  * isn't sent for approval again; steps 0-2 always run.
  */
@@ -43,6 +44,6 @@ export function gateWrite(input: {
     const right = writeRight(input.members, input.requester, calendar);
     if (right.right === "needs-approval") return { decision: "needs-approval", approvers: right.approvers };
   }
-  if (input.writes === "confirm") return { decision: "needs-approval", approvers: approvers(input.members) };
+  if (input.writes === "confirm" && input.requester.from !== "page") return { decision: "needs-approval", approvers: approvers(input.members) };
   return { decision: "write" };
 }

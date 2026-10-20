@@ -64,9 +64,23 @@ test("writes on lets a parent page and an admin page write and keeps the permiss
   assert.deepEqual(gate("on", { from: "discord", member: calla! }), { decision: "needs-approval", approvers: ["Donnie"] });
 });
 
-test("writes confirm sends every write for approval, a parent's included", () => {
-  for (const requester of [parentPage, adminPage, { from: "discord", member: donnie! } as Requester, { from: "discord", member: calla! } as Requester]) {
+test("writes confirm holds what the agent proposes for approval, a parent's included", () => {
+  for (const requester of [{ from: "discord", member: donnie! } as Requester, { from: "discord", member: calla! } as Requester, { from: "tool", senderIsOwner: true } as Requester]) {
     assert.deepEqual(gate("confirm", requester, callaCalendar), { decision: "needs-approval", approvers: ["Donnie"] }, JSON.stringify(requester));
+  }
+});
+
+test("writes confirm lets a parent's Save on the page through: the click is the approval", () => {
+  for (const calendar of [family, callaCalendar]) {
+    assert.deepEqual(gate("confirm", parentPage, calendar), { decision: "write" }, calendar.id);
+    assert.deepEqual(gate("confirm", adminPage, calendar), { decision: "write" }, calendar.id);
+  }
+});
+
+test("writes confirm keeps the kid rule: a kid's change to the shared calendar waits for a parent, and a kid page stays view-only", () => {
+  assert.deepEqual(gate("confirm", { from: "discord", member: calla! }, family), { decision: "needs-approval", approvers: ["Donnie"] });
+  for (const [label, requester] of GUEST_PAGES) {
+    assert.deepEqual(gate("confirm", requester, family), { decision: "refused", message: VIEW_ONLY }, label);
   }
 });
 
@@ -85,7 +99,7 @@ test("an unknown or read-write grant lets the write through to the table", () =>
   for (const grant of ["unknown", "read-write"] as const) {
     assert.deepEqual(gate("on", parentPage, family, grant), { decision: "write" }, grant);
     assert.deepEqual(gate("on", { from: "discord", member: calla! }, family, grant), { decision: "needs-approval", approvers: ["Donnie"] }, grant);
-    assert.deepEqual(gate("confirm", adminPage, family, grant), { decision: "needs-approval", approvers: ["Donnie"] }, grant);
+    assert.deepEqual(gate("confirm", adminPage, family, grant), { decision: "write" }, grant);
   }
 });
 

@@ -567,18 +567,16 @@ test("two page submits of the same change are two requests, and the second gets 
   assert.equal(s.gog.writes().length, 1);
 });
 
-test("the page gate: a guest is view-only, confirm mode gets the not-approved line with the op's verb, a bad requestId writes nothing", async () => {
+test("the page gate: a guest is view-only, a parent's Save goes through in confirm mode, a bad requestId writes nothing", async () => {
   const s = setup();
   const event = seed(s);
   assert.deepEqual(await submit(s, pageInput({ op: "delete", id: wire("c0", event) }), parentPage(["operator.read"])), { ok: false, message: VIEW_ONLY });
   const confirm = setup({ writes: "confirm" });
   const held = seed(confirm);
-  assert.deepEqual(await submit(confirm, pageInput({ op: "delete", id: wire("c0", held) })), {
-    ok: false,
-    message: "That didn't get approved, so I didn't delete **Dentist**. Ask again when Donnie is around.",
-  });
+  assert.equal((await submit(confirm, pageInput({ op: "delete", id: wire("c0", held) }))).ok, true);
   assert.deepEqual(await submit(s, { op: "delete", id: wire("c0", event), requestId: "a\nb" } as CalendarWrite), { ok: false, message: "Something went wrong checking that, so I didn't delete that event." });
-  assert.deepEqual([s.gog.writes(), confirm.gog.writes(), s.log.rows], [[], [], []]);
+  assert.deepEqual([s.gog.writes(), s.log.rows], [[], []]);
+  assert.equal(confirm.gog.writes().length, 1);
 });
 
 test("ux's locked lines for a change that can't go ahead", async () => {

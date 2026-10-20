@@ -19,7 +19,7 @@ test("a minimal live config fills defaults and keys calendars by position", () =
       timezone: "America/Toronto",
       demo: false,
       gogPath: "gog",
-      writes: "on",
+      writes: "confirm",
       reminderLeadMinutes: [15],
       quietHours: { startHour: 22, endHour: 7 },
       schoolHints: [],
@@ -219,9 +219,9 @@ test("a school calendar is attributed from its owners alone", () => {
   assert.deepEqual(unassigned.calendars[0]?.owners, []);
 });
 
-test("writes is on by default, takes confirm or off, and refuses anything else", () => {
-  assert.equal(parseConfig({}).writes, "on");
-  assert.equal(parseConfig({ writes: "confirm" }).writes, "confirm");
+test("writes is confirm by default, takes on or off, and refuses anything else", () => {
+  assert.equal(parseConfig({}).writes, "confirm");
+  assert.equal(parseConfig({ writes: "on" }).writes, "on");
   assert.equal(parseConfig({ writes: "off" }).writes, "off");
   for (const writes of ["OFF", "", true, null, "draft"]) {
     assert.throws(() => parseConfig({ writes }), { message: "oc-family-pack config: writes must be one of on, confirm, off" }, String(writes));

@@ -151,7 +151,7 @@ Briefs and reminders use a channel you name. Each key in `channels` is a short n
 
 `morningTime`, `afterSchoolTime`, and `weekendPreviewTime` are optional clock times, `HH:MM` in 24-hour form. Leave a time unset to skip that household brief. `weekendPreviewWeekday` defaults to Friday (`5`). `0` is Sunday and `6` is Saturday.
 
-`writes` defaults to `on`. Set it to `confirm` to hold every calendar change for a parent, or `off` to refuse calendar changes.
+`writes` defaults to `confirm`, which holds changes the agent proposes until a parent approves. `on` lets the agent make them, though a kid's change to a shared calendar still waits for a parent. `off` refuses all agent changes. Changes you make yourself on the Family page skip `confirm`, but `off` blocks them too.
 
 ## The Family page
 

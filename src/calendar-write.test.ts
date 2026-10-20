@@ -769,15 +769,12 @@ test("writes off refuses a parent's page with the off line, no gog call and no l
   });
 });
 
-test("writes confirm holds a parent's page write for approval without touching gog or the log", async () => {
-  await withStore(async ({ stateDir, store }) => {
+test("writes confirm lets a parent's page Save through: the click is the approval", async () => {
+  await withStore(async ({ store }) => {
     const gog = fakeGog();
-    assert.deepEqual(await submitCreate(submitDeps(gog, store, "confirm"), pageSubmit({ connId: "p", scopes: PARENT_SCOPES })), {
-      status: "needs-approval",
-      approvers: ["Britta"],
-    });
-    assert.equal(gog.calls.length, 0);
-    assert.deepEqual(logRows(stateDir), []);
+    const result = await submitCreate(submitDeps(gog, store, "confirm"), pageSubmit({ connId: "p", scopes: PARENT_SCOPES }));
+    assert.equal(result.status, "created");
+    assert.equal(gog.calls.filter((args) => args[1] === "create").length, 1);
   });
 });
 

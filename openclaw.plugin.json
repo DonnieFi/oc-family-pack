@@ -294,7 +294,7 @@
             "const": "off"
           }
         ],
-        "default": "on"
+        "default": "confirm"
       },
       "members": {
         "type": "array",

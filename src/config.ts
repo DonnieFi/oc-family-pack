@@ -67,7 +67,7 @@ export const ConfigSchema = Type.Object(
     schoolHints: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_PHRASE }), { maxItems: MAX_PHRASES })),
     closedDayPhrases: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_PHRASE }), { maxItems: MAX_PHRASES })),
     gogPath: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
-    writes: Type.Optional(Type.Union(WRITE_MODES.map((mode) => Type.Literal(mode)), { default: "on" })),
+    writes: Type.Optional(Type.Union(WRITE_MODES.map((mode) => Type.Literal(mode)), { default: "confirm" })),
     members: Type.Optional(
       Type.Array(
         Type.Object(
@@ -419,7 +419,7 @@ export function parseConfig(raw: unknown): Config {
         : timezone(value.timezone, "timezone"),
     demo,
     gogPath: value.gogPath === undefined ? "gog" : text(value.gogPath, "gogPath"),
-    writes: value.writes === undefined ? "on" : oneOf(value.writes, "writes", WRITE_MODES),
+    writes: value.writes === undefined ? "confirm" : oneOf(value.writes, "writes", WRITE_MODES),
     members,
     calendars,
   };

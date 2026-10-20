@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Calendar writes from the agent now default to `confirm`. If you never set `writes`, the agent will ask for a parent's approval before it changes a calendar. Set `writes: "on"` to keep the old behaviour.
+
 ## 0.2.0 — 2026-10-04
 
 What you can use now.
