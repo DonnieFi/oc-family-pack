@@ -20,7 +20,7 @@ export type CalendarWriteApi = {
     handler: (event: HookEvent, ctx: HookContext) => Promise<HookResult | undefined>,
     opts: { priority: number; matcher: readonly [string, ...string[]] },
   ) => void;
-  registerTool: (factory: (ctx: ToolContext) => CalendarTool, opts: { name: string }) => void;
+  registerTool: (factory: (ctx: ToolContext) => CalendarTool, opts: { name: string; optional?: boolean }) => void;
 };
 
 /**
@@ -36,8 +36,8 @@ export function registerCalendarWrite(api: CalendarWriteApi, deps: CalendarWrite
     priority: CALENDAR_HOOK_PRIORITY,
     matcher: [CALENDAR_CREATE_TOOL, ...Object.keys(CHANGE_TOOLS)],
   });
-  api.registerTool((ctx) => calendarCreateTool(deps, stamper, ctx), { name: CALENDAR_CREATE_TOOL });
+  api.registerTool((ctx) => calendarCreateTool(deps, stamper, ctx), { name: CALENDAR_CREATE_TOOL, optional: true });
   for (const op of Object.values(CHANGE_TOOLS) as ChangeOp[]) {
-    api.registerTool((ctx) => calendarChangeTool(op, deps, stamper, ctx), { name: TOOL_OF[op] });
+    api.registerTool((ctx) => calendarChangeTool(op, deps, stamper, ctx), { name: TOOL_OF[op], optional: true });
   }
 }

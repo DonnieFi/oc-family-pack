@@ -115,8 +115,8 @@ test("queries are operator.read session actions, the page write is operator.writ
   ]);
   const writes = ["calendar_create", "calendar_update", "calendar_move", "calendar_delete"];
   assert.deepEqual(tools, [
-    ...writes.map((name) => ({ name })),
-    { name: "set_reminder_mode" },
+    ...writes.map((name) => ({ name, optional: true })),
+    { name: "set_reminder_mode", optional: true },
     { name: "garbage_schedule" },
     { name: "family_schedule" },
     { name: "family_today" },
@@ -165,4 +165,20 @@ test("CalendarWrite rejects an unknown op, a missing or multi-line requestId, an
   }
   assert.equal(Value.Check(CalendarWriteResultSchema, { ok: true, message: "Deleted **Dentist**." }), true);
   assert.equal(Value.Check(CalendarWriteResultSchema, { ok: true, message: "x", eventId: "c0/e1" }), false);
+});
+
+test("the manifest marks the calendar write tools and set_reminder_mode optional, so they need tools.allow", async () => {
+  const { readFileSync } = await import("node:fs");
+  const manifest = JSON.parse(readFileSync(new URL("../openclaw.plugin.json", import.meta.url), "utf8")) as {
+    contracts: { tools: string[] };
+    toolMetadata?: Record<string, { optional?: boolean }>;
+  };
+  const optional = ["calendar_create", "calendar_update", "calendar_move", "calendar_delete", "set_reminder_mode"];
+  for (const name of optional) {
+    assert.ok(manifest.contracts.tools.includes(name), name);
+    assert.equal(manifest.toolMetadata?.[name]?.optional, true, name);
+  }
+  for (const name of ["family_today", "family_schedule", "garbage_schedule"]) {
+    assert.notEqual(manifest.toolMetadata?.[name]?.optional, true, name);
+  }
 });

@@ -14,8 +14,8 @@ export function registerCalendarWrite(api, deps) {
         priority: CALENDAR_HOOK_PRIORITY,
         matcher: [CALENDAR_CREATE_TOOL, ...Object.keys(CHANGE_TOOLS)],
     });
-    api.registerTool((ctx) => calendarCreateTool(deps, stamper, ctx), { name: CALENDAR_CREATE_TOOL });
+    api.registerTool((ctx) => calendarCreateTool(deps, stamper, ctx), { name: CALENDAR_CREATE_TOOL, optional: true });
     for (const op of Object.values(CHANGE_TOOLS)) {
-        api.registerTool((ctx) => calendarChangeTool(op, deps, stamper, ctx), { name: TOOL_OF[op] });
+        api.registerTool((ctx) => calendarChangeTool(op, deps, stamper, ctx), { name: TOOL_OF[op], optional: true });
     }
 }

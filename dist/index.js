@@ -173,7 +173,7 @@ const plugin = defineFeaturePlugin({
             senderId: ctx.requesterSenderId,
             senderIsOwner: ctx.senderIsOwner,
             directOperator: ctx.conversationReadOrigin === "direct-operator",
-        }), { name: SET_REMINDER_MODE_TOOL });
+        }), { name: SET_REMINDER_MODE_TOOL, optional: true });
         // The week is a Gateway method, not a feature query, because only a Gateway
         // method sees who signed in. Same operator.read scope the queries get.
         api.session.controls.registerControlUiDescriptor({
@@ -216,29 +216,35 @@ if (!metadata) {
 metadata.configSchema = { ...ConfigSchema };
 // The calendar write tools are registered with api.registerTool, not through the feature
 // contract, so they get no page session action. `openclaw plugins build` reads contracts.tools
-// from this list.
+// from this list. optional: true becomes toolMetadata.<tool>.optional in the manifest, so these
+// side-effect tools reach the model only after the operator lists them in tools.allow.
 metadata.tools.push({
     name: CALENDAR_CREATE_TOOL,
+    optional: true,
     label: "Add to calendar",
     description: "Add one event to a family calendar; some additions wait for a parent to approve them.",
     parameters: { ...CalendarCreateInputSchema },
 }, {
     name: CALENDAR_UPDATE_TOOL,
+    optional: true,
     label: "Change a calendar event",
     description: "Change one family calendar event; some changes wait for a parent to approve them.",
     parameters: { ...CalendarUpdateInputSchema },
 }, {
     name: CALENDAR_MOVE_TOOL,
+    optional: true,
     label: "Move a calendar event",
     description: "Move one event to another family calendar; some moves wait for a parent to approve them.",
     parameters: { ...CalendarMoveInputSchema },
 }, {
     name: CALENDAR_DELETE_TOOL,
+    optional: true,
     label: "Delete a calendar event",
     description: "Delete one family calendar event; some deletions wait for a parent to approve them.",
     parameters: { ...CalendarDeleteInputSchema },
 }, {
     name: SET_REMINDER_MODE_TOOL,
+    optional: true,
     label: "Reminder delivery",
     description: "Change how one person gets event reminders: a direct message, a mention in the brief channel, or off. A person can change their own. A parent can change anyone's.",
     parameters: { ...SetReminderModeSchema },

@@ -474,5 +474,22 @@
       "calendar_delete",
       "set_reminder_mode"
     ]
+  },
+  "toolMetadata": {
+    "calendar_create": {
+      "optional": true
+    },
+    "calendar_update": {
+      "optional": true
+    },
+    "calendar_move": {
+      "optional": true
+    },
+    "calendar_delete": {
+      "optional": true
+    },
+    "set_reminder_mode": {
+      "optional": true
+    }
   }
 }
