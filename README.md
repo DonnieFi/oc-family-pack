@@ -173,15 +173,17 @@ In Discord, a kid can change their own personal calendar. A change to a shared c
 
 Undo is not available. A change that already went through is not undone from the page or from chat.
 
-The agent can't change the calendar until you allow it. `calendar_create`, `calendar_update`, `calendar_move`, `calendar_delete`, and `set_reminder_mode` are optional tools, so OpenClaw only offers them to a model you list them for in `tools.allow`:
+`calendar_create`, `calendar_update`, `calendar_move`, `calendar_delete`, and `set_reminder_mode` are optional tools. On a `full` tool profile, the agent can already see the calendar tools. What protects your calendar is the `writes` setting and the parent rule, not tool visibility.
+
+With no tool profile set, or a narrower one such as `coding`, add them with `tools.alsoAllow`:
 
 ```json5
 {
-  tools: { allow: ["oc-family-pack"] }, // every tool from this plugin, or name the tools one by one
+  tools: { alsoAllow: ["oc-family-pack"] },
 }
 ```
 
-Without that, agents can still answer what's on with `family_today`, `family_schedule`, and `garbage_schedule`, and the Family page can still change events.
+Use `alsoAllow`, not `allow`. Without a profile, `tools.allow: ["oc-family-pack"]` also takes away other plugins' tools.
 
 ## Briefs, reminders, and garbage
 

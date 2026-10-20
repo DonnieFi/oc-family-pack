@@ -23,7 +23,7 @@ The collection calendar check has one gap. Only literal addresses and localhost 
 
 Every calendar write from chat goes through one `before_tool_call` hook that runs first. When a change needs a parent, the hook holds it for the host's approval prompt. It then writes a stamp into a parameter the model never sees, and it overwrites that parameter on every call. The stamp is an HMAC over the decision, the tool, and the event version the hook read. The tool refuses a missing, forged, or mismatched stamp. The stamp is never hashed into a key, written to an event, or logged.
 
-The four write tools and `set_reminder_mode` are optional. A model only gets them after the operator lists them in `tools.allow`.
+The four write tools and `set_reminder_mode` are optional tools. On a `full` tool profile, the agent can already see the calendar tools. What protects your calendar is the `writes` setting and the parent rule, not tool visibility. With no profile, or a narrower one, they appear only after the operator adds them with `tools.alsoAllow`.
 
 ## What it stores
 
