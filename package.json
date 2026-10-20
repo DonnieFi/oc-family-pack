@@ -3,6 +3,14 @@
   "version": "0.2.0",
   "description": "A calm family week in the Control UI: shared calendars, today's highlights, weather, briefs, and chat with your agents.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DonnieFi/oc-family-pack.git"
+  },
+  "homepage": "https://github.com/DonnieFi/oc-family-pack#readme",
+  "bugs": {
+    "url": "https://github.com/DonnieFi/oc-family-pack/issues"
+  },
   "private": true,
   "type": "module",
   "scripts": {
