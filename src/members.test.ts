@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { briefTick } from "./briefs.ts";
 import type { RunGog } from "./calendar-gog.ts";
 import { parseConfig } from "./config.ts";
 import { familyHandlers, familyWeek } from "./handlers.ts";
@@ -73,10 +74,12 @@ test("gate (b): a 0.2.0 config with displayName and no id loads, and its owners 
     members: [
       { profileId: "alex", displayName: "Alex", role: "parent", discordId: "100000000000000001" },
       { profileId: "riley", displayName: "Riley", role: "kid" },
+      { profileId: "kid1", displayName: "Riley", role: "kid" },
     ],
     calendars: [
       { id: "family@group.calendar.google.com", label: "Family", kind: "shared", owners: ["alex", "riley"] },
       { id: "school", label: "School", kind: "school", owners: ["riley"] },
+      { id: "kid1-personal", label: "Kid1", kind: "personal", owners: ["kid1"] },
     ],
   };
   const config = parseConfig(v020);
@@ -85,11 +88,12 @@ test("gate (b): a 0.2.0 config with displayName and no id loads, and its owners 
     [
       ["alex", "alex", "Alex", "parent"],
       ["riley", "riley", "Riley", "kid"],
+      ["kid1", "kid1", "Riley", "kid"],
     ],
   );
   assert.deepEqual(
     config.calendars.map((calendar) => calendar.owners),
-    [["alex", "riley"], ["riley"]],
+    [["alex", "riley"], ["riley"], ["kid1"]],
   );
 });
 
@@ -138,6 +142,8 @@ test("gate (c): an email appears in no output at all, operator results included"
         { name: "Riley", role: "kid", email: EMAIL },
       ],
       calendars: [{ id: "family", label: "Family", kind: "shared", owners: ["alex", "riley"] }],
+      channels: { family: "222222222222222222" },
+      summaryChannel: "family",
     };
     const config = parseConfig(raw);
     const runGog: RunGog = async () => ({
@@ -153,6 +159,31 @@ test("gate (c): an email appears in no output at all, operator results included"
     outputs.push(await handlers["family.today"]({}, tool({ messageChannel: "discord", requesterSenderId: "100000000000000001" })));
     const week = familyWeek(config, { now: () => now, runGog, fetchWeather: async () => new Response("", { status: 503 }) } as never);
     outputs.push(await week({}, { kind: "owner" }).catch((error: unknown) => String(error)));
+    // Monday 08:00 in Halifax: both the daily and the weekly brief are due on one tick.
+    const monday = Date.parse("2026-10-19T11:00:00Z");
+    const sent: string[] = [];
+    await briefTick(
+      {
+        config,
+        store: () => ({ deliveryDone: async () => false, appendDeliveryLog: async () => {} }) as never,
+        deliver: async (_target, messages, key) => {
+          sent.push(key);
+          outputs.push(messages);
+          return { status: "sent", receipt: { messageIds: ["1"], sentAt: monday } };
+        },
+        agentName: async () => "Hazel",
+        readCalendars: async () => ({
+          status: "ok",
+          data: [{ id: "c0/e1", title: "Swim", start: "2026-10-19T19:00:00.000Z", end: "2026-10-19T20:00:00.000Z", allDay: false, calendarKey: config.calendars[0]!.key }],
+          warnings: [],
+        }),
+        readWeather: async () => undefined,
+        garbageTomorrow: async () => undefined,
+        log: (line) => lines.push(line),
+      },
+      monday,
+    );
+    assert.deepEqual(sent.map((key) => key.split(":")[0]).sort(), ["daily-summary", "weekly-summary"], sent.join(", "));
     const host = { plugins: { entries: { "oc-family-pack": { config: raw } } } };
     outputs.push(planSetup(host, {}, { steps: [] } as never, TZ));
     for (const bad of [{ name: "Riley", email: "riley.morgan@outlook" }, { name: "Riley", email: `${EMAIL} x` }]) {
