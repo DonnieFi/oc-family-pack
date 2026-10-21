@@ -1,5 +1,5 @@
-# Allowlist: plugin code, docs, the beads plan export, and agent
-# config are published. Local state and the beads database stay here.
+# Allowlist: plugin code, docs and agent config are published.
+# Local state and the whole beads directory stay here.
 /*
 !/.gitignore
 !/README.md
@@ -24,7 +24,6 @@
 !/.agents/
 !/.claude/
 !/.codex/
-!/.beads/
 
 **/*.md
 !/README.md
@@ -36,10 +35,8 @@
 !/skills/**/SKILL.md
 !/AGENTS.md
 !/.agents/**/*.md
-!/.beads/README.md
 
-/.beads/backup/
-/.beads/hooks/
+/.beads/
 
 # Planning, research, audits and proof artifacts: local only.
 # The plan map (docs/overview.html) is public, served by GitHub Pages.
