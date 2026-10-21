@@ -28,13 +28,13 @@ import { planAccess } from "../src/access.ts";
 import { planSetup } from "../src/setup.ts";
 import { POLL_MS } from "../src/calendar-watch.ts";
 import { addDays } from "../src/week.ts";
+import { pickRefusal } from "./smoke-ports.ts";
 import { isolatedGatewayEnv } from "./isolated-env.ts";
 
 const ROOT = dirname(dirname(new URL(import.meta.url).pathname));
 const PLUGIN_ID = "oc-family-pack";
 const TOKEN = "ocfp-smoke-token";
 /** The operator's live Gateway. This script must never bind or talk to it. */
-const LIVE_GATEWAY_PORT = 18789;
 
 /**
  * The `openclaw` binary to test. This must be the host the operator actually
@@ -376,31 +376,31 @@ function hostDistDir(): string {
   );
 }
 
-/** Ports the live Gateway holds: its own and the sidecar it opens 10 above it. */
-const LIVE_PORTS = [LIVE_GATEWAY_PORT, LIVE_GATEWAY_PORT + 10];
-
 async function freePort(): Promise<number> {
   const pinned = process.env.OCFP_SMOKE_PORT?.trim();
   if (pinned) {
     const port = Number(pinned);
     if (!Number.isInteger(port) || port < 1024 || port > 65535) fail("plugin load", `OCFP_SMOKE_PORT must be a port number, not ${pinned}`);
-    for (const taken of [port, port + 10]) {
-      if (LIVE_PORTS.includes(taken)) fail("plugin load", `OCFP_SMOKE_PORT ${port} would use ${taken}, which belongs to the live Gateway`);
-      if (!(await portIsFree(taken))) fail("plugin load", `OCFP_SMOKE_PORT ${port} needs ${taken}, and something already listens there`);
-    }
+    const refusal = await pickRefusal(port, portIsFree);
+    if (refusal) fail("plugin load", `OCFP_SMOKE_PORT ${refusal}`);
     return port;
   }
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const port = await randomPort();
+    if (!(await pickRefusal(port, portIsFree))) return port;
+  }
+  fail("plugin load", "could not find a local port whose sidecar 10 above it is also free and off the live Gateway");
+}
+
+/** A port the OS hands out as free right now; freePort still vets it and its sidecar. */
+function randomPort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
     server.once("error", (error) => reject(new Error(`smoke: plugin load failed: could not reserve a local port: ${error.message}`)));
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       const port = typeof address === "object" && address ? address.port : 0;
-      server.close(() =>
-        LIVE_PORTS.includes(port)
-          ? reject(new Error(`smoke: plugin load failed: refused to use the live Gateway port ${port}`))
-          : resolve(port),
-      );
+      server.close(() => resolve(port));
     });
   });
 }
