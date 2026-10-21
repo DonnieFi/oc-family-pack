@@ -78,4 +78,13 @@ BEGIN SELECT RAISE(ABORT, 'oc_family_pack_reminder_mode is append-only'); END;
 CREATE TRIGGER oc_family_pack_reminder_mode_no_delete BEFORE DELETE ON oc_family_pack_reminder_mode
 BEGIN SELECT RAISE(ABORT, 'oc_family_pack_reminder_mode is append-only'); END;`,
   },
+  {
+    id: "0005-home-seed",
+    // One row once Today has been placed on a fresh Home. A later removal is the
+    // operator's choice: the page offers to pin it again and does not re-add it.
+    sql: `CREATE TABLE oc_family_pack_home (
+  id TEXT PRIMARY KEY,
+  at INTEGER NOT NULL
+) STRICT;`,
+  },
 ];

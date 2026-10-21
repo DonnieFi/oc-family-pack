@@ -468,9 +468,9 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/496fbedc339f4965570c5f6938622c31c83dafe789725e1713e224ab87525ffb/index.js",
+    "entry": "dist/control-ui/f86cf8d81d86087f7df12db53a13c6b851d0c05cbfd435d8e123becc8a3549c6/index.js",
     "styles": [
-      "dist/control-ui/496fbedc339f4965570c5f6938622c31c83dafe789725e1713e224ab87525ffb/index.css"
+      "dist/control-ui/f86cf8d81d86087f7df12db53a13c6b851d0c05cbfd435d8e123becc8a3549c6/index.css"
     ]
   },
   "contracts": {
@@ -482,7 +482,8 @@
       "calendar_update",
       "calendar_move",
       "calendar_delete",
-      "set_reminder_mode"
+      "set_reminder_mode",
+      "family_contact"
     ]
   },
   "toolMetadata": {
@@ -499,6 +500,9 @@
       "optional": true
     },
     "set_reminder_mode": {
+      "optional": true
+    },
+    "family_contact": {
       "optional": true
     }
   }

@@ -146,6 +146,14 @@ const handlers = {
             modes[row.profileId] = row.mode;
         return modes;
     },
+    "home.seeded": () => {
+        const row = db.prepare("SELECT id FROM oc_family_pack_home WHERE id = 'today'").get();
+        return row?.id === "today";
+    },
+    "home.claim": () => {
+        const result = db.prepare("INSERT OR IGNORE INTO oc_family_pack_home (id, at) VALUES ('today', ?)").run(Date.now());
+        return { inserted: result.changes === 1 };
+    },
 };
 function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);

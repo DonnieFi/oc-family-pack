@@ -4,12 +4,14 @@ import { briefTick } from "./briefs.ts";
 import type { RunGog } from "./calendar-gog.ts";
 import { parseConfig } from "./config.ts";
 import { familyHandlers, familyWeek } from "./handlers.ts";
+import { familyContact } from "./contact.ts";
 import { planSetup, NO_CHANNEL } from "./setup.ts";
 import { visibleCalendarIds } from "./visibility.ts";
 import { weekMethod, type viewerOf } from "./week-method.ts";
 
 // A member is a contact card. Only the name is required. `id` is the internal key, `profileId`
-// is the Control UI login and is never derived, `email` is stored and never shown anywhere.
+// is the Control UI login and is never derived, `email` is stored. The operator's family_contact
+// tool is the one result that includes it. Everything else, including a refusal, leaves it out.
 
 const EMAIL = "riley.morgan@outlook.com";
 const TZ = "America/Halifax";
@@ -186,6 +188,14 @@ test("gate (c): an email appears in no output at all, operator results included"
     assert.deepEqual(sent.map((key) => key.split(":")[0]).sort(), ["daily-summary", "weekly-summary"], sent.join(", "));
     const host = { plugins: { entries: { "oc-family-pack": { config: raw } } } };
     outputs.push(planSetup(host, {}, { steps: [] } as never, TZ));
+    outputs.push(planSetup(host, { kid: ["jordan"], email: ["jordan=not-an-email"] }, { steps: [] } as never, TZ));
+    const ownerCard = await familyContact(config, { senderIsOwner: true }).execute("call", { id: "riley" });
+    assert.equal(JSON.parse(ownerCard.content[0]!.text).email, EMAIL);
+    const directCard = await familyContact(config, { directOperator: true }).execute("call", { id: "alex" });
+    assert.equal(JSON.parse(directCard.content[0]!.text).email, "alex.morgan@outlook.com");
+    outputs.push(await familyContact(config, {}).execute("call", { id: "riley" }));
+    outputs.push(await familyContact(config, { senderIsOwner: true }).execute("call", { id: "nope" }));
+    outputs.push(await familyContact(config, { senderIsOwner: true }).execute("call", { id: EMAIL }));
     for (const bad of [{ name: "Riley", email: "riley.morgan@outlook" }, { name: "Riley", email: `${EMAIL} x` }]) {
       try {
         parseConfig({ members: [bad] });

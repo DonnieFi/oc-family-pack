@@ -17,6 +17,9 @@ import { pageWrite } from "./page-write.ts";
 import { briefDirectory, startBriefs } from "./briefs.ts";
 import { deliver } from "./discord-delivery.ts";
 import { SET_REMINDER_MODE_TOOL, SetReminderModeSchema, reminderTool, startReminders } from "./reminders.ts";
+import { FAMILY_CONTACT_TOOL, FamilyContactSchema, familyContact } from "./contact.ts";
+import { TODAY_HOME_METHOD } from "./today-home.ts";
+import { todayHomeMethod } from "./today-home-method.ts";
 import { startHouseholds } from "./households.ts";
 import { DEMO_MEMBERS } from "./demo.ts";
 import { createGarbageFeed } from "./garbage.ts";
@@ -183,6 +186,14 @@ const plugin = defineFeaturePlugin({
         }),
       { name: SET_REMINDER_MODE_TOOL, optional: true },
     );
+    api.registerTool(
+      (ctx: { senderIsOwner?: boolean; conversationReadOrigin?: string }) =>
+        familyContact(config, {
+          senderIsOwner: ctx.senderIsOwner,
+          directOperator: ctx.conversationReadOrigin === "direct-operator",
+        }),
+      { name: FAMILY_CONTACT_TOOL, optional: true },
+    );
     // The week is a Gateway method, not a feature query, because only a Gateway
     // method sees who signed in. Same operator.read scope the queries get.
     api.session.controls.registerControlUiDescriptor({
@@ -200,6 +211,8 @@ const plugin = defineFeaturePlugin({
       ),
       { scope: "operator.read" },
     );
+    // operator.write so a kid cannot consume the one-time Home seed.
+    api.registerGatewayMethod(TODAY_HOME_METHOD, todayHomeMethod(() => store), { scope: "operator.write" });
     return {
       ...familyHandlers(config, { log: (line) => api.logger.warn(line) }),
       [CALENDAR_WRITE_ACTION]: pageWrite({
@@ -269,6 +282,13 @@ metadata.tools.push(
     label: "Reminder delivery",
     description: "Change how one person gets event reminders: a direct message, a mention in the brief channel, or off. A person can change their own. A parent can change anyone's.",
     parameters: { ...SetReminderModeSchema },
+  },
+  {
+    name: FAMILY_CONTACT_TOOL,
+    optional: true,
+    label: "Contact",
+    description: "Look up one family member by id. Only the operator may use this. Returns that person's id and name, plus email and Discord id when they are set. It does not list the family.",
+    parameters: { ...FamilyContactSchema },
   },
 );
 

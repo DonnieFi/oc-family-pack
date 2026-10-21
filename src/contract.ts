@@ -285,7 +285,7 @@ export const ScheduleInputSchema = Type.Object(
       Type.String({
         minLength: 1,
         maxLength: LABEL_MAX,
-        description: 'Only calendars this person owns: a roster profileId, or "me" for the person asking on Discord.',
+        description: 'Only calendars this person owns: a roster member id, or "me" for the person asking on Discord.',
       }),
     ),
     query: Type.Optional(

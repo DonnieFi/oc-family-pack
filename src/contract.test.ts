@@ -117,6 +117,7 @@ test("queries are operator.read session actions, the page write is operator.writ
   assert.deepEqual(tools, [
     ...writes.map((name) => ({ name, optional: true })),
     { name: "set_reminder_mode", optional: true },
+    { name: "family_contact", optional: true },
     { name: "garbage_schedule" },
     { name: "family_schedule" },
     { name: "family_today" },
@@ -125,6 +126,7 @@ test("queries are operator.read session actions, the page write is operator.writ
   assert.deepEqual(methods, [
     { method: "family.week", scope: "operator.read" },
     { method: "family.deliveryStatus", scope: "operator.read" },
+    { method: "family.todayHome", scope: "operator.write" },
   ]);
   assert.deepEqual(widgets, [{ surface: "widget", id: "family-today", label: "Today", requiredScopes: ["operator.read"] }]);
   assert.equal(commands, 0);
@@ -173,7 +175,7 @@ test("the manifest marks the calendar write tools and set_reminder_mode optional
     contracts: { tools: string[] };
     toolMetadata?: Record<string, { optional?: boolean }>;
   };
-  const optional = ["calendar_create", "calendar_update", "calendar_move", "calendar_delete", "set_reminder_mode"];
+  const optional = ["calendar_create", "calendar_update", "calendar_move", "calendar_delete", "set_reminder_mode", "family_contact"];
   for (const name of optional) {
     assert.ok(manifest.contracts.tools.includes(name), name);
     assert.equal(manifest.toolMetadata?.[name]?.optional, true, name);

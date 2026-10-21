@@ -79,6 +79,10 @@ export type FamilyStore = {
   appendReminderMode: (profileId: string, mode: ReminderMode) => Promise<{ id: number }>;
   /** The latest saved mode for each person who has changed it. */
   reminderModes: () => Promise<Record<string, ReminderMode>>;
+  /** True after Today has been placed on Home once. */
+  homeSeeded: () => Promise<boolean>;
+  /** Records that placement. A second call inserts nothing. */
+  claimHomeSeed: () => Promise<{ inserted: boolean }>;
   stop: () => Promise<void>;
   spawned: () => number;
 };
@@ -315,6 +319,14 @@ async function openSession(options: {
     async reminderModes() {
       await ensureOpen();
       return (await post("reminderMode.latest", {})) as Record<string, ReminderMode>;
+    },
+    async homeSeeded() {
+      await ensureOpen();
+      return (await post("home.seeded", {})) === true;
+    },
+    async claimHomeSeed() {
+      await ensureOpen();
+      return (await post("home.claim", {})) as { inserted: boolean };
     },
     stop() {
       if (stopPromise) return stopPromise;

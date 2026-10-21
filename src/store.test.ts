@@ -84,14 +84,14 @@ test("the built store module is the one production loads", () => {
   for (const sourceFile of mainFiles) assert.equal(sourceFile.includes("node:sqlite"), false);
 });
 
-test("a first start applies 0001 to 0004 and a second start applies nothing", async () => {
+test("a first start applies 0001 to 0005 and a second start applies nothing", async () => {
   const stateDir = tempState();
   const previous = process.umask(0o022);
   const { openFamilyStore } = await loadStore();
   try {
     const first = await openFamilyStore({ stateDir });
-    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode"]);
-    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode"]);
+    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed"]);
+    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed"]);
     assert.deepEqual(first.ready.unknown, []);
     assert.equal(first.ready.journalMode, "wal");
     assert.equal(first.ready.isMainThread, false);
@@ -101,13 +101,13 @@ test("a first start applies 0001 to 0004 and a second start applies nothing", as
     assert.equal(status.scriptUrl.endsWith("/dist/store-worker.js"), true);
     assertPermissions(dbPath(stateDir));
     const rows = migrationRows(dbPath(stateDir));
-    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode"]);
+    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed"]);
     const appliedAt = rows[0]?.applied_at;
     await first.stop();
 
     const second = await openFamilyStore({ stateDir });
     assert.deepEqual(second.ready.appliedNow, []);
-    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode"]);
+    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed"]);
     assert.equal(second.ready.journalMode, "wal");
     assertPermissions(dbPath(stateDir));
     const again = migrationRows(dbPath(stateDir));
@@ -115,6 +115,21 @@ test("a first start applies 0001 to 0004 and a second start applies nothing", as
     await second.stop();
   } finally {
     process.umask(previous);
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("today's home seed is recorded once", async () => {
+  const stateDir = tempState();
+  const { openFamilyStore } = await loadStore();
+  try {
+    const store = await openFamilyStore({ stateDir });
+    assert.equal(await store.homeSeeded(), false);
+    assert.deepEqual(await store.claimHomeSeed(), { inserted: true });
+    assert.equal(await store.homeSeeded(), true);
+    assert.deepEqual(await store.claimHomeSeed(), { inserted: false });
+    await store.stop();
+  } finally {
     rmSync(stateDir, { recursive: true, force: true });
   }
 });

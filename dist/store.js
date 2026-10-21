@@ -211,6 +211,14 @@ async function openSession(options) {
             await ensureOpen();
             return (await post("reminderMode.latest", {}));
         },
+        async homeSeeded() {
+            await ensureOpen();
+            return (await post("home.seeded", {})) === true;
+        },
+        async claimHomeSeed() {
+            await ensureOpen();
+            return (await post("home.claim", {}));
+        },
         stop() {
             if (stopPromise)
                 return stopPromise;

@@ -10,6 +10,7 @@ import {
 } from "openclaw/plugin-sdk/control-ui";
 import { createFeatureClient } from "openclaw/plugin-sdk/feature-contract";
 import { CALENDAR_WRITE_ACTION, contract, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.ts";
+import { homeSessionKey, seededFlag, todayHomeDecision, todayPutParams, widgetsOf, TODAY_HOME_METHOD } from "./today-home.ts";
 import { DELIVERY_STATUS_METHOD } from "./delivery-status.ts";
 import { mixTowardInk } from "./contrast.ts";
 import { roundHalfEven } from "./recommendation.ts";
@@ -208,6 +209,43 @@ function watchRequest<T>(
   };
 }
 
+/**
+ * Place Today on a fresh Home once. A week payload is not a board, so a
+ * request that does not answer `{ seeded }` does nothing. A kid, who cannot
+ * write, is not asked and does not consume the seed.
+ */
+export async function settleTodayHome(host: ControlUiHost, onPrompt: (show: boolean) => void): Promise<void> {
+  try {
+    if (host.signal?.aborted) return;
+    if (!host.connection?.canRead || !host.connection.canWrite || typeof host.request !== "function") {
+      onPrompt(false);
+      return;
+    }
+    const seeded = seededFlag(await host.request(TODAY_HOME_METHOD, {}));
+    if (host.signal?.aborted || seeded === undefined) {
+      onPrompt(false);
+      return;
+    }
+    const sessionKey = homeSessionKey(host.agents?.defaultId);
+    const widgets = widgetsOf(await host.request("board.get", { sessionKey }));
+    if (host.signal?.aborted || widgets === undefined) {
+      onPrompt(false);
+      return;
+    }
+    const decision = todayHomeDecision({ canWrite: true, seeded, widgets });
+    if (decision === "place") {
+      await host.request("board.widget.put", todayPutParams(sessionKey));
+      if (host.signal?.aborted) return;
+      await host.request(TODAY_HOME_METHOD, { claim: true });
+      onPrompt(false);
+      return;
+    }
+    onPrompt(decision === "prompt");
+  } catch {
+    onPrompt(false);
+  }
+}
+
 export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewContext) {
   const host: ControlUiHost = initial.host;
   const content = h("div", { class: "ocfp-stack" });
@@ -318,6 +356,30 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   /** The brief line stays off during the first load and when the week is denied. */
   let showDelivery = false;
   let deliveryView: { line: string; failed: boolean } | undefined;
+  let showTodayPin = false;
+  let viewKind: Load["kind"] = "loading";
+  const pinLine = h("p", { class: "ocfp-today-pin" });
+
+  function syncTodayPin() {
+    pinLine.remove();
+    if (!showTodayPin || viewKind === "loading" || viewKind === "denied") return;
+    const button = on(h("button", { type: "button", class: "ocfp-btn ocfp-btn-today" }, "Pin Today on Home"), "click", () => {
+      void pinToday();
+    });
+    pinLine.replaceChildren("Today isn't on Home. ", button);
+    content.append(pinLine);
+  }
+
+  async function pinToday() {
+    try {
+      await host.request("board.widget.put", todayPutParams(homeSessionKey(host.agents?.defaultId)));
+      if (!alive()) return;
+      showTodayPin = false;
+      syncTodayPin();
+    } catch {
+      // The button stays. Opening the page again tries once more.
+    }
+  }
 
   function paintDelivery(view: { line: string; failed: boolean }) {
     deliveryLine.classList.toggle("is-failed", view.failed);
@@ -331,16 +393,17 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   }
 
   function syncDelivery() {
-    if (!showDelivery || deliveryView === undefined) {
-      deliveryLine.remove();
-      return;
+    if (!showDelivery || deliveryView === undefined) deliveryLine.remove();
+    else {
+      paintDelivery(deliveryView);
+      content.append(deliveryLine);
     }
-    paintDelivery(deliveryView);
-    content.append(deliveryLine);
+    syncTodayPin();
   }
 
   function render(load: Load) {
     if (!alive()) return;
+    viewKind = load.kind;
     root.removeAttribute("aria-busy");
     if (load.kind === "loading") {
       showDelivery = false;
@@ -940,6 +1003,11 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   renderAgents();
   watchWeek();
   loadDelivery();
+  void settleTodayHome(host, (show) => {
+    if (!alive()) return;
+    showTodayPin = show;
+    syncTodayPin();
+  });
 
   return {
     update(next: ControlUiViewContext) {
@@ -1062,5 +1130,6 @@ export default defineControlUiPlugin({
     host.ui.registerNavigation({ id: PAGE_ID, label: "Family", page: { id: PAGE_ID }, icon: "calendarClock" });
     host.ui.registerPage({ id: PAGE_ID, label: "Family", mount: mountFamilyPage });
     host.ui.registerWidget({ id: TODAY_WIDGET_ID, label: "Today", mount: mountTodayWidget as unknown as ControlUiWidget["mount"] });
+    void settleTodayHome(host, () => {});
   },
 });

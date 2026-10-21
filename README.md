@@ -58,7 +58,7 @@ The pictures below are the demo week (Alex, Sam, Riley, and Jordan). Demo mode d
 | Feature | What you get | Status |
 | --- | --- | --- |
 | Family page | Monday–Sunday week, a color per person, chips that dim events, Environment Canada weather, and a chat strip | Available |
-| Today widget | Up to three highlight lines on the Control UI dashboard. Separate from the Today jump on the week grid | Available |
+| Today widget | Up to three highlight lines on the Control UI dashboard. A fresh Home gets the card once. If you remove it, the Family page offers to pin it again | Available |
 | Calendar changes | One write path from the page and from chat. A parent approves anything a kid cannot change alone. No undo | Available |
 | Daily and weekly briefs | 07:00 daily and Sunday 20:00 weekly, posted to the Discord summary channel you configure | Available |
 | Reminders | A lead time, quiet hours, and a per-person mode: direct message, summary channel, or off | Available |
@@ -113,7 +113,7 @@ Then open **Family** from the Control UI sidebar. The page is `/plugin?plugin=oc
 
 ## Configuration
 
-Family Pack reads `plugins.entries["oc-family-pack"].config`. Each person needs a `name`; everything else is optional. `id` is the internal key (it defaults to `profileId`, else a slug of the name). `email` is only stored on the card; nothing sends it or shows it. A `profileId`, when set, is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. Family Pack matches it exactly, so it must be the same name the Gateway signs that person in as. It is not the Gateway's internal profile id. A member id sent by the browser is not identity. A calendar's owners are member ids. A school calendar belongs to the student.
+Family Pack reads `plugins.entries["oc-family-pack"].config`. Each person needs a `name`; everything else is optional. `id` is the internal key (it defaults to `profileId`, else a slug of the name). `email` is stored on the card. The week, the page, briefs, and logs do not show it. `family_contact` can read one person's email, and only for the operator. A `profileId`, when set, is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. Family Pack matches it exactly, so it must be the same name the Gateway signs that person in as. It is not the Gateway's internal profile id. A member id sent by the browser is not identity. A calendar's owners are member ids. A school calendar belongs to the student.
 
 ```json5
 {
@@ -174,7 +174,7 @@ In Discord, a kid can change their own personal calendar. A change to a shared c
 
 Undo is not available. A change that already went through is not undone from the page or from chat.
 
-`calendar_create`, `calendar_update`, `calendar_move`, `calendar_delete`, and `set_reminder_mode` are optional tools. On a `full` tool profile, the agent can already see the calendar tools. What protects your calendar is the `writes` setting and the parent rule, not tool visibility.
+`calendar_create`, `calendar_update`, `calendar_move`, `calendar_delete`, `set_reminder_mode`, and `family_contact` are optional tools. On a `full` tool profile, the agent can already see the calendar tools. What protects your calendar is the `writes` setting and the parent rule, not tool visibility. `family_contact` looks up one member by id and answers only for the operator. It does not list the family, and it does not send mail.
 
 With no tool profile set, or a narrower one such as `coding`, add them with `tools.alsoAllow`:
 

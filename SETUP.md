@@ -63,6 +63,16 @@ In LAN mode, when you pass `--discord`, setup also prints `users.linkChannelIden
 
 Discord is how this version knows who "me" is in chat. The Family page works without it.
 
+## Email
+
+`--email` is `NAME=address`.
+
+```bash
+openclaw family setup --kid riley --email riley=riley@example.com
+```
+
+Setup checks the shape and does not repeat a bad address. The checklist and the lines above the patch do not print addresses. The patch JSON does, because `openclaw config patch` replaces the whole members list, and leaving an address out would delete it. An email stays on the card. The week, the page, and briefs do not show it. `family_contact` can read one person's email, and only for the operator.
+
 ## The checklist
 
 `openclaw family setup` with no names prints a checklist. Each line is `Name: Done` or `Name: To do`, then one Next step.

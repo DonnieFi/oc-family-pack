@@ -89,6 +89,7 @@ async function flush() {
 function mountPage(options: {
   mode?: "light" | "dark";
   canRead?: boolean;
+  canWrite?: boolean;
   props?: Record<string, unknown>;
   /** What the family.week Gateway method answers: the week, or an error it rejects with. */
   result?: WeekPayload | Error;
@@ -118,7 +119,7 @@ function mountPage(options: {
     connection: {
       connected: true,
       canRead: options.canRead ?? true,
-      canWrite: true,
+      canWrite: options.canWrite ?? true,
       canGrant: false,
       canAdmin: false,
       assistantAgentId: null,
@@ -291,6 +292,61 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(page.container.textContent?.includes("You need read access to see the family week."), true);
     assert.equal([...page.container.querySelectorAll("button")].some((button) => button.textContent === "Try again"), false);
     assert.equal(page.counts().requests, 0);
+    assert.equal(page.container.textContent?.includes("Pin Today on Home"), false);
+  });
+
+  test("someone who cannot write is not asked to pin Today and does not read the seed", async () => {
+    const methods: unknown[] = [];
+    const page = mountPage({
+      canWrite: false,
+      request: (method: unknown) => {
+        methods.push(method);
+        return Promise.resolve(week());
+      },
+    });
+    await flush();
+    assert.equal(methods.includes("family.todayHome"), false);
+    assert.equal(methods.includes("board.widget.put"), false);
+    assert.equal(page.container.textContent?.includes("Pin Today on Home"), false);
+  });
+
+  test("a fresh Home gets Today once", async () => {
+    const calls: unknown[][] = [];
+    const page = mountPage({
+      request: (method: unknown, params: unknown) => {
+        calls.push([method, params]);
+        if (method === "family.todayHome") return Promise.resolve({ seeded: false });
+        if (method === "board.get") return Promise.resolve({ widgets: [] });
+        return Promise.resolve(week());
+      },
+    });
+    await flush();
+    assert.equal(calls.some((call) => call[0] === "board.widget.put"), true);
+    assert.equal(
+      calls.some((call) => call[0] === "family.todayHome" && (call[1] as { claim?: boolean } | undefined)?.claim === true),
+      true,
+    );
+    assert.equal(page.container.textContent?.includes("Pin Today on Home"), false);
+  });
+
+  test("a Home that already had Today, then lost it, offers to pin it again", async () => {
+    const calls: unknown[][] = [];
+    const page = mountPage({
+      request: (method: unknown, params: unknown) => {
+        calls.push([method, params]);
+        if (method === "family.todayHome") return Promise.resolve({ seeded: true });
+        if (method === "board.get") return Promise.resolve({ widgets: [] });
+        return Promise.resolve(week());
+      },
+    });
+    await flush();
+    const button = [...page.container.querySelectorAll("button")].find((item) => item.textContent === "Pin Today on Home");
+    assert.ok(button);
+    assert.equal(page.container.textContent?.includes("Today isn't on Home."), true);
+    button.click();
+    await flush();
+    assert.equal(calls.some((call) => call[0] === "board.widget.put"), true);
+    assert.equal(page.container.textContent?.includes("Pin Today on Home"), false);
   });
 
   test("a failed load names the failure, offers Try again, and shows the raw error", async () => {
@@ -849,7 +905,7 @@ describe("calendar freshness", { concurrency: 1 }, () => {
       if (answer.calendar.status === "ok") answer.calendar.data[0]!.title = "Dentist (moved)";
       page.fire(CHANGED, { reason: "external", calendarKeys: [], at: "2026-09-30T14:00:00.000Z" });
       await flush();
-      assert.equal(page.counts().requests, 3);
+      assert.equal(page.counts().requests, 4);
       const card = page.container.querySelector<HTMLElement>("[data-event-id='e-alex']");
       assert.equal(card?.querySelector(".ocfp-event-title")?.textContent, "Dentist (moved)");
       assert.ok(active !== null && active === card, "focus moves to the re-rendered card");

@@ -2,11 +2,12 @@
 // Pure: reads the host config it is given and prints a config patch. Nothing
 // here writes config, stores a password, or calls the Gateway.
 import { detectAccess, outsideSignIn, people, PROFILE_STEP, ROLES, SCOPES } from "./access.js";
-import { DISCORD_ID, slugOf } from "./config.js";
+import { DISCORD_ID, MemberError, memberEmail, slugOf } from "./config.js";
 import { WEATHER_SETUP_HINT } from "./weather-ec.js";
 const CONFIG_PATH = "plugins.entries.oc-family-pack.config";
 const DISCORD_HELP = "Optional. In Discord, turn on Developer Mode, then right-click the person and pick Copy User ID.";
 const BAD_DISCORD = "Give each Discord ID as `--discord NAME=ID`. The ID is the number Copy User ID gives you, 17 to 20 digits long.";
+const BAD_EMAIL = "Give each email as `--email NAME=address`.";
 const LINK_INTRO = "Then link each Discord ID to that person's profile, so the Gateway knows who's talking in Discord:";
 export const PATCH_INTRO = "Check it first with `openclaw config patch --stdin --dry-run`, then run it again without `--dry-run` to apply it.";
 function record(value) {
@@ -131,12 +132,35 @@ function discordIds(pairs) {
     }
     return { ids };
 }
+/** `NAME=address` pairs from `--email`. A bad address is not repeated. */
+function emailsOf(pairs) {
+    const emails = new Map();
+    for (const pair of pairs) {
+        const at = pair.indexOf("=");
+        const name = pair.slice(0, at).toLowerCase();
+        const raw = pair.slice(at + 1);
+        if (at < 1 || name === "" || raw.trim() === "")
+            return { error: BAD_EMAIL };
+        if (emails.has(name))
+            return { error: `\`${name}\` has more than one email. Give each person one.` };
+        try {
+            emails.set(name, memberEmail(raw, name));
+        }
+        catch (error) {
+            if (error instanceof MemberError)
+                return { error: error.message };
+            throw error;
+        }
+    }
+    return { emails };
+}
 /**
  * New members go after the existing ones, which are copied exactly as written:
  * `config patch` replaces whole arrays, so leaving one out would delete it.
- * A Discord ID changes only that person's `discordId`.
+ * A Discord ID changes only that person's `discordId`. An email changes only that person's `email`.
+ * The patch copies every stored field, including an email, because leaving one out would delete it.
  */
-function membersPatch(existing, list, ids) {
+function membersPatch(existing, list, ids, emails) {
     const taken = new Set(existing.map(profileId));
     const skipped = list.filter((person) => taken.has(person.name)).map((person) => `${person.name} is already set up, so that entry was left as it is.`);
     const added = list
@@ -146,18 +170,32 @@ function membersPatch(existing, list, ids) {
         displayName: person.name[0]?.toUpperCase() + person.name.slice(1),
         role: person.role,
         ...(ids.has(person.name) ? { discordId: ids.get(person.name) } : {}),
+        ...(emails.has(person.name) ? { email: emails.get(person.name) } : {}),
     }));
     const known = new Set([...taken, ...added.map((member) => member.profileId)]);
-    const stranger = [...ids.keys()].find((name) => !known.has(name));
+    const stranger = [...ids.keys(), ...emails.keys()].find((name) => !known.has(name));
     if (stranger)
         return { skipped, error: `\`${stranger}\` isn't in the family yet. Add them with \`--parent\`, \`--kid\` or \`--guest\` in the same command.` };
     let changed = added.length;
     const kept = existing.map((entry) => {
-        const id = ids.get(profileId(entry));
-        if (id === undefined || record(entry).discordId === id)
+        const key = profileId(entry);
+        const discordId = ids.get(key);
+        const email = emails.get(key);
+        const current = record(entry);
+        const next = { ...current };
+        let touched = false;
+        if (discordId !== undefined && current.discordId !== discordId) {
+            next.discordId = discordId;
+            touched = true;
+        }
+        if (email !== undefined && current.email !== email) {
+            next.email = email;
+            touched = true;
+        }
+        if (!touched)
             return entry;
         changed += 1;
-        return { ...record(entry), discordId: id };
+        return next;
     });
     const members = [...kept, ...added];
     // parseConfig refuses a shared id, so catch it here instead of in the patch.
@@ -213,7 +251,7 @@ export function planSetup(host, input, gog, hostZone) {
     const list = steps(host, gog, hostZone);
     const checklist = list.map((step) => `${step.name}: ${step.done ? "Done" : "To do"}`);
     const named = (input.parent ?? []).length + (input.kid ?? []).length + (input.guest ?? []).length > 0;
-    const asked = named || (input.discord ?? []).length > 0;
+    const asked = named || (input.discord ?? []).length > 0 || (input.email ?? []).length > 0;
     if (asked) {
         const found = named ? people(input) : { list: [] };
         if ("error" in found)
@@ -221,8 +259,11 @@ export function planSetup(host, input, gog, hostZone) {
         const parsed = discordIds(input.discord ?? []);
         if ("error" in parsed)
             return { ok: false, text: parsed.error };
+        const mail = emailsOf(input.email ?? []);
+        if ("error" in mail)
+            return { ok: false, text: mail.error };
         const existing = familyConfig(host).members;
-        const { skipped, patch, error } = membersPatch(Array.isArray(existing) ? existing : [], found.list, parsed.ids);
+        const { skipped, patch, error } = membersPatch(Array.isArray(existing) ? existing : [], found.list, parsed.ids, mail.emails);
         if (error)
             return { ok: false, text: error };
         if (patch) {

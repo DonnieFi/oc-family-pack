@@ -17,6 +17,9 @@ import { pageWrite } from "./page-write.js";
 import { briefDirectory, startBriefs } from "./briefs.js";
 import { deliver } from "./discord-delivery.js";
 import { SET_REMINDER_MODE_TOOL, SetReminderModeSchema, reminderTool, startReminders } from "./reminders.js";
+import { FAMILY_CONTACT_TOOL, FamilyContactSchema, familyContact } from "./contact.js";
+import { TODAY_HOME_METHOD } from "./today-home.js";
+import { todayHomeMethod } from "./today-home-method.js";
 import { startHouseholds } from "./households.js";
 import { DEMO_MEMBERS } from "./demo.js";
 import { createGarbageFeed } from "./garbage.js";
@@ -174,6 +177,10 @@ const plugin = defineFeaturePlugin({
             senderIsOwner: ctx.senderIsOwner,
             directOperator: ctx.conversationReadOrigin === "direct-operator",
         }), { name: SET_REMINDER_MODE_TOOL, optional: true });
+        api.registerTool((ctx) => familyContact(config, {
+            senderIsOwner: ctx.senderIsOwner,
+            directOperator: ctx.conversationReadOrigin === "direct-operator",
+        }), { name: FAMILY_CONTACT_TOOL, optional: true });
         // The week is a Gateway method, not a feature query, because only a Gateway
         // method sees who signed in. Same operator.read scope the queries get.
         api.session.controls.registerControlUiDescriptor({
@@ -184,6 +191,8 @@ const plugin = defineFeaturePlugin({
         });
         api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant })), { scope: "operator.read" });
         api.registerGatewayMethod(DELIVERY_STATUS_METHOD, deliveryStatusMethod(() => store, () => (config.demo ? DEMO_MEMBERS : config.members)), { scope: "operator.read" });
+        // operator.write so a kid cannot consume the one-time Home seed.
+        api.registerGatewayMethod(TODAY_HOME_METHOD, todayHomeMethod(() => store), { scope: "operator.write" });
         return {
             ...familyHandlers(config, { log: (line) => api.logger.warn(line) }),
             [CALENDAR_WRITE_ACTION]: pageWrite({
@@ -248,5 +257,11 @@ metadata.tools.push({
     label: "Reminder delivery",
     description: "Change how one person gets event reminders: a direct message, a mention in the brief channel, or off. A person can change their own. A parent can change anyone's.",
     parameters: { ...SetReminderModeSchema },
+}, {
+    name: FAMILY_CONTACT_TOOL,
+    optional: true,
+    label: "Contact",
+    description: "Look up one family member by id. Only the operator may use this. Returns that person's id and name, plus email and Discord id when they are set. It does not list the family.",
+    parameters: { ...FamilyContactSchema },
 });
 export default plugin;

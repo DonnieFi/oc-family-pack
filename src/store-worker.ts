@@ -185,6 +185,14 @@ const handlers: Record<string, (input: unknown) => unknown> = {
     for (const row of rows) modes[row.profileId] = row.mode;
     return modes;
   },
+  "home.seeded": () => {
+    const row = db.prepare("SELECT id FROM oc_family_pack_home WHERE id = 'today'").get() as { id?: string } | undefined;
+    return row?.id === "today";
+  },
+  "home.claim": () => {
+    const result = db.prepare("INSERT OR IGNORE INTO oc_family_pack_home (id, at) VALUES ('today', ?)").run(Date.now());
+    return { inserted: result.changes === 1 };
+  },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

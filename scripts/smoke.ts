@@ -924,21 +924,21 @@ async function main(): Promise<void> {
   note(`host scheduler surface answers (${jobs.jobs.length} host jobs); the store is a service, and briefs register jobs later`, "service scheduler");
 
   // 8. The plugin-owned store. The service opens the real database, applies
-  // 0001-initial to 0004-reminder-mode, and leaves those rows in place across a Gateway restart, a
+  // 0001-initial to 0005-home-seed, and leaves those rows in place across a Gateway restart, a
   // forced reinstall, and plugins update. Backup must snapshot it instead of
   // archiving it as opaque bytes. A store that cannot open must not take the Gateway down.
   const pluginStateDir = join(stateDir, "plugins", PLUGIN_ID);
   const opened = await waitForStore(stateDir);
   assertStoreModes(opened);
   const firstRows = readMigrations(opened);
-  if (firstRows.map((row) => row.id).join(",") !== "0001-initial,0002-write-log,0003-delivery-log,0004-reminder-mode") {
-    fail("sqlite store", `expected 0001-initial through 0004-reminder-mode, got ${JSON.stringify(firstRows)}`);
+  if (firstRows.map((row) => row.id).join(",") !== "0001-initial,0002-write-log,0003-delivery-log,0004-reminder-mode,0005-home-seed") {
+    fail("sqlite store", `expected 0001-initial through 0005-home-seed, got ${JSON.stringify(firstRows)}`);
   }
   const logsBlocked = readLogGuards(opened);
   if (logsBlocked.join(",") !== "write update,write delete,delivery update,delivery delete,reminder update,reminder delete") {
     fail("sqlite store", `the logs are not append-only in the Gateway's database: ${JSON.stringify(logsBlocked)}`);
   }
-  note("0002-write-log through 0004-reminder-mode are applied, and both logs refuse UPDATE and DELETE", "sqlite store");
+  note("0002-write-log through 0005-home-seed are applied, and both logs refuse UPDATE and DELETE", "sqlite store");
   const appliedAt = firstRows[0]?.applied_at ?? 0;
   const readyLine = stripAnsi(readFileSync(logPath, "utf8"))
     .split("\n")

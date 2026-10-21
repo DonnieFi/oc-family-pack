@@ -4,7 +4,11 @@
 
 - Calendar writes from the agent now default to `confirm`. If you never set `writes`, the agent will ask for a parent's approval before it changes a calendar. Set `writes: "on"` to keep the old behaviour.
 - Needs OpenClaw 2026.10.5 or newer, before 2026.11. Tested on 2026.10.5. An install on OpenClaw 2026.9.x has to upgrade OpenClaw first.
-- A member needs only a name. `email`, `discordId` and `profileId` are optional. Setup warns about a member with no email and no Discord; it does not refuse them. An email never leaves config. `family.week` and `family.members` renamed each member's `profileId` to `memberId`. The values are the same. A client that reads `profileId` from either has to switch to `memberId`.
+- A member needs only a name. `email`, `discordId` and `profileId` are optional. Setup warns about a member with no email and no Discord; it does not refuse them. An email stays off the week, the page, briefs, and logs. `family_contact` is the one way out, and only the operator can use it, one person at a time. `family.week` and `family.members` renamed each member's `profileId` to `memberId`. The values are the same. A client that reads `profileId` from either has to switch to `memberId`.
+- `openclaw family setup --email NAME=address` stores an email on that person's card. A bad address is not repeated in the error. The lines above the config patch do not print addresses. The patch itself does, because applying it replaces the whole members list.
+- `family_schedule`'s `member` is a roster member id, or `"me"` on Discord.
+- A fresh Home gets the Today card once. Removing it does not put it back. The Family page then offers "Pin Today on Home". Someone who cannot write is not asked.
+- `npm run build` runs `openclaw plugins build` in a throwaway state directory. It refuses the live Gateway's state directory, ports 18789 and 18799, and a pid whose command is the live gateway.
 
 ## 0.2.0 — 2026-10-04
 

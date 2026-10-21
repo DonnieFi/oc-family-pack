@@ -17,7 +17,7 @@ Answer only from tool results. Do not add, move, or rename an event the tool did
 - An unknown Discord sender is a guest and sees shared calendars only.
 - Off Discord, the owner flag is the shared owner and can see every calendar. It does not name a person.
 - "me" fails closed when the caller is unknown. The tool says `I can't tell who 'me' is here. Name the person.` Repeat that line. Do not pick a person.
-- `member` is a roster profileId or `"me"`. Do not pass a display name. To ask about someone who is not "me", you need their profileId.
+- `member` is a roster member id or `"me"`. Do not pass a display name. To ask about someone who is not "me", you need their member id.
 
 Both `family_today` and `family_schedule` show only the calendars that person may see.
 

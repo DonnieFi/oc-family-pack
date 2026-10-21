@@ -160,9 +160,9 @@ Authelia.
 
 ## What is a family member?
 
-A member is the household's record of a person, in `plugins.entries.oc-family-pack.config.members`. It holds `profileId`, `displayName`, and `role` (`parent`, `kid`, or `guest`). Optional fields are `color`, `discordId`, `reminders` (`dm`, `channel`, or `off`), and `devices`.
+A member is the household's record of a person, in `plugins.entries.oc-family-pack.config.members`. Only `name` is required. `id` is the internal key: an explicit `id`, otherwise `profileId`, otherwise a lower-case slug of the name. `role` is `parent`, `kid`, or `guest`, and defaults to guest. Optional fields are `profileId`, `email`, `color`, `discordId`, `reminders` (`dm`, `channel`, or `off`), and `devices`. `displayName` is the older spelling of `name` and still loads.
 
-`profileId` is the sign-in username, lower case, matched exactly to the trusted-proxy user. It is not the Gateway's internal profile id. The chips on the Family page only dim events. They do not add a person, and they are not identity. At least one parent is required. The fields and the steps are in [SETUP.md](SETUP.md).
+`profileId` is the sign-in username, lower case, matched exactly to the trusted-proxy user. It is not the Gateway's internal profile id, and it is never made up from the name. Someone with no `profileId` is not that person on the Family page; they still count in chat when their `discordId` matches. Setup's Members step stays To do until there is a parent. The chips on the Family page only dim events. They do not add a person, and they are not identity. The fields and the steps are in [SETUP.md](SETUP.md).
 
 ## How do I add someone?
 
@@ -172,7 +172,7 @@ Apply it with `openclaw config patch --stdin --dry-run`, then again without `--d
 
 ## Where do email and phone go?
 
-This version stores no email and no phone on the member. Sign-in is the `profileId`. A Discord user id goes in `discordId`, set with `openclaw family setup --discord alex=200000000000000001`. Email aliases, if you use them, belong to the OpenClaw user profile, not this plugin.
+An email can be stored on the member with `openclaw family setup --email alex=alex@example.com`. Sign-in is the `profileId`. The week, the page, briefs, and logs do not show the address. `family_contact` can read one person's email, and only for the operator. No phone number is stored. A Discord user id goes in `discordId`, set with `openclaw family setup --discord alex=200000000000000001`.
 
 ## How do I set a Discord user id?
 

@@ -215,6 +215,35 @@ test("people without a Discord ID get the optional command, which never holds up
   assert.equal(everyone.text.includes("--discord"), false);
 });
 
+test("an email is stored on the card, a bad address is not repeated, and the lines above the patch leave it out", () => {
+  const address = "riley@example.com";
+  const added = planSetup(host(complete), { kid: ["riley"], email: [`riley=${address}`] }, READY, "UTC");
+  const before = added.text.slice(0, added.text.indexOf(PATCH_INTRO));
+  assert.equal(before.includes(address), false, before);
+  assert.equal(before.includes("example.com"), false, before);
+  const members = patchOf(added.text).plugins.entries["oc-family-pack"].config.members as Record<string, unknown>[];
+  assert.equal(members[1]?.email, address);
+  assert.deepEqual(members[0], ALEX);
+
+  const bad = planSetup(host(complete), { kid: ["riley"], email: ["riley=not-an-email"] }, READY, "UTC");
+  assert.equal(bad.ok, false);
+  assert.equal(bad.text.includes("not-an-email"), false, bad.text);
+  assert.match(bad.text, /riley's email doesn't look right/);
+
+  const existing = planSetup(host({ ...complete, members: [{ ...ALEX, email: address }] }), { kid: ["riley"] }, READY, "UTC");
+  const prose = existing.text.slice(0, existing.text.indexOf(PATCH_INTRO));
+  assert.equal(prose.includes(address), false, prose);
+  const kept = patchOf(existing.text).plugins.entries["oc-family-pack"].config.members as Record<string, unknown>[];
+  assert.equal(kept[0]?.email, address);
+
+  const stranger = planSetup(host(complete), { email: ["sam=sam@example.com"] }, READY, "UTC");
+  assert.match(stranger.text, /`sam` isn't in the family yet/);
+  assert.equal(stranger.text.includes("sam@example.com"), false, stranger.text);
+  const twice = planSetup(host(complete), { email: ["alex=a@example.com", "alex=b@example.com"] }, READY, "UTC");
+  assert.match(twice.text, /`alex` has more than one email/);
+  assert.equal(twice.text.includes("example.com"), false, twice.text);
+});
+
 test("setup reads only pure modules: no Gateway, process, file or network imports", async () => {
   const { readFile } = await import("node:fs/promises");
   const source = await readFile(new URL("./setup.ts", import.meta.url), "utf8");

@@ -248,6 +248,13 @@ export class MemberError extends ConfigError {
 
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Trimmed and lowercased, or a MemberError that does not repeat the address. */
+export function memberEmail(value: string, displayName: string): string {
+  const email = value.trim().toLowerCase();
+  if (!EMAIL_SHAPE.test(email)) throw new MemberError(`${displayName}'s email doesn't look right. Check it and try again.`);
+  return email;
+}
+
 /** A lowercase slug of a name: "Riley Morgan" is riley-morgan. */
 export function slugOf(name: string): string {
   return name
@@ -278,9 +285,8 @@ function member(value: unknown, index: number): MemberConfig {
   };
   if (login !== undefined) parsed.profileId = login;
   if (value.email !== undefined) {
-    const email = typeof value.email === "string" ? value.email.trim().toLowerCase() : "";
-    if (!EMAIL_SHAPE.test(email)) throw new MemberError(`${displayName}'s email doesn't look right. Check it and try again.`);
-    parsed.email = email;
+    if (typeof value.email !== "string") throw new MemberError(`${displayName}'s email doesn't look right. Check it and try again.`);
+    parsed.email = memberEmail(value.email, displayName);
   }
   if (value.color !== undefined) {
     const color = text(value.color, `${field}.color`);
