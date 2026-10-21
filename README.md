@@ -113,7 +113,7 @@ Then open **Family** from the Control UI sidebar. The page is `/plugin?plugin=oc
 
 ## Configuration
 
-Family Pack reads `plugins.entries["oc-family-pack"].config`. Each person needs a `name`; everything else is optional. `id` is the internal key (it defaults to `profileId`, else a slug of the name). `email` is only stored on the card; nothing sends it or shows it. A `profileId`, when set, is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. Family Pack matches it exactly, so it must be the same name the Gateway signs that person in as. It is not the Gateway's internal profile id. A member id sent by the browser is not identity. A calendar's owners are member ids. A school calendar belongs to the student.
+Family Pack reads `plugins.entries["oc-family-pack"].config`. Each person needs a `name`; `email`, `discordId`, and `profileId` are optional. Someone with no email and no Discord still loads, and setup warns that the bots can't reach them. `id` is the internal key (it defaults to `profileId`, else a slug of the name). The page and `family.members` call it `memberId`. `email` is only stored on the card; nothing sends it or shows it. A `profileId`, when set, is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. Family Pack matches it exactly, so it must be the same name the Gateway signs that person in as. It is not the Gateway's internal profile id. A member id sent by the browser is not identity. A calendar's owners are member ids. A school calendar belongs to the student.
 
 ```json5
 {
@@ -125,9 +125,9 @@ Family Pack reads `plugins.entries["oc-family-pack"].config`. Each person needs 
           timezone: "America/Toronto",
           location: { lat: 45.42, lon: -75.7, label: "Home" },
           members: [
-            { profileId: "alex", displayName: "Alex", role: "parent" },
-            { profileId: "sam", displayName: "Sam", role: "parent" },
-            { profileId: "riley", displayName: "Riley", role: "kid" },
+            { name: "Alex", profileId: "alex", role: "parent", discordId: "100000000000000001" },
+            { name: "Sam", profileId: "sam", role: "parent", email: "sam@example.com" },
+            { name: "Riley", profileId: "riley", role: "kid" },
             { name: "Jordan", role: "kid", email: "jordan@example.com" },
           ],
           calendars: [
@@ -277,7 +277,7 @@ OpenClaw plugin APIs are experimental, so this plugin tracks host releases rathe
 npm run smoke
 ```
 
-It boots a throwaway Gateway on a temp state dir and a free loopback port, never touching your running one. The checks include: the plugin loads, the manifest validates, a real `family.week` call matches the contract schema, a signed-in kid sees shared calendars and the calendars they own, the page registers, and the plugin's host-payload limits still agree with the host's own. A break fails with the name of the step that broke. It tests the OpenClaw build you actually run, not the pinned devDependency: it looks for an `openclaw` outside this repo's own `node_modules/.bin`, and fails by name if there is none. Set `OCFP_SMOKE_HOST_BIN` to point it at a specific binary, or `OCFP_SMOKE_KEEP=1` to keep the throwaway state for inspection. If your host is a different build than the one this repo was tested against, the smoke stops at the manifest step and tells you to rebuild `dist/` with that host.
+It boots a throwaway Gateway on a temp state dir and a free loopback port, never touching your running one. It also uses the port 10 above, and refuses any pair that is busy or would touch the live Gateway's 18789 or 18799. To pin it, set `OCFP_SMOKE_PORT=19789`, which uses 19789 and 19799. The checks include: the plugin loads, the manifest validates, a real `family.week` call matches the contract schema, a signed-in kid sees shared calendars and the calendars they own, the page registers, and the plugin's host-payload limits still agree with the host's own. A break fails with the name of the step that broke. It tests the OpenClaw build you actually run, not the pinned devDependency: it looks for an `openclaw` outside this repo's own `node_modules/.bin`, and fails by name if there is none. Set `OCFP_SMOKE_HOST_BIN` to point it at a specific binary, or `OCFP_SMOKE_KEEP=1` to keep the throwaway state for inspection. If your host is a different build than the one this repo was tested against, the smoke stops at the manifest step and tells you to rebuild `dist/` with that host.
 
 ## Roadmap
 
