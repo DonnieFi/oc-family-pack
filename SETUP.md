@@ -6,15 +6,18 @@ The person is the record you add. `openclaw family setup` prints the next step a
 
 Each person is a member in `plugins.entries.oc-family-pack.config.members`.
 
-- **profileId** (required). Lower case. This is the trusted-proxy sign-in username, the `X-Forwarded-User` value. It is the name the Gateway signs that person in as. It is separate from the Gateway's internal profile id. The page matches it exactly. A member id from the browser is not identity.
-- **displayName** (required). When setup adds someone, it sets this to the username with the first letter capitalized. `riley` becomes Riley.
-- **role** (required). `parent`, `kid`, or `guest`. At least one parent is required before the Members step is done.
+- **name** (required). What the family calls this person. `displayName` is still accepted. When setup adds someone, it sets this to the username with the first letter capitalized. `riley` becomes Riley.
+- **id** (optional). The internal key. Calendar owners, briefs, reminders and Today use it. Omitted means the `profileId`, or else a lower-case slug of the name (`Riley S` becomes `riley-s`). Two people with the same id fail the config, and the error names both.
+- **profileId** (optional). Only for someone who signs in to the Control UI. Lower case. This is the trusted-proxy sign-in username, the `X-Forwarded-User` value. It is separate from the Gateway's internal profile id. The page matches it exactly. Someone without one can't open the Family page as themselves. It is never made up from the name. A member id from the browser is not identity.
+- **role** (optional). `parent`, `kid`, or `guest`. Omitted means `guest`. At least one parent is required before the Members step is done.
 - **color** (optional). A CSS color, such as `#3b82f6`. The page uses it. The setup command does not set it.
 - **discordId** (optional). 17 to 20 digits. It stays in config. The week payload never includes it.
 - **reminders** (optional). `dm`, `channel`, or `off`. Omitted means `dm`. Change it later in chat with `set_reminder_mode`. The setup command does not set it.
 - **devices** (optional). `label`, `primaryMac`, `aliasMacs`, and `source`. A MAC is a device signal. It is normalized when config is parsed, and it stays off the week payload. The setup command does not set it.
 
-This version stores no email and no phone on the member. Sign-in is `profileId`. Email aliases, if the household uses them, belong to the OpenClaw user profile, not this plugin.
+- **email** (optional). Trimmed and stored in lower case. It is only stored on the person's card. Nothing in this plugin sends email, and no output shows it. Two people may share one.
+
+Someone with no email and no Discord still loads, and setup says: Riley has no email or Discord, so the bots can't reach them. Add either one to fix this. A kid's card doesn't need a parent's Discord. Sign-in is `profileId`; no phone is stored.
 
 Usernames use lower-case letters, numbers, dots, dashes, or underscores, up to 32 characters. The command says: Usernames use lower-case letters, numbers, dots, dashes or underscores. Try `alex`, not `Alex Smith`. Each person sees their username as their name in the Control UI, so use what the family calls them.
 
@@ -120,7 +123,7 @@ openclaw family gog --desktop
 
 If the Gateway service cannot see `gog` on `PATH`, set `gogPath` to the full path of the binary.
 
-When `gog` can list calendars, put them in config. Each one has an `id`, a `label`, and a `kind` of `personal`, `shared`, or `school`. Owners are `profileId` values. A school calendar's owners are the students. A shared calendar's owners may be an empty list. A full example is in the Configuration section of [README.md](README.md). The Calendars step is Done when sign-in is ready and at least one calendar is in config.
+When `gog` can list calendars, put them in config. Each one has an `id`, a `label`, and a `kind` of `personal`, `shared`, or `school`. Owners are member `id` values. A school calendar's owners are the students. A shared calendar's owners may be an empty list. A full example is in the Configuration section of [README.md](README.md). The Calendars step is Done when sign-in is ready and at least one calendar is in config.
 
 ## Sign-in
 

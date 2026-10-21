@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { DELIVERY_EMPTY, DELIVERY_UNAVAILABLE, deliveryStatusLine, deliveryStatusMethod } from "./delivery-status.ts";
 import type { DeliveryKind, DeliveryStatus } from "./store.ts";
 
-const ROSTER = [{ profileId: "alex", displayName: "Alex" }];
+const ROSTER = [{ id: "alex", displayName: "Alex" }];
 
 const NAMED: Record<DeliveryStatus, string> = {
   sent: "Daily brief sent to Alex.",
@@ -31,7 +31,7 @@ test("the delivery line names the kind and who it was for, and hides every other
     assert.equal(view?.line.includes("summary"), false);
   }
   assert.equal(deliveryStatusLine({ kind: "weekly", status: "sent", target: "200000000000000099" }, ROSTER)?.line, "Weekly brief sent.");
-  assert.equal(deliveryStatusLine({ kind: "household", status: "partial", target: "alex" }, [{ profileId: "alex", displayName: "  " }])?.line, "Household brief partly sent.");
+  assert.equal(deliveryStatusLine({ kind: "household", status: "partial", target: "alex" }, [{ id: "alex", displayName: "  " }])?.line, "Household brief partly sent.");
   assert.equal(deliveryStatusLine({ kind: "alert", status: "held", target: "alex" }, ROSTER)?.line, "Alert to Alex is waiting to send.");
   assert.equal(deliveryStatusLine({ kind: "nope" as DeliveryKind, status: "sent", target: "alex" }, ROSTER), undefined);
 });

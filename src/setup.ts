@@ -3,7 +3,7 @@
 // here writes config, stores a password, or calls the Gateway.
 
 import { detectAccess, outsideSignIn, people, PROFILE_STEP, ROLES, SCOPES, type AccessPeople, type Person, type Role } from "./access.ts";
-import { DISCORD_ID } from "./config.ts";
+import { DISCORD_ID, slugOf } from "./config.ts";
 import type { GogSetupPlan } from "./gog-setup.ts";
 import { WEATHER_SETUP_HINT } from "./weather-ec.ts";
 
@@ -27,9 +27,36 @@ export function familyConfig(host: unknown): Record<string, unknown> {
   return record(record(record(record(record(host).plugins).entries)["oc-family-pack"]).config);
 }
 
-function profileId(member: unknown): string {
+/** ux's warning for a member the bots have no way to reach. Temporary wording is ux's call. */
+export const NO_CHANNEL = (name: string) => `${name} has no email or Discord, so the bots can't reach them. Add either one to fix this.`;
+
+/** The member's Control UI login, if it has one. Never derived. */
+function loginOf(member: unknown): string | undefined {
   const id = record(member).profileId;
-  return typeof id === "string" ? id.toLowerCase() : "";
+  return typeof id === "string" && id.trim() !== "" ? id.trim().toLowerCase() : undefined;
+}
+
+/** The name setup knows a member by: its id, its login, or its name. */
+function nameOf(member: unknown): string {
+  const entry = record(member);
+  for (const value of [entry.name, entry.displayName, entry.id, entry.profileId]) if (typeof value === "string" && value.trim() !== "") return value.trim();
+  return "";
+}
+
+/** Members with neither an email nor a Discord id. */
+function unreachable(host: unknown): string[] {
+  const members = familyConfig(host).members;
+  return (Array.isArray(members) ? members : [])
+    .filter((member) => record(member).email === undefined && record(member).discordId === undefined)
+    .map((member) => NO_CHANNEL(nameOf(member)));
+}
+
+/** The key setup matches a member by: the login, else the id, else the slug of the name, as parseConfig derives it. */
+function profileId(member: unknown): string {
+  const entry = record(member);
+  if (typeof entry.profileId === "string") return entry.profileId.toLowerCase();
+  if (typeof entry.id === "string") return entry.id.toLowerCase();
+  return slugOf(nameOf(member));
 }
 
 function named(names: string[]): string {
@@ -56,7 +83,7 @@ function grantedRole(gateway: unknown, user: string): Role {
  * member and everyone already allowed. Nobody gets dropped by re-running it.
  */
 function accessCommand(gateway: unknown, members: unknown[], allowed: string[]): string {
-  const roster = new Map<string, string>(members.map((member) => [profileId(member), String(record(member).role)]));
+  const roster = new Map<string, string>(members.flatMap((member) => { const login = loginOf(member); return login ? [[login, String(record(member).role)] as [string, string]] : []; }));
   for (const user of allowed) if (!roster.has(user)) roster.set(user, grantedRole(gateway, user));
   const flags = [...roster].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([user, role]) => `--${role} ${user}`);
   return `openclaw family access lan ${flags.join(" ")}`;
@@ -69,7 +96,7 @@ function membersStep(host: unknown, members: unknown[]): Step {
   if (detectAccess(gateway).mode === "lan") {
     const list = record(record(record(gateway).auth).trustedProxy).allowUsers;
     const allowed = Array.isArray(list) ? list.map((user) => String(user).toLowerCase()) : [];
-    const locked = members.map(profileId).filter((id) => !allowed.includes(id));
+    const locked = members.flatMap((member) => loginOf(member) ?? []).filter((id) => !allowed.includes(id));
     if (locked.length > 0) {
       const who = named(locked);
       return {
@@ -216,6 +243,8 @@ export function planSetup(host: unknown, input: SetupInput, gog: GogSetupPlan, h
   }
   const optional = asked ? [] : discordHint(host);
   const next = list.find((step) => !step.done);
-  if (!next) return { ok: true, text: [...checklist, ...optional, "", "Everything is set up."].join("\n") };
-  return { ok: false, text: [...checklist, ...optional, "", `Next: ${next.next}`].join("\n") };
+  const warnings = unreachable(host);
+  const warned = warnings.length > 0 ? ["", ...warnings] : [];
+  if (!next) return { ok: true, text: [...checklist, ...warned, ...optional, "", "Everything is set up."].join("\n") };
+  return { ok: false, text: [...checklist, ...warned, ...optional, "", `Next: ${next.next}`].join("\n") };
 }

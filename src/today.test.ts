@@ -81,8 +81,8 @@ test("a live read scores the school class separately and stays inside the calend
     timezone: TZ,
     gogPath: "/fake/gog",
     members: [
-      { profileId: "alex", displayName: "Alex", role: "parent" },
-      { profileId: "riley", displayName: "Riley", role: "kid" },
+      { id: "alex", profileId: "alex", displayName: "Alex", role: "parent" },
+      { id: "riley", profileId: "riley", displayName: "Riley", role: "kid" },
     ],
     calendars: [
       { id: "alex", label: "Alex", kind: "personal", owners: ["alex"] },

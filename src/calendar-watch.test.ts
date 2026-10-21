@@ -12,7 +12,7 @@ function config(calendars: string[], demo = false) {
     timezone: "America/Toronto",
     demo,
     gogPath: "/fake/gog",
-    members: [{ profileId: "kid", displayName: "Kid", role: "kid" }],
+    members: [{ id: "kid", profileId: "kid", displayName: "Kid", role: "kid" }],
     calendars: calendars.map((id) => ({ id, label: id, kind: "personal", owners: ["kid"] })),
   });
 }

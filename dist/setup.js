@@ -2,7 +2,7 @@
 // Pure: reads the host config it is given and prints a config patch. Nothing
 // here writes config, stores a password, or calls the Gateway.
 import { detectAccess, outsideSignIn, people, PROFILE_STEP, ROLES, SCOPES } from "./access.js";
-import { DISCORD_ID } from "./config.js";
+import { DISCORD_ID, slugOf } from "./config.js";
 import { WEATHER_SETUP_HINT } from "./weather-ec.js";
 const CONFIG_PATH = "plugins.entries.oc-family-pack.config";
 const DISCORD_HELP = "Optional. In Discord, turn on Developer Mode, then right-click the person and pick Copy User ID.";
@@ -16,9 +16,36 @@ function record(value) {
 export function familyConfig(host) {
     return record(record(record(record(record(host).plugins).entries)["oc-family-pack"]).config);
 }
-function profileId(member) {
+/** ux's warning for a member the bots have no way to reach. Temporary wording is ux's call. */
+export const NO_CHANNEL = (name) => `${name} has no email or Discord, so the bots can't reach them. Add either one to fix this.`;
+/** The member's Control UI login, if it has one. Never derived. */
+function loginOf(member) {
     const id = record(member).profileId;
-    return typeof id === "string" ? id.toLowerCase() : "";
+    return typeof id === "string" && id.trim() !== "" ? id.trim().toLowerCase() : undefined;
+}
+/** The name setup knows a member by: its id, its login, or its name. */
+function nameOf(member) {
+    const entry = record(member);
+    for (const value of [entry.name, entry.displayName, entry.id, entry.profileId])
+        if (typeof value === "string" && value.trim() !== "")
+            return value.trim();
+    return "";
+}
+/** Members with neither an email nor a Discord id. */
+function unreachable(host) {
+    const members = familyConfig(host).members;
+    return (Array.isArray(members) ? members : [])
+        .filter((member) => record(member).email === undefined && record(member).discordId === undefined)
+        .map((member) => NO_CHANNEL(nameOf(member)));
+}
+/** The key setup matches a member by: the login, else the id, else the slug of the name, as parseConfig derives it. */
+function profileId(member) {
+    const entry = record(member);
+    if (typeof entry.profileId === "string")
+        return entry.profileId.toLowerCase();
+    if (typeof entry.id === "string")
+        return entry.id.toLowerCase();
+    return slugOf(nameOf(member));
 }
 function named(names) {
     return names.length === 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
@@ -40,7 +67,7 @@ function grantedRole(gateway, user) {
  * member and everyone already allowed. Nobody gets dropped by re-running it.
  */
 function accessCommand(gateway, members, allowed) {
-    const roster = new Map(members.map((member) => [profileId(member), String(record(member).role)]));
+    const roster = new Map(members.flatMap((member) => { const login = loginOf(member); return login ? [[login, String(record(member).role)]] : []; }));
     for (const user of allowed)
         if (!roster.has(user))
             roster.set(user, grantedRole(gateway, user));
@@ -55,7 +82,7 @@ function membersStep(host, members) {
     if (detectAccess(gateway).mode === "lan") {
         const list = record(record(record(gateway).auth).trustedProxy).allowUsers;
         const allowed = Array.isArray(list) ? list.map((user) => String(user).toLowerCase()) : [];
-        const locked = members.map(profileId).filter((id) => !allowed.includes(id));
+        const locked = members.flatMap((member) => loginOf(member) ?? []).filter((id) => !allowed.includes(id));
         if (locked.length > 0) {
             const who = named(locked);
             return {
@@ -205,7 +232,9 @@ export function planSetup(host, input, gog, hostZone) {
     }
     const optional = asked ? [] : discordHint(host);
     const next = list.find((step) => !step.done);
+    const warnings = unreachable(host);
+    const warned = warnings.length > 0 ? ["", ...warnings] : [];
     if (!next)
-        return { ok: true, text: [...checklist, ...optional, "", "Everything is set up."].join("\n") };
-    return { ok: false, text: [...checklist, ...optional, "", `Next: ${next.next}`].join("\n") };
+        return { ok: true, text: [...checklist, ...warned, ...optional, "", "Everything is set up."].join("\n") };
+    return { ok: false, text: [...checklist, ...warned, ...optional, "", `Next: ${next.next}`].join("\n") };
 }

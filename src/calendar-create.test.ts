@@ -42,9 +42,9 @@ function household(writes: "on" | "confirm" | "off" = "on", members?: unknown[])
     timezone: "America/Halifax",
     writes,
     members: members ?? [
-      { profileId: "donnie", displayName: "Donnie", role: "parent", discordId: DONNIE_ID },
-      { profileId: "britta", displayName: "Britta", role: "parent", discordId: BRITTA_ID },
-      { profileId: "penny", displayName: "Penny", role: "kid", discordId: PENNY_ID },
+      { id: "donnie", profileId: "donnie", displayName: "Donnie", role: "parent", discordId: DONNIE_ID },
+      { id: "britta", profileId: "britta", displayName: "Britta", role: "parent", discordId: BRITTA_ID },
+      { id: "penny", profileId: "penny", displayName: "Penny", role: "kid", discordId: PENNY_ID },
     ],
     calendars: [
       { id: DONNIE_CAL, label: "Donnie", kind: "personal", owners: ["donnie"] },
@@ -396,9 +396,9 @@ test("a long event name is cut with … to fit 80; the person's name and the cal
 
 test("a long person's name is never cut; the event name gives way", async () => {
   const config = household("on", [
-    { profileId: "donnie", displayName: "Donnie", role: "parent" },
-    { profileId: "britta", displayName: "Britta", role: "parent" },
-    { profileId: "penny", displayName: "Penelope Josephine Fiander-Smith", role: "kid", discordId: PENNY_ID },
+    { id: "donnie", profileId: "donnie", displayName: "Donnie", role: "parent" },
+    { id: "britta", profileId: "britta", displayName: "Britta", role: "parent" },
+    { id: "penny", profileId: "penny", displayName: "Penelope Josephine Fiander-Smith", role: "kid", discordId: PENNY_ID },
   ]);
   const s = setup({ config });
   const outcome = await hostCall(s, discord(PENNY_ID), { ...SLEEPOVER, title: "A very long sleepover at the cottage with everyone" }, { decide: () => "deny" });
@@ -530,12 +530,12 @@ test("the tool description carries the shared not-approved line with the approve
   assert.ok(description.includes("Calendars: Donnie, Family, Penny."));
   const three = setup({
     config: household("on", [
-      { profileId: "a", displayName: "Ann", role: "parent" },
-      { profileId: "b", displayName: "Bob", role: "parent" },
-      { profileId: "c", displayName: "Cy", role: "parent" },
-      { profileId: "donnie", displayName: "Donnie", role: "kid" },
-      { profileId: "britta", displayName: "Britta", role: "kid" },
-      { profileId: "penny", displayName: "Penny", role: "kid" },
+      { id: "a", profileId: "a", displayName: "Ann", role: "parent" },
+      { id: "b", profileId: "b", displayName: "Bob", role: "parent" },
+      { id: "c", profileId: "c", displayName: "Cy", role: "parent" },
+      { id: "donnie", profileId: "donnie", displayName: "Donnie", role: "kid" },
+      { id: "britta", profileId: "britta", displayName: "Britta", role: "kid" },
+      { id: "penny", profileId: "penny", displayName: "Penny", role: "kid" },
     ]),
   });
   assert.ok(three.tools[0]!.factory(invoke().tool).description.includes("Ask again when Ann, Bob, or Cy is around."));
@@ -543,9 +543,9 @@ test("the tool description carries the shared not-approved line with the approve
 
 test("with no parents the approver is the person who set this up", async () => {
   const config = household("on", [
-    { profileId: "donnie", displayName: "Donnie", role: "kid" },
-    { profileId: "britta", displayName: "Britta", role: "kid" },
-    { profileId: "penny", displayName: "Penny", role: "kid", discordId: PENNY_ID },
+    { id: "donnie", profileId: "donnie", displayName: "Donnie", role: "kid" },
+    { id: "britta", profileId: "britta", displayName: "Britta", role: "kid" },
+    { id: "penny", profileId: "penny", displayName: "Penny", role: "kid", discordId: PENNY_ID },
   ]);
   const s = setup({ config });
   assert.ok(s.tools[0]!.factory(invoke().tool).description.includes("Ask again when the person who set this up is around."));

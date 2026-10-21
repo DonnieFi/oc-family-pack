@@ -236,7 +236,7 @@ export function approverPhrase(members: readonly MemberConfig[]): string {
 export function calendarPlace(members: readonly MemberConfig[], calendar: Pick<CalendarConfig, "kind" | "owners" | "label">): string {
   if (calendar.kind === "personal") {
     const names = calendar.owners.flatMap((owner) => {
-      const member = members.find((entry) => entry.profileId === owner);
+      const member = members.find((entry) => entry.id === owner);
       return member ? [clean(member.displayName)] : [];
     });
     if (names.length > 0) return `${joinWith(names, "and")}'s calendar`;

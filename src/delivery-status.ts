@@ -17,7 +17,7 @@ const KIND_WORD: Record<DeliveryKind, string> = {
 
 export type DeliveryLine = { line: string; failed: boolean };
 
-type RosterName = { profileId: string; displayName: string };
+type RosterName = { id: string; displayName: string };
 
 /** One sentence for the latest row. A target that is not a roster profile id adds no destination. */
 export function deliveryStatusLine(
@@ -26,7 +26,7 @@ export function deliveryStatusLine(
 ): DeliveryLine | undefined {
   const kind = KIND_WORD[row.kind];
   if (kind === undefined) return undefined;
-  const name = roster.find((member) => member.profileId === row.target)?.displayName;
+  const name = roster.find((member) => member.id === row.target)?.displayName;
   const named = typeof name === "string" && name.trim() !== "" ? name : undefined;
   const line = sentence(kind, row.status, named);
   if (line === undefined) return undefined;

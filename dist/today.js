@@ -26,7 +26,7 @@ function overlapsToday(event, today, timezone) {
     return start <= today && today <= end;
 }
 function ownerIds(calendar, members) {
-    const order = new Map(members.map((member, index) => [member.profileId, index]));
+    const order = new Map(members.map((member, index) => [member.id, index]));
     return calendar.owners.filter((id) => order.has(id)).sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
 }
 function classifyInput(event, kind) {

@@ -27,10 +27,10 @@ test("family.week returns one literal demo week to the owner", async () => {
       { date: "2026-10-04", isToday: false, eventIds: ["demo/a2", "demo/t11", "demo/t12"] },
     ],
     members: [
-      { profileId: "alex", displayName: "Alex", role: "parent", color: "oklch(0.72 0.14 245)" },
-      { profileId: "sam", displayName: "Sam", role: "parent", color: "oklch(0.72 0.16 55)" },
-      { profileId: "riley", displayName: "Riley", role: "kid", color: "oklch(0.72 0.18 310)" },
-      { profileId: "jordan", displayName: "Jordan", role: "kid", color: "oklch(0.75 0.15 150)" },
+      { memberId: "alex", displayName: "Alex", role: "parent", color: "oklch(0.72 0.14 245)" },
+      { memberId: "sam", displayName: "Sam", role: "parent", color: "oklch(0.72 0.16 55)" },
+      { memberId: "riley", displayName: "Riley", role: "kid", color: "oklch(0.72 0.18 310)" },
+      { memberId: "jordan", displayName: "Jordan", role: "kid", color: "oklch(0.75 0.15 150)" },
     ],
     calendars: [
       { key: "c0", label: "Alex", kind: "personal", ownerIds: ["alex"] },
@@ -84,7 +84,7 @@ test("family.members handler returns the picker roster and omits discord ids and
   });
   const roster = familyHandlers(config)["family.members"]();
   assert.deepEqual(roster, {
-    members: [{ profileId: "riley", displayName: "Riley", role: "kid", color: "oklch(0.72 0.14 245)" }],
+    members: [{ memberId: "riley", displayName: "Riley", role: "kid", color: "oklch(0.72 0.14 245)" }],
   });
   const wire = JSON.stringify(roster);
   for (const secret of [

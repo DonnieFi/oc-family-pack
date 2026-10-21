@@ -160,7 +160,7 @@ async function runJob(deps, store, job, now) {
     if (job.kind === "morning") {
         const members = deps.config.demo ? DEMO_MEMBERS : deps.config.members;
         for (const parent of members.filter((member) => member.role === "parent")) {
-            await sendOne(deps, store, job, { member: parent.profileId }, parent.profileId, message, undefined);
+            await sendOne(deps, store, job, { member: parent.id }, parent.id, message, undefined);
         }
         return;
     }

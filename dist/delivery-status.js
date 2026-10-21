@@ -14,7 +14,7 @@ export function deliveryStatusLine(row, roster) {
     const kind = KIND_WORD[row.kind];
     if (kind === undefined)
         return undefined;
-    const name = roster.find((member) => member.profileId === row.target)?.displayName;
+    const name = roster.find((member) => member.id === row.target)?.displayName;
     const named = typeof name === "string" && name.trim() !== "" ? name : undefined;
     const line = sentence(kind, row.status, named);
     if (line === undefined)

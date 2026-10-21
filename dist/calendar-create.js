@@ -158,7 +158,7 @@ export function approverPhrase(members) {
 export function calendarPlace(members, calendar) {
     if (calendar.kind === "personal") {
         const names = calendar.owners.flatMap((owner) => {
-            const member = members.find((entry) => entry.profileId === owner);
+            const member = members.find((entry) => entry.id === owner);
             return member ? [clean(member.displayName)] : [];
         });
         if (names.length > 0)

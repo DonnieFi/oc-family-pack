@@ -11,11 +11,11 @@ const NANA_DISCORD = "100000000000000005";
 const config = parseConfig({
   timezone: "America/Halifax",
   members: [
-    { profileId: "donnie", displayName: "Donnie", role: "parent", discordId: DONNIE_DISCORD },
-    { profileId: "britta", displayName: "Britta", role: "parent" },
-    { profileId: "calla", displayName: "Calla", role: "kid", discordId: CALLA_DISCORD },
-    { profileId: "penny", displayName: "Penny", role: "kid" },
-    { profileId: "nana", displayName: "Nana", role: "guest", discordId: NANA_DISCORD },
+    { id: "donnie", profileId: "donnie", displayName: "Donnie", role: "parent", discordId: DONNIE_DISCORD },
+    { id: "britta", profileId: "britta", displayName: "Britta", role: "parent" },
+    { id: "calla", profileId: "calla", displayName: "Calla", role: "kid", discordId: CALLA_DISCORD },
+    { id: "penny", profileId: "penny", displayName: "Penny", role: "kid" },
+    { id: "nana", profileId: "nana", displayName: "Nana", role: "guest", discordId: NANA_DISCORD },
   ],
   calendars: [
     { id: "donnie", label: "Donnie", kind: "personal", owners: ["donnie"] },

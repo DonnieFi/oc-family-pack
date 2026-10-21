@@ -9,8 +9,8 @@ import { gateWrite, READ_ONLY, VIEW_ONLY, WRITES_OFF } from "./write-gate.ts";
 const config = parseConfig({
   timezone: "America/Halifax",
   members: [
-    { profileId: "donnie", displayName: "Donnie", role: "parent", discordId: "100000000000000003" },
-    { profileId: "calla", displayName: "Calla", role: "kid", discordId: "100000000000000001" },
+    { id: "donnie", profileId: "donnie", displayName: "Donnie", role: "parent", discordId: "100000000000000003" },
+    { id: "calla", profileId: "calla", displayName: "Calla", role: "kid", discordId: "100000000000000001" },
   ],
   calendars: [
     { id: "family", label: "Family", kind: "shared", owners: ["donnie", "calla"] },

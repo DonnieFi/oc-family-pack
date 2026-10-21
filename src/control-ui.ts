@@ -115,7 +115,7 @@ const isFamilyOnly = (sources: readonly CalendarRef[]) => sources.length > 0 && 
 /** Owners of every source calendar, once each, in roster order. */
 const rosterOwners = (week: WeekPayload, sources: readonly CalendarRef[]) => {
   const ids = new Set(sources.flatMap((calendar) => calendar.ownerIds));
-  return week.members.flatMap((member) => (ids.has(member.profileId) ? [member.profileId] : []));
+  return week.members.flatMap((member) => (ids.has(member.memberId) ? [member.memberId] : []));
 };
 
 /** Attributes that name the same control across a re-render, most specific first. */
@@ -394,7 +394,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     updateStale();
     const entering = week.range.start !== shownStart;
     shownStart = week.range.start;
-    const members = new Map<string, Member>(week.members.map((member) => [member.profileId, member]));
+    const members = new Map<string, Member>(week.members.map((member) => [member.memberId, member]));
     const events = new Map<string, FamilyEvent>(week.calendar.status === "ok" ? week.calendar.data.map((event) => [event.id, event]) : []);
     const inWeek = week.days.some((day) => day.isToday);
     if (!week.days.some((day) => day.date === selectedDay)) {
@@ -487,7 +487,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     };
     filters.append(
       chip(null, "Everyone", undefined, undefined),
-      ...week.members.map((member) => chip(member.profileId, member.displayName, member.color, member.role === "guest" ? "guest" : undefined)),
+      ...week.members.map((member) => chip(member.memberId, member.displayName, member.color, member.role === "guest" ? "guest" : undefined)),
     );
     filters.hidden = week.members.length === 0;
 
@@ -757,7 +757,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   function openEvent(week: WeekPayload, event: FamilyEvent, sources: CalendarRef[], color: string, trigger: HTMLElement | null) {
     const timezone = week.range.timezone;
     const fmt = formats(timezone, host.locale);
-    const members = new Map(week.members.map((member) => [member.profileId, member]));
+    const members = new Map(week.members.map((member) => [member.memberId, member]));
     const describeWhen = () => {
       if (event.allDay) {
         const last = addDays(event.end, -1);

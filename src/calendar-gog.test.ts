@@ -18,7 +18,7 @@ function familyConfig(gogPath: string, calendars: { id: string; label: string }[
   return parseConfig({
     timezone: "America/Toronto",
     gogPath,
-    members: [{ profileId: "kid", displayName: "Kid", role: "kid" }],
+    members: [{ id: "kid", profileId: "kid", displayName: "Kid", role: "kid" }],
     calendars: calendars.map((calendar) => ({ ...calendar, kind: "personal", owners: ["kid"] })),
   });
 }

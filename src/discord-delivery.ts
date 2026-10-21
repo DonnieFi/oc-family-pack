@@ -9,7 +9,7 @@ export type DeliveryTarget = { member: string } | { channel: string };
 
 /** Ids are looked up at send time, so stored targets stay member ids and channel keys. */
 export type DeliveryDirectory = {
-  members: readonly Pick<MemberConfig, "profileId" | "discordId">[];
+  members: readonly Pick<MemberConfig, "id" | "discordId">[];
   channels: Readonly<Record<string, string>>;
 };
 
@@ -72,7 +72,7 @@ const NO_CHANNEL_CODES = new Set([10003, 10013]);
 
 function discordTo(directory: DeliveryDirectory, target: DeliveryTarget): string | undefined {
   if ("member" in target) {
-    const id = directory.members.find((member) => member.profileId === target.member)?.discordId;
+    const id = directory.members.find((member) => member.id === target.member)?.discordId;
     return id ? `user:${id}` : undefined;
   }
   const id = Object.hasOwn(directory.channels, target.channel) ? directory.channels[target.channel] : undefined;

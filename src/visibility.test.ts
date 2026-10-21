@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { CalendarConfig, Config, MemberConfig } from "./types.ts";
 import { visibleCalendarIds, type Viewer } from "./visibility.ts";
 
-const member = (profileId: string, role: MemberConfig["role"]): MemberConfig => ({ profileId, displayName: profileId, role, devices: [] });
+const member = (profileId: string, role: MemberConfig["role"]): MemberConfig => ({ id: profileId, profileId, displayName: profileId, role, devices: [] });
 const calendar = (id: string, kind: CalendarConfig["kind"], owners: string[]): CalendarConfig => ({ key: id, id, label: id, kind, owners });
 
 const config: Pick<Config, "members" | "calendars"> = {

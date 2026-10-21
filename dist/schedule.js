@@ -15,7 +15,7 @@ const GUEST = { kind: "person", username: undefined };
 export function scheduleCaller(members, context) {
     const requester = resolveRequester(members, context);
     if (requester.from === "discord" && requester.member) {
-        return { viewer: { kind: "person", username: requester.member.profileId }, me: requester.member.profileId };
+        return { viewer: { kind: "member", id: requester.member.id }, me: requester.member.id };
     }
     return { viewer: requester.from === "tool" && requester.senderIsOwner ? { kind: "owner" } : GUEST };
 }
@@ -82,8 +82,8 @@ export async function buildSchedule(config, input, caller, now, runGog) {
             return { error: ME_UNKNOWN };
         member = caller.me;
     }
-    else if (member !== undefined && !members.some((entry) => entry.profileId === member)) {
-        return { error: "member must be a profileId from the family roster, or \"me\"." };
+    else if (member !== undefined && !members.some((entry) => entry.id === member)) {
+        return { error: "member must be an id from the family roster, or \"me\"." };
     }
     let start;
     let end;
@@ -125,8 +125,8 @@ export async function buildSchedule(config, input, caller, now, runGog) {
         }
         return [classify(event, calendar.kind)];
     });
-    const order = new Map(members.map((entry, index) => [entry.profileId, index]));
-    const names = new Map(members.map((entry) => [entry.profileId, entry.displayName]));
+    const order = new Map(members.map((entry, index) => [entry.id, index]));
+    const names = new Map(members.map((entry) => [entry.id, entry.displayName]));
     const ownersOf = (group) => [...new Set(group.flatMap((copy) => byKey.get(copy.calendarKey)?.owners ?? []))]
         .filter((id) => names.has(id))
         .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))

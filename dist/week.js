@@ -178,7 +178,7 @@ export function groupByDay(dates, today, events, timezone) {
 /** Page roster only. discordId and devices stay in config and are not copied here. */
 export function resolveMembers(members) {
     return members.map((member, index) => ({
-        profileId: member.profileId,
+        memberId: member.id,
         displayName: member.displayName,
         role: member.role,
         color: member.color ?? MEMBER_PALETTE[index % MEMBER_PALETTE.length] ?? MEMBER_PALETTE[0],

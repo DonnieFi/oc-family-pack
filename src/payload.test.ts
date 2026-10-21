@@ -31,8 +31,8 @@ test("discord ids and device MACs stay off the week payload", async () => {
   });
   const payload = await buildWeekPayload(config, "2026-10-01", Date.parse("2026-09-30T16:00:00Z"), noWeather, OWNER);
   assert.deepEqual(payload.members, [
-    { profileId: "riley", displayName: "Riley", role: "kid", color: "oklch(0.72 0.14 245)" },
-    { profileId: "alex", displayName: "Alex", role: "parent", color: "oklch(0.72 0.16 55)" },
+    { memberId: "riley", displayName: "Riley", role: "kid", color: "oklch(0.72 0.14 245)" },
+    { memberId: "alex", displayName: "Alex", role: "parent", color: "oklch(0.72 0.16 55)" },
   ]);
   assert.deepEqual(payload.calendars, [{ key: "c0", label: "School", kind: "school", ownerIds: ["riley"] }]);
   const wire = JSON.stringify(payload);
@@ -45,6 +45,15 @@ test("discord ids and device MACs stay off the week payload", async () => {
   assert.equal(wire.includes("school-feed@group.calendar.google.com"), false, "calendars travel as keys");
 });
 
+test("week members carry memberId = member.id; a config without ids gets its profileIds", async () => {
+  const week = (members: object[]) =>
+    buildWeekPayload(parseConfig({ timezone: "UTC", gogPath: "/bin/true", members }), "2026-10-01", Date.parse("2026-09-30T16:00:00Z"), noWeather, OWNER);
+  const ids = async (members: object[]) => (await week(members)).members.map((member) => member.memberId);
+  assert.deepEqual(await ids([{ profileId: "alex", displayName: "Alex", role: "parent" }, { profileId: "riley", displayName: "Riley", role: "kid" }]), ["alex", "riley"]);
+  assert.deepEqual(await ids([{ id: "kid-1", profileId: "riley", displayName: "Riley", role: "kid" }, { displayName: "Sam Lee", role: "parent" }]), ["kid-1", "sam-lee"]);
+  assert.equal(JSON.stringify(await week([{ profileId: "alex", displayName: "Alex", role: "parent" }])).includes("profileId"), false);
+});
+
 test("demo mode renders a synthetic week with a roster, calendars, colors, and day buckets", async () => {
   const config = parseConfig({ demo: true, timezone: "America/Toronto" });
   const payload = await buildWeekPayload(config, "2026-10-01", Date.parse("2026-09-30T16:00:00Z"), noWeather, OWNER);
@@ -52,10 +61,10 @@ test("demo mode renders a synthetic week with a roster, calendars, colors, and d
   assert.deepEqual(payload.range, { start: "2026-09-28", end: "2026-10-04", timezone: "America/Toronto" });
   assert.equal(payload.today, "2026-09-30");
   assert.deepEqual(payload.members, [
-    { profileId: "alex", displayName: "Alex", role: "parent", color: "oklch(0.72 0.14 245)" },
-    { profileId: "sam", displayName: "Sam", role: "parent", color: "oklch(0.72 0.16 55)" },
-    { profileId: "riley", displayName: "Riley", role: "kid", color: "oklch(0.72 0.18 310)" },
-    { profileId: "jordan", displayName: "Jordan", role: "kid", color: "oklch(0.75 0.15 150)" },
+    { memberId: "alex", displayName: "Alex", role: "parent", color: "oklch(0.72 0.14 245)" },
+    { memberId: "sam", displayName: "Sam", role: "parent", color: "oklch(0.72 0.16 55)" },
+    { memberId: "riley", displayName: "Riley", role: "kid", color: "oklch(0.72 0.18 310)" },
+    { memberId: "jordan", displayName: "Jordan", role: "kid", color: "oklch(0.75 0.15 150)" },
   ]);
   assert.deepEqual(payload.calendars, [
     { key: "c0", label: "Alex", kind: "personal", ownerIds: ["alex"] },
@@ -123,7 +132,7 @@ function busiestWeek(eventCount: number, event: (index: number) => Omit<FamilyEv
     range: { start: "2026-09-28", end: "2026-10-04", timezone: "America/Toronto" },
     today: "2026-09-30",
     days: DATES.map((date) => ({ date, isToday: date === "2026-09-30", eventIds: events.map((entry) => entry.id) })),
-    members: members.map((profileId) => ({ profileId, displayName: profileId, color: "oklch(0.72 0.14 245)", role: "parent" })),
+    members: members.map((memberId) => ({ memberId, displayName: memberId, color: "oklch(0.72 0.14 245)", role: "parent" })),
     calendars: Array.from({ length: 16 }, (_, index) => ({ key: `c${index}`, label: `Calendar ${index}`, kind: "personal", ownerIds: members })),
     calendar: { status: "ok", data: events, warnings: Array.from({ length: 16 }, (_, index) => `Could not read the "Calendar ${index}" calendar: gog timed out`) },
     weather: {
@@ -158,7 +167,7 @@ test("a week over the event cap or the host's size limit becomes a calendar erro
     [tooMany, tooLarge].map((payload) => [payload.calendar, payload.days.flatMap((day) => day.eventIds).length, payload.members.length, payload.weather.status]),
     [
       [{ status: "error", message: "This week has 201 events, more than Family can show at once. Remove a busy calendar from the plugin config." }, 0, 32, "ok"],
-      [{ status: "error", message: "This week is 418707 bytes, more than Family can show at once. Remove a busy calendar from the plugin config." }, 0, 32, "ok"],
+      [{ status: "error", message: "This week is 418675 bytes, more than Family can show at once. Remove a busy calendar from the plugin config." }, 0, 32, "ok"],
     ],
   );
   assert.equal(Value.Check(WeekPayloadSchema, tooMany), true);
@@ -283,7 +292,10 @@ test("family.week is byte-identical to the 00a3483 build, plus the two write fla
     const payload = await buildWeekPayload(config, "2026-09-28", NOW, noWeather, OWNER);
     // Printed by the same setup at 00a3483, before reads kept Google fields for the classifier.
     // s5k.28 appended the write flags; an owner's page with no write scope reads both false.
-    const golden = readFileSync(join(fixtures, "week-00a3483.json"), "utf8").replace(/}$/, ',"canEdit":false,"calendarsReadOnly":false}');
+    // s5k.39 renamed members[].profileId to memberId; the values are unchanged.
+    const golden = readFileSync(join(fixtures, "week-00a3483.json"), "utf8")
+      .replaceAll('"profileId":', '"memberId":')
+      .replace(/}$/, ',"canEdit":false,"calendarsReadOnly":false}');
     assert.equal(JSON.stringify(payload), golden);
   } finally {
     rmSync(dir, { recursive: true, force: true });

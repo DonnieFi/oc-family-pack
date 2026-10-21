@@ -37,8 +37,8 @@ async function briefEvents(deps, start, end) {
     if (read.status !== "ok")
         return undefined;
     const byKey = new Map(calendars.map((calendar) => [calendar.key, calendar]));
-    const order = new Map(members.map((member, index) => [member.profileId, index]));
-    const names = new Map(members.map((member) => [member.profileId, member.displayName]));
+    const order = new Map(members.map((member, index) => [member.id, index]));
+    const names = new Map(members.map((member) => [member.id, member.displayName]));
     return groupCopies(read.data.filter((event) => byKey.has(event.calendarKey))).map((group) => {
         const event = mergeGroup(group);
         const calendar = byKey.get(event.calendarKey);
@@ -134,11 +134,11 @@ export async function alertDeliveryFailure(deps, store, kind, target, textFor) {
         return;
     const parents = (deps.config.demo ? DEMO_MEMBERS : deps.config.members).filter((member) => member.role === "parent");
     for (const parent of parents) {
-        const key = `alert:${kind}:${target}:${streak.id}:${parent.profileId}`;
+        const key = `alert:${kind}:${target}:${streak.id}:${parent.id}`;
         if (await store.deliveryDone(key))
             continue;
-        const outcome = await deps.deliver({ member: parent.profileId }, [{ text: textFor(streak.status) }], key);
-        await store.appendDeliveryLog(rowOf(key, "alert", parent.profileId, outcome));
+        const outcome = await deps.deliver({ member: parent.id }, [{ text: textFor(streak.status) }], key);
+        await store.appendDeliveryLog(rowOf(key, "alert", parent.id, outcome));
     }
 }
 async function alertParents(deps, store, brief, target) {

@@ -113,7 +113,7 @@ Then open **Family** from the Control UI sidebar. The page is `/plugin?plugin=oc
 
 ## Configuration
 
-Family Pack reads `plugins.entries["oc-family-pack"].config`. Each `profileId` is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. Family Pack matches it exactly, so it must be the same name the Gateway signs that person in as. It is not the Gateway's internal profile id. A member id sent by the browser is not identity. A calendar's owners are those same ids. A school calendar belongs to the student.
+Family Pack reads `plugins.entries["oc-family-pack"].config`. Each person needs a `name`; everything else is optional. `id` is the internal key (it defaults to `profileId`, else a slug of the name). `email` is only stored on the card; nothing sends it or shows it. A `profileId`, when set, is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. Family Pack matches it exactly, so it must be the same name the Gateway signs that person in as. It is not the Gateway's internal profile id. A member id sent by the browser is not identity. A calendar's owners are member ids. A school calendar belongs to the student.
 
 ```json5
 {
@@ -128,6 +128,7 @@ Family Pack reads `plugins.entries["oc-family-pack"].config`. Each `profileId` i
             { profileId: "alex", displayName: "Alex", role: "parent" },
             { profileId: "sam", displayName: "Sam", role: "parent" },
             { profileId: "riley", displayName: "Riley", role: "kid" },
+            { name: "Jordan", role: "kid", email: "jordan@example.com" },
           ],
           calendars: [
             { id: "family@group.calendar.google.com", label: "Family", kind: "shared", owners: [] },

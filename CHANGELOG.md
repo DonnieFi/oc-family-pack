@@ -4,6 +4,7 @@
 
 - Calendar writes from the agent now default to `confirm`. If you never set `writes`, the agent will ask for a parent's approval before it changes a calendar. Set `writes: "on"` to keep the old behaviour.
 - Needs OpenClaw 2026.10.5 or newer, before 2026.11. Tested on 2026.10.5. An install on OpenClaw 2026.9.x has to upgrade OpenClaw first.
+- A member needs only a name. `email`, `discordId` and `profileId` are optional. Setup warns about a member with no email and no Discord; it does not refuse them. An email never leaves config. The week payload calls each person `memberId`, not `profileId`; the values are the same.
 
 ## 0.2.0 — 2026-10-04
 

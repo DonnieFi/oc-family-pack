@@ -300,13 +300,13 @@
         "type": "array",
         "items": {
           "type": "object",
-          "required": [
-            "profileId",
-            "displayName",
-            "role"
-          ],
           "properties": {
-            "profileId": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "name": {
               "type": "string",
               "minLength": 1,
               "maxLength": 200
@@ -315,6 +315,16 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 200
+            },
+            "profileId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "email": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 254
             },
             "role": {
               "anyOf": [
@@ -458,9 +468,9 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/342508f1a7b6a2868c63b47be3a00f3c37986298ce25cf5292a5753a49529806/index.js",
+    "entry": "dist/control-ui/496fbedc339f4965570c5f6938622c31c83dafe789725e1713e224ab87525ffb/index.js",
     "styles": [
-      "dist/control-ui/342508f1a7b6a2868c63b47be3a00f3c37986298ce25cf5292a5753a49529806/index.css"
+      "dist/control-ui/496fbedc339f4965570c5f6938622c31c83dafe789725e1713e224ab87525ffb/index.css"
     ]
   },
   "contracts": {

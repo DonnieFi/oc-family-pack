@@ -48,8 +48,8 @@ function household(writes: "on" | "confirm" | "off" = "on"): Config {
     writes,
     gogPath: GOG,
     members: [
-      { profileId: "donnie", displayName: "Donnie", role: "parent", discordId: DONNIE_ID },
-      { profileId: "calla", displayName: "Calla", role: "kid", discordId: CALLA_ID },
+      { id: "donnie", profileId: "donnie", displayName: "Donnie", role: "parent", discordId: DONNIE_ID },
+      { id: "calla", profileId: "calla", displayName: "Calla", role: "kid", discordId: CALLA_ID },
     ],
     calendars: [
       { id: DONNIE_CAL, label: "Donnie", kind: "personal", owners: ["donnie"] },

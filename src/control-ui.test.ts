@@ -20,8 +20,8 @@ function week(): WeekPayload {
       eventIds: date === "2026-09-30" ? ["e-alex", "e-family"] : [],
     })),
     members: [
-      { profileId: "alex", displayName: "Alex", role: "parent", color: "oklch(0.72 0.14 245)" },
-      { profileId: "sam", displayName: "Sam", role: "parent", color: "oklch(0.72 0.16 55)" },
+      { memberId: "alex", displayName: "Alex", role: "parent", color: "oklch(0.72 0.14 245)" },
+      { memberId: "sam", displayName: "Sam", role: "parent", color: "oklch(0.72 0.16 55)" },
     ],
     calendars: [
       { key: "c0", label: "Alex", kind: "personal", ownerIds: ["alex"] },

@@ -699,8 +699,8 @@ test("a gog that ignores --private-prop-filter still can't pass off someone else
 const household = parseConfig({
   timezone: "America/Halifax",
   members: [
-    { profileId: "britta", displayName: "Britta", role: "parent" },
-    { profileId: "calla", displayName: "Calla", role: "kid" },
+    { id: "britta", profileId: "britta", displayName: "Britta", role: "parent" },
+    { id: "calla", profileId: "calla", displayName: "Calla", role: "kid" },
   ],
   calendars: [{ id: "family@group.calendar.google.com", label: "Family", kind: "shared", owners: ["britta", "calla"] }],
 });

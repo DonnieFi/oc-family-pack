@@ -27,7 +27,7 @@ export function pageRole(client) {
 function writer(requester) {
     switch (requester.from) {
         case "discord":
-            return requester.member ? { role: requester.member.role, profileId: requester.member.profileId } : { role: "guest" };
+            return requester.member ? { role: requester.member.role, profileId: requester.member.id } : { role: "guest" };
         case "tool":
             return { role: "kid" };
         case "page":

@@ -17,7 +17,7 @@ const CALLA_DISCORD = "100000000000000001";
 const DONNIE_DISCORD = "100000000000000003";
 const OWNER: ScheduleCaller = { viewer: { kind: "owner" } };
 const GUEST: ScheduleCaller = { viewer: { kind: "person", username: undefined } };
-const CALLA: ScheduleCaller = { viewer: { kind: "person", username: "calla" }, me: "calla" };
+const CALLA: ScheduleCaller = { viewer: { kind: "member", id: "calla" }, me: "calla" };
 
 type Raw = Record<string, unknown>;
 const at = (date: string, clock: string) => ({ dateTime: `${date}T${clock}:00-04:00` });

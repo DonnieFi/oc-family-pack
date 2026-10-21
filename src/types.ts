@@ -31,8 +31,13 @@ export type MemberDevice = {
 };
 
 export type MemberConfig = {
-  profileId: string;
+  /** The internal key: owners, briefs, delivery and Today use it. Defaults to profileId, else a slug of the name. */
+  id: string;
+  /** The Control UI login (trusted-proxy username). Optional and never derived. */
+  profileId?: string;
   displayName: string;
+  /** Stored on the card only. Nothing in the plugin sends email or shows it. */
+  email?: string;
   color?: string;
   role: MemberRole;
   /** Discord sender id. Stays in config; never copied onto the week payload. */

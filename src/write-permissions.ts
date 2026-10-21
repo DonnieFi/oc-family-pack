@@ -39,7 +39,7 @@ export function pageRole(client: { scopes?: readonly unknown[] } | undefined): "
 function writer(requester: Requester): { role: MemberRole; profileId?: string } {
   switch (requester.from) {
     case "discord":
-      return requester.member ? { role: requester.member.role, profileId: requester.member.profileId } : { role: "guest" };
+      return requester.member ? { role: requester.member.role, profileId: requester.member.id } : { role: "guest" };
     case "tool":
       return { role: "kid" };
     case "page":

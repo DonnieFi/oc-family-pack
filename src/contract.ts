@@ -106,7 +106,7 @@ const EmptyInput = Type.Object({}, { additionalProperties: false });
  */
 export const MemberSchema = Type.Object(
   {
-    profileId: Text(LABEL_MAX),
+    memberId: Text(LABEL_MAX),
     displayName: Text(LABEL_MAX),
     color: Text(100),
     role: MemberRole,
@@ -375,7 +375,7 @@ export const contract = defineFeatureContract({
   operations: {
     "family.members": {
       kind: "query",
-      description: "Read the roster a picker shows: profile id, display name, color, and role for each person.",
+      description: "Read the roster a picker shows: member id, display name, color, and role for each person.",
       input: EmptyInput,
       output: MembersPayloadSchema,
     },

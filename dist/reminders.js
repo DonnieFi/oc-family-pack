@@ -18,7 +18,7 @@ function roster(config) {
     return config.demo ? DEMO_MEMBERS : config.members;
 }
 function modeOf(member, stored) {
-    return stored[member.profileId] ?? member.reminders ?? "dm";
+    return stored[member.id] ?? member.reminders ?? "dm";
 }
 /** Timed events in the window, copies merged, owners in roster order. All-day events are not reminders. */
 async function reminderEvents(deps, now) {
@@ -32,8 +32,8 @@ async function reminderEvents(deps, now) {
     if (read.status !== "ok")
         return undefined;
     const byKey = new Map(calendars.map((calendar) => [calendar.key, calendar]));
-    const order = new Map(members.map((member, index) => [member.profileId, index]));
-    const names = new Map(members.map((member) => [member.profileId, member.displayName]));
+    const order = new Map(members.map((member, index) => [member.id, index]));
+    const names = new Map(members.map((member) => [member.id, member.displayName]));
     return groupCopies(read.data.filter((event) => !event.allDay && byKey.has(event.calendarKey))).map((group) => {
         const event = mergeGroup(group);
         const owners = [...new Set(group.flatMap((copy) => byKey.get(copy.calendarKey).owners))]
@@ -78,7 +78,7 @@ export async function reminderTick(deps, now) {
         return;
     }
     const stored = await store.reminderModes();
-    const members = new Map(roster(deps.config).map((member) => [member.profileId, member]));
+    const members = new Map(roster(deps.config).map((member) => [member.id, member]));
     const who = (event) => event.owners.map((owner) => owner.displayName);
     for (const due of dueReminders(events, now, deps.config.timezone, leads, quietOf(deps.config))) {
         const member = members.get(due.profileId);
@@ -144,24 +144,24 @@ export function maySetReminder(requester, target) {
     if (requester.from === "tool" && requester.senderIsOwner)
         return true;
     if (requester.from === "discord" && requester.member) {
-        return requester.member.profileId === target.profileId || requester.member.role === "parent";
+        return requester.member.id === target.id || requester.member.role === "parent";
     }
     return false;
 }
 /**
  * The chat tool behind "remind me in the channel" / "turn my reminders off".
- * `member` is a roster profileId, or "me" for the person asking on Discord.
+ * `member` is a roster member id, or "me" for the person asking on Discord.
  */
 export async function setReminderMode(store, members, requester, member, mode) {
-    const profileId = member === "me" ? (requester.from === "discord" ? requester.member?.profileId : undefined) : member;
+    const profileId = member === "me" ? (requester.from === "discord" ? requester.member?.id : undefined) : member;
     if (profileId === undefined)
         return { ok: false, text: "I can't tell who is asking. Name the person." };
-    const target = members.find((entry) => entry.profileId === profileId);
+    const target = members.find((entry) => entry.id === profileId);
     if (!target)
         return { ok: false, text: "That person is not in the family." };
     if (!maySetReminder(requester, target))
         return { ok: false, text: "Only a parent, or the person themselves, can change reminder delivery." };
-    await store.appendReminderMode(target.profileId, mode);
+    await store.appendReminderMode(target.id, mode);
     return { ok: true, text: MODE_LINE[mode](target.displayName) };
 }
 /** Facts the tool context carries. A direct-operator HTTP call has no Discord sender. */
@@ -172,7 +172,7 @@ export function reminderRequester(members, facts) {
 }
 export const SET_REMINDER_MODE_TOOL = "set_reminder_mode";
 export const SetReminderModeSchema = Type.Object({
-    member: Type.String({ minLength: 1, maxLength: 200, description: 'A roster profileId, or "me" for the person asking on Discord.' }),
+    member: Type.String({ minLength: 1, maxLength: 200, description: 'A roster member id, or "me" for the person asking on Discord.' }),
     mode: Type.Union([Type.Literal("dm"), Type.Literal("channel"), Type.Literal("off")], { description: "A direct message, a mention in the brief channel, or off." }),
 }, { additionalProperties: false });
 /** The agent's set_reminder_mode tool. The host checks the schema; this checks who is asking. */

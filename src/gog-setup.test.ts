@@ -208,7 +208,7 @@ test("openclaw family setup reads the host config, runs the gog checks, and fail
   const { program, actions } = fakeProgram();
   const host = {
     gateway: { bind: "loopback", controlUi: { experimental: { customPlugins: true } } },
-    plugins: { entries: { "oc-family-pack": { config: { members: [{ profileId: "alex", displayName: "Alex", role: "parent" }] } } } },
+    plugins: { entries: { "oc-family-pack": { config: { members: [{ id: "alex", profileId: "alex", displayName: "Alex", role: "parent" }] } } } },
   };
   registerFamilyCli(program, {
     run: async (_file, args) => {

@@ -29,7 +29,7 @@ export function checkKey(key) {
 export function requesterTag(requester) {
     switch (requester.from) {
         case "discord":
-            return requester.member ? `discord:${requester.member.profileId}` : "discord:unmatched";
+            return requester.member ? `discord:${requester.member.id}` : "discord:unmatched";
         case "tool":
             // Off Discord the owner flag names no person, and the hook can't see it on tools.invoke.
             return "tool";

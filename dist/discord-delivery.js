@@ -24,7 +24,7 @@ const NO_PERMISSION_CODES = new Set([50001, 50007, 50013]);
 const NO_CHANNEL_CODES = new Set([10003, 10013]);
 function discordTo(directory, target) {
     if ("member" in target) {
-        const id = directory.members.find((member) => member.profileId === target.member)?.discordId;
+        const id = directory.members.find((member) => member.id === target.member)?.discordId;
         return id ? `user:${id}` : undefined;
     }
     const id = Object.hasOwn(directory.channels, target.channel) ? directory.channels[target.channel] : undefined;

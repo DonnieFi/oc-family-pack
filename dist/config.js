@@ -52,9 +52,12 @@ export const ConfigSchema = Type.Object({
     gogPath: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
     writes: Type.Optional(Type.Union(WRITE_MODES.map((mode) => Type.Literal(mode)), { default: "confirm" })),
     members: Type.Optional(Type.Array(Type.Object({
-        profileId: Name,
-        displayName: Name,
-        role: Type.Union(ROLES.map((role) => Type.Literal(role))),
+        id: Type.Optional(Name),
+        name: Type.Optional(Name),
+        displayName: Type.Optional(Name),
+        profileId: Type.Optional(Name),
+        email: Type.Optional(Type.String({ minLength: 3, maxLength: 254 })),
+        role: Type.Optional(Type.Union(ROLES.map((role) => Type.Literal(role)))),
         color: Type.Optional(Type.String({ maxLength: 100, pattern: CSS_COLOR.source })),
         discordId: Type.Optional(Type.String({ minLength: 17, maxLength: 20, pattern: DISCORD_ID.source })),
         reminders: Type.Optional(Type.Union(REMINDER_MODES.map((mode) => Type.Literal(mode)), { default: "dm" })),
@@ -175,18 +178,48 @@ function device(value, field, memberName) {
         source: text(value.source, `${field}.source`),
     };
 }
+/** A plain load error, in ux's words, that names no field and repeats no value. */
+export class MemberError extends ConfigError {
+    constructor(message) {
+        super("members", "");
+        this.message = message;
+    }
+}
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** A lowercase slug of a name: "Riley Morgan" is riley-morgan. */
+export function slugOf(name) {
+    return name
+        .normalize("NFKD")
+        .replaceAll(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replaceAll(/[^a-z0-9._-]+/g, "-")
+        .replaceAll(/^-+|-+$/g, "");
+}
 function member(value, index) {
     const field = `members[${index}]`;
     if (!isRecord(value)) {
         throw new ConfigError(field, "must be an object");
     }
-    const displayName = text(value.displayName, `${field}.displayName`);
+    // name is the field; displayName is the 0.2.0 spelling and still loads.
+    const displayName = text(value.name ?? value.displayName, `${field}.name`);
+    const login = value.profileId === undefined ? undefined : profileId(value.profileId, `${field}.profileId`);
+    const id = value.id !== undefined ? profileId(value.id, `${field}.id`) : (login ?? slugOf(displayName));
+    if (id === "")
+        throw new ConfigError(`${field}.id`, `can't be made from the name ${displayName}. Give ${displayName} an id.`);
     const parsed = {
-        profileId: profileId(value.profileId, `${field}.profileId`),
+        id,
         displayName,
-        role: oneOf(value.role, `${field}.role`, ROLES),
+        role: value.role === undefined ? "guest" : oneOf(value.role, `${field}.role`, ROLES),
         devices: atMost(list(value.devices, `${field}.devices`), `${field}.devices`, MAX_DEVICES).map((entry, deviceIndex) => device(entry, `${field}.devices[${deviceIndex}]`, displayName)),
     };
+    if (login !== undefined)
+        parsed.profileId = login;
+    if (value.email !== undefined) {
+        const email = typeof value.email === "string" ? value.email.trim().toLowerCase() : "";
+        if (!EMAIL_SHAPE.test(email))
+            throw new MemberError(`${displayName}'s email doesn't look right. Check it and try again.`);
+        parsed.email = email;
+    }
     if (value.color !== undefined) {
         const color = text(value.color, `${field}.color`);
         if (!CSS_COLOR.test(color)) {
@@ -209,7 +242,7 @@ function calendar(value, index, profileIds) {
     const owners = list(value.owners, `${field}.owners`).map((owner, i) => {
         const id = profileId(owner, `${field}.owners[${i}]`);
         if (!profileIds.has(id)) {
-            throw new ConfigError(`${field}.owners[${i}]`, `"${id}" does not match any members[].profileId`);
+            throw new ConfigError(`${field}.owners[${i}]`, `"${id}" does not match any members[].id`);
         }
         return id;
     });
@@ -326,6 +359,19 @@ function unique(values, field) {
         seen.add(value);
     }
 }
+/** The first two members sharing a key, as ux's line. The line names people, never the shared value unless it is an id. */
+function clash(members, key, line) {
+    const seen = new Map();
+    for (const entry of members) {
+        const value = key(entry);
+        if (value === undefined)
+            continue;
+        const first = seen.get(value);
+        if (first !== undefined)
+            throw new MemberError(line(first, entry.displayName, value));
+        seen.set(value, entry.displayName);
+    }
+}
 export function parseConfig(raw) {
     const value = raw === undefined || raw === null ? {} : raw;
     if (!isRecord(value)) {
@@ -336,11 +382,12 @@ export function parseConfig(raw) {
     }
     const demo = value.demo === true;
     const members = list(value.members, "members").map(member);
-    // Profile ids are already lowercased, so "Riley" and "riley" collide here.
-    unique(members.map((entry) => entry.profileId), "members[].profileId");
+    // Ids and logins are already lowercased, so "Riley" and "riley" collide here.
+    clash(members, (entry) => entry.profileId, (a, b) => `${a} and ${b} have the same Control UI login. Each login can belong to only one person.`);
     // Discord identity is this id matched to the sender, so two members cannot share one.
-    unique(members.flatMap((entry) => (entry.discordId === undefined ? [] : [entry.discordId])), "members[].discordId");
-    const profileIds = new Set(members.map((entry) => entry.profileId));
+    clash(members, (entry) => entry.discordId, (a, b) => `${a} and ${b} have the same Discord account. Each Discord account can belong to only one person.`);
+    clash(members, (entry) => entry.id, (a, b, id) => `Two people would share the ID ${id} (${a} and ${b}). Give one of them its own id.`);
+    const profileIds = new Set(members.map((entry) => entry.id));
     const calendars = list(value.calendars, "calendars").map((entry, index) => calendar(entry, index, profileIds));
     unique(calendars.map((entry) => entry.id), "calendars[].id");
     const config = {

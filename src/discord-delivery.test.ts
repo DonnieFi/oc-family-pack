@@ -5,8 +5,8 @@ import { deliver, PRE_CONNECT_CODES, type DeliveryDirectory, type DiscordMessage
 
 const DIRECTORY: DeliveryDirectory = {
   members: [
-    { profileId: "donnie", discordId: "111111111111111111" },
-    { profileId: "penny" },
+    { id: "donnie", discordId: "111111111111111111" },
+    { id: "penny" },
   ],
   channels: { smithy: "222222222222222222" },
 };

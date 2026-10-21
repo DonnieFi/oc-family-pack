@@ -22,7 +22,7 @@ export type ScheduleCaller = { viewer: Viewer; me?: string };
 export function scheduleCaller(members: readonly MemberConfig[], context: FeatureInvocationContext): ScheduleCaller {
   const requester = resolveRequester(members, context);
   if (requester.from === "discord" && requester.member) {
-    return { viewer: { kind: "person", username: requester.member.profileId }, me: requester.member.profileId };
+    return { viewer: { kind: "member", id: requester.member.id }, me: requester.member.id };
   }
   return { viewer: requester.from === "tool" && requester.senderIsOwner ? { kind: "owner" } : GUEST };
 }
@@ -102,8 +102,8 @@ export async function buildSchedule(
   if (member === "me") {
     if (caller.me === undefined) return { error: ME_UNKNOWN };
     member = caller.me;
-  } else if (member !== undefined && !members.some((entry) => entry.profileId === member)) {
-    return { error: "member must be a profileId from the family roster, or \"me\"." };
+  } else if (member !== undefined && !members.some((entry) => entry.id === member)) {
+    return { error: "member must be an id from the family roster, or \"me\"." };
   }
   let start: string;
   let end: string;
@@ -143,8 +143,8 @@ export async function buildSchedule(
     return [classify(event, calendar.kind)];
   });
 
-  const order = new Map(members.map((entry, index) => [entry.profileId, index]));
-  const names = new Map(members.map((entry) => [entry.profileId, entry.displayName]));
+  const order = new Map(members.map((entry, index) => [entry.id, index]));
+  const names = new Map(members.map((entry) => [entry.id, entry.displayName]));
   const ownersOf = (group: readonly Copy[]) =>
     [...new Set(group.flatMap((copy) => byKey.get(copy.calendarKey)?.owners ?? []))]
       .filter((id) => names.has(id))

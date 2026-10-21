@@ -24,7 +24,7 @@ test("a minimal live config fills defaults and keys calendars by position", () =
       quietHours: { startHour: 22, endHour: 7 },
       schoolHints: [],
       closedDayPhrases: [],
-      members: [{ ...member, devices: [], reminders: "dm" }],
+      members: [{ ...member, id: "p1", devices: [], reminders: "dm" }],
       calendars: [
         { key: "c0", id: "family@group.calendar.google.com", label: "Family", kind: "shared", owners: [] },
         { key: "c1", id: "p1@example.com", label: "Parent", kind: "personal", owners: ["p1"] },
@@ -50,9 +50,9 @@ test("config errors name the offending field", () => {
     [{ timezone: "UTC", members: [{ ...member, role: "pet" }] }, "oc-family-pack config: members[0].role must be one of parent, kid, guest"],
     [
       { timezone: "UTC", members: [member], calendars: [{ id: "c1", label: "School", kind: "school", owners: ["p2"] }] },
-      'oc-family-pack config: calendars[0].owners[0] "p2" does not match any members[].profileId',
+      'oc-family-pack config: calendars[0].owners[0] "p2" does not match any members[].id',
     ],
-    [{ timezone: "UTC", members: [member, member] }, 'oc-family-pack config: members[].profileId contains "p1" more than once'],
+    [{ timezone: "UTC", members: [member, member] }, "Parent One and Parent One have the same Control UI login. Each login can belong to only one person."],
     [{ demo: true, location: { lat: 95, lon: 0 } }, "oc-family-pack config: location.lat must be a number between -90 and 90"],
     [{ demo: true, members: [{ ...member, color: "red;background:url(x)" }] }, "oc-family-pack config: members[0].color must be a CSS color such as #3b82f6 or oklch(0.72 0.14 245)"],
   ];
@@ -146,7 +146,7 @@ test("profile ids are stored lowercased and uniqueness runs after that", () => {
           { profileId: "riley", displayName: "Riley Two", role: "kid" },
         ],
       }),
-    { name: "ConfigError", message: 'oc-family-pack config: members[].profileId contains "riley" more than once' },
+    { name: "ConfigError", message: "Riley and Riley Two have the same Control UI login. Each login can belong to only one person." },
   );
 });
 
@@ -162,7 +162,7 @@ test("discord ids are unique across the roster", () => {
           { profileId: "alex", displayName: "Alex", role: "parent", discordId: snowflake },
         ],
       }),
-    { name: "ConfigError", message: `oc-family-pack config: members[].discordId contains "${snowflake}" more than once` },
+    { message: "Riley and Alex have the same Discord account. Each Discord account can belong to only one person." },
   );
 });
 
