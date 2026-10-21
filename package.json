@@ -14,7 +14,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && openclaw plugins build",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json && node --disable-warning=ExperimentalWarning scripts/isolated-openclaw.ts openclaw plugins build",
     "validate": "node --disable-warning=ExperimentalWarning scripts/isolated-openclaw.ts openclaw plugins validate --json",
     "pack": "openclaw plugins pack --json",
     "typecheck": "tsc -p tsconfig.json",

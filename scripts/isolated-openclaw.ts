@@ -11,6 +11,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isolatedGatewayEnv } from "./isolated-env.ts";
+import { guardRefusal, liveStateDir } from "./isolated-guard.ts";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -26,6 +27,13 @@ mkdirSync(stateDir, { recursive: true });
 // Keep the host log inside the temp dir. Otherwise it writes the shared
 // /tmp/openclaw log that a live Gateway also uses.
 writeFileSync(configPath, `${JSON.stringify({ logging: { file: join(root, "openclaw.log") } })}\n`);
+
+const refusal = guardRefusal({ stateDir, liveStateDir: liveStateDir(process.env), args: args.slice(1) });
+if (refusal) {
+  rmSync(root, { recursive: true, force: true });
+  console.error(`isolated-openclaw: ${refusal}`);
+  process.exit(1);
+}
 
 let code = 1;
 try {
