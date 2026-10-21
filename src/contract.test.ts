@@ -167,7 +167,7 @@ test("CalendarWrite rejects an unknown op, a missing or multi-line requestId, an
   assert.equal(Value.Check(CalendarWriteResultSchema, { ok: true, message: "x", eventId: "c0/e1" }), false);
 });
 
-test("the manifest marks the calendar write tools and set_reminder_mode optional, so they need tools.allow", async () => {
+test("the manifest marks the calendar write tools and set_reminder_mode optional, so they need tools.alsoAllow", async () => {
   const { readFileSync } = await import("node:fs");
   const manifest = JSON.parse(readFileSync(new URL("../openclaw.plugin.json", import.meta.url), "utf8")) as {
     contracts: { tools: string[] };

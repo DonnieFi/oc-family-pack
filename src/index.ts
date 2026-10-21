@@ -233,7 +233,7 @@ metadata.configSchema = { ...ConfigSchema };
 // The calendar write tools are registered with api.registerTool, not through the feature
 // contract, so they get no page session action. `openclaw plugins build` reads contracts.tools
 // from this list. optional: true becomes toolMetadata.<tool>.optional in the manifest, so these
-// side-effect tools reach the model only after the operator lists them in tools.allow.
+// side-effect tools reach the model only after the operator lists them in tools.alsoAllow.
 metadata.tools.push(
   {
     name: CALENDAR_CREATE_TOOL,
