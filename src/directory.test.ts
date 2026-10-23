@@ -168,8 +168,8 @@ test("devices keep an explicit id, reject a second copy of a MAC, and store a re
     () =>
       parseConfig({
         members: [
-          { id: "alex", name: "Alex", role: "parent", devices: [{ label: "Phone", primaryMac: MAC, source: "operator" }] },
-          { id: "sam", name: "Sam", role: "parent", devices: [{ label: "Phone", primaryMac: "aa:bb:cc:dd:ee:11", source: "operator" }] },
+          { id: "alex", name: "Alex", role: "parent", devices: [{ id: "phone", label: "Phone", primaryMac: MAC, source: "operator" }] },
+          { id: "sam", name: "Sam", role: "parent", devices: [{ id: "phone", label: "Phone", primaryMac: "aa:bb:cc:dd:ee:11", source: "operator" }] },
         ],
       }),
     /device id phone/,
@@ -194,7 +194,7 @@ test("devices keep an explicit id, reject a second copy of a MAC, and store a re
         ],
       }),
     (error: Error) => {
-      assert.match(error.message, /reserved address is not an IP address/);
+      assert.match(error.message, /reserved address must be an IPv4 address/);
       assert.equal(error.message.includes("not-an-ip"), false);
       return true;
     },
@@ -289,4 +289,47 @@ test("the directory methods return the roster to a parent and a preview that doe
   const demo = parseConfig({ demo: true, timezone: "UTC" });
   await directoryPreviewMethod(() => demo, () => raw)({ params: { op: "edit", edits: [{ id: "alex", login: "alex-home" }] }, respond });
   assert.match(JSON.stringify(seen[0]), /Turn demo off/);
+});
+
+
+test("legacy device labels migrate without collisions, data loss, or order dependence", () => {
+  const members = [
+    { name: "Alex", profileId: "alex", devices: [
+      { label: "Phone", primaryMac: "AA-BB-CC-DD-EE-02", source: "operator" },
+      { label: "Phone", primaryMac: "aa:bb:cc:dd:ee:01", source: "operator" },
+      { label: "Tablet", primaryMac: "aa:bb:cc:dd:ee:03", source: "operator" },
+    ] },
+    { name: "Sam", id: "person-sam", devices: [
+      { label: "Phone", primaryMac: "aa:bb:cc:dd:ee:04", source: "operator", sharedWith: ["alex"] },
+      { id: "alex-phone", label: "Explicit", primaryMac: "aa:bb:cc:dd:ee:05", source: "operator" },
+    ] },
+  ];
+  const original = structuredClone(members);
+  const ids = (raw: unknown[]) => Object.fromEntries(parseConfig({ members: raw }).members.flatMap(member => member.devices.map(d => [d.primaryMac, d.id])));
+  const before = ids(members);
+  assert.deepEqual(Object.values(before).sort(), ["alex-phone", "alex-phone-2", "alex-phone-3", "person-sam-phone", "tablet"]);
+  assert.deepEqual(ids(members.toReversed().map(m => ({ ...m, devices: m.devices.toReversed() }))), before);
+  const migration = planMaterialize(members);
+  assert.equal(migration.ok, true);
+  if (!migration.ok) return;
+  assert.deepEqual(ids(migration.members), before);
+  assert.deepEqual(members, original, "preview must not mutate input");
+  assert.deepEqual((migration.members as typeof members)[0]?.devices[0]?.primaryMac, "AA-BB-CC-DD-EE-02");
+  const again = planMaterialize(migration.members);
+  assert.equal(again.ok && again.changed, false);
+  const renamed = structuredClone(migration.members) as typeof members;
+  renamed[0]!.name = "Alex Morgan";
+  renamed[0]!.profileId = "new-login";
+  renamed[0]!.devices[0]!.label = "New phone label";
+  assert.deepEqual(ids(renamed), before);
+});
+
+test("reservations accept only strict IPv4 literals, never IPv6 or malformed addresses", () => {
+  const config = (address: string) => ({ members: [{ name: "Alex", devices: [{ label: "Phone", primaryMac: MAC, source: "operator", reservation: { address, source: "operator" } }] }] });
+  for (const address of ["192.168.1.40", "0.0.0.0", "255.255.255.255"]) {
+    assert.equal(parseConfig(config(address)).members[0]?.devices[0]?.reservation?.address, address);
+  }
+  for (const address of [":::", "1:2:3", "2001:db8::1", "2001:db8:0:0:0:0:0::", "::ffff:192.168.1.40", "256.1.1.1", "192.168.001.40", "192.168.1", "phone.lan", "192.168.1.40/24"]) {
+    assert.throws(() => parseConfig(config(address)), /must be an IPv4 address/, address);
+  }
 });

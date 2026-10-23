@@ -73,7 +73,7 @@ export const ConfigSchema = Type.Object({
             source: Name,
             sharedWith: Type.Optional(Type.Array(Name, { maxItems: MAX_MEMBERS })),
             reservation: Type.Optional(Type.Object({
-                address: Type.String({ minLength: 2, maxLength: 64 }),
+                address: Type.String({ minLength: 2, maxLength: 64, description: "Configured IPv4 address; IPv6 and observed addresses are not supported." }),
                 network: Type.Optional(Name),
                 source: Name,
             }, { additionalProperties: false })),
@@ -178,15 +178,6 @@ function atMost(items, field, max) {
     return items;
 }
 const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
-/** An IPv4 address, or a compressed-or-full IPv6 address. Hostnames are not addresses. */
-function isIpAddress(value) {
-    if (IPV4.test(value))
-        return true;
-    if (!value.includes(":") || !/^[0-9a-f:]+$/i.test(value))
-        return false;
-    const groups = value.split(":");
-    return groups.length >= 3 && groups.length <= 8 && groups.every((group) => /^[0-9a-f]{0,4}$/i.test(group));
-}
 function reservation(value, field, deviceLabel) {
     if (!isRecord(value))
         throw new ConfigError(field, "must be an object");
@@ -194,8 +185,8 @@ function reservation(value, field, deviceLabel) {
         throw new ConfigError(field, "records a configured reservation only. An observed address is not stored");
     }
     const address = text(value.address, `${field}.address`);
-    if (!isIpAddress(address)) {
-        throw new MemberError(`${deviceLabel}'s reserved address is not an IP address. Check it and try again.`);
+    if (!IPV4.test(address)) {
+        throw new MemberError(`${deviceLabel}'s reserved address must be an IPv4 address. Check it and try again.`);
     }
     const parsed = { address, source: text(value.source, `${field}.source`) };
     if (value.network !== undefined)
@@ -465,6 +456,41 @@ function clash(members, key, line) {
         seen.set(value, entry.displayName);
     }
 }
+/** Preserve unambiguous legacy ids; disambiguate omitted ids by owner.
+ * Explicit ids are never rewritten, even when duplicated (validation rejects them).
+ * Materialize before editing labels/MACs or expanding the roster to freeze these ids.
+ */
+function resolveLegacyDeviceIds(members, rawMembers) {
+    const counts = new Map();
+    for (const member of members)
+        for (const entry of member.devices) {
+            counts.set(entry.id, (counts.get(entry.id) ?? 0) + 1);
+        }
+    const reserved = new Set(counts.keys());
+    const pending = [];
+    for (const [memberIndex, member] of members.entries()) {
+        const raw = rawMembers[memberIndex];
+        const devices = isRecord(raw) && Array.isArray(raw.devices) ? raw.devices : [];
+        for (const [deviceIndex, entry] of member.devices.entries()) {
+            const original = devices[deviceIndex];
+            if (!isRecord(original) || original.id !== undefined || counts.get(entry.id) === 1)
+                continue;
+            pending.push({ owner: member.id, device: entry });
+        }
+    }
+    // Stable even if the operator reorders people or same-label devices. MACs
+    // break ties but never appear in the generated id or contact-tool output.
+    pending.sort((a, b) => `${a.owner}:${a.device.primaryMac}`.localeCompare(`${b.owner}:${b.device.primaryMac}`));
+    for (const { owner, device } of pending) {
+        const base = `${owner}-${device.id}`.slice(0, 180);
+        let candidate = base;
+        let suffix = 2;
+        while (reserved.has(candidate))
+            candidate = `${base}-${suffix++}`;
+        device.id = candidate;
+        reserved.add(candidate);
+    }
+}
 /** One device record per id and per MAC. A shared device lists the other people; it is not copied. */
 function checkDevices(members) {
     const memberIds = new Set(members.map((entry) => entry.id));
@@ -526,7 +552,8 @@ export function parseConfig(raw) {
         throw new ConfigError("demo", "must be true or false");
     }
     const demo = value.demo === true;
-    const members = list(value.members, "members").map(member);
+    const rawMembers = list(value.members, "members");
+    const members = rawMembers.map(member);
     // Ids and logins are already lowercased, so "Riley" and "riley" collide here.
     clash(members, (entry) => entry.profileId, (a, b) => `${a} and ${b} have the same Control UI login. Each login can belong to only one person.`);
     // Discord identity is this id matched to the sender, so two members cannot share one.
@@ -534,6 +561,7 @@ export function parseConfig(raw) {
     clash(members, (entry) => entry.id, (a, b, id) => `Two people would share the ID ${id} (${a} and ${b}). Give one of them its own id.`);
     clash(members, (entry) => entry.gatewayProfileId, (a, b) => `${a} and ${b} have the same Gateway profile. Each profile can belong to only one person.`);
     checkIdentityNames(members);
+    resolveLegacyDeviceIds(members, rawMembers);
     checkDevices(members);
     const profileIds = new Set(members.map((entry) => entry.id));
     const calendars = list(value.calendars, "calendars").map((entry, index) => calendar(entry, index, profileIds));

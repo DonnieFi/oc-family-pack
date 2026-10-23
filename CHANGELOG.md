@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Legacy devices with repeated labels now load and materialize collision-free ids. Unique label-based ids and all explicit ids are preserved. Migration is deterministic across roster/device ordering, and freezes ids before later renames.
+- Device reservations now accept only IPv4 literals. IPv6 (including previously accepted malformed literals) is refused with an explicit IPv4 error; remove or replace existing IPv6 reservations before upgrading.
+- The isolated smoke now verifies host-enforced People directory/preview access for parent and read-only users. Beta.4 integration steps are documented; the tested host pin stays beta.3 until beta.4 is released and proved.
+
 - Calendar writes from the agent now default to `confirm`. If you never set `writes`, the agent will ask for a parent's approval before it changes a calendar. Set `writes: "on"` to keep the old behaviour.
 - Needs OpenClaw `2026.10.10-beta.3` or newer, before 2026.11. Tested on `2026.10.10-beta.3`. npm's `>=2026.10.5 <2026.11` range does not accept that beta, so the peer range names it. npm `latest` on 2026-10-23 is `2026.10.6`, which is an earlier semver and is not this build. An install on OpenClaw 2026.9.x has to upgrade OpenClaw first.
 - A member needs only a name. `email`, `phone`, `discordId` and `profileId` are optional. Setup warns about a member with no Discord account; it does not refuse them. Email and phone are stored and are not notification routes. They stay off the week, the Family page, briefs, and logs. The People page shows them to a parent and previews a config patch. It does not write the Gateway config. `family_contact` returns one person's card only when the host sets `senderIsOwner`. `family.week` and `family.members` renamed each member's `profileId` to `memberId`. The values are the same. A client that reads `profileId` from either has to switch to `memberId`.

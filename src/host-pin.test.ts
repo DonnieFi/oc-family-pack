@@ -23,6 +23,9 @@ test("the pinned host is the tested beta, and a plain 2026.10 range does not acc
   assert.equal(pkg.peerDependencies.openclaw, `>=${HOST} <2026.11`);
   assert.equal(satisfies(HOST, PLAIN), false);
   assert.equal(satisfies(HOST, pkg.peerDependencies.openclaw), true);
+  // Range admission is not a compatibility claim: beta.4 still needs a real smoke.
+  assert.equal(satisfies("2026.10.10-beta.4", pkg.peerDependencies.openclaw), true);
+  assert.equal(satisfies("2026.10.10-beta.4", pkg.openclaw.install.minHostVersion), true);
   assert.equal(satisfies("2026.10.6", pkg.peerDependencies.openclaw), false);
   assert.equal(satisfies("2026.10.10", pkg.peerDependencies.openclaw), true);
   assert.equal(satisfies("2026.11.0", pkg.peerDependencies.openclaw), false);

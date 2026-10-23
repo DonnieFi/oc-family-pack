@@ -2,7 +2,7 @@
 // plugin already uses and apply an edit through parseConfig. They print a
 // config patch. They do not write the Gateway config.
 
-import { ConfigError, MemberError, parseConfig, readMemberIdentity, slugOf } from "./config.ts";
+import { ConfigError, MemberError, parseConfig, readMemberIdentity } from "./config.ts";
 import { DIRECTORY_PERSISTENCE } from "./directory-contract.ts";
 import type { MemberConfig, MemberRole, ReminderMode } from "./types.ts";
 
@@ -79,6 +79,7 @@ export const AMBIGUOUS_REFERENCE = (token: string) => `\`${token}\` matches more
 
 /** Write the id the plugin already uses onto any member or device that omitted one. */
 export function materializeMembers(members: readonly unknown[]): { members: unknown[]; changed: boolean } {
+  const effective = parseConfig({ members }).members;
   let changed = false;
   const next = members.map((entry, index) => {
     if (!isRecord(entry)) return entry;
@@ -88,14 +89,15 @@ export function materializeMembers(members: readonly unknown[]): { members: unkn
       changed = true;
     }
     if (Array.isArray(copy.devices)) {
-      copy.devices = copy.devices.map((device) => {
+      copy.devices = copy.devices.map((device, deviceIndex) => {
         if (!isRecord(device)) return device;
         if (typeof device.id === "string" && device.id.trim() !== "") return device;
-        if (typeof device.label !== "string" || slugOf(device.label) === "") return device;
+        const id = effective[index]?.devices[deviceIndex]?.id;
+        if (id === undefined) return device;
         changed = true;
         const rest = { ...device };
         delete rest.id;
-        return { id: slugOf(device.label), ...rest };
+        return { id, ...rest };
       });
     }
     return copy;

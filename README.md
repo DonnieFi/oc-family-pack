@@ -271,6 +271,19 @@ npm run check      # typecheck, script typecheck, tests, validate, build --check
 
 After browser-only changes, rebuild and use **Plugins → Advanced → Customize UI → Reload plugin UI**. Backend changes need a plugin reload.
 
+### Preparing for beta.4
+
+Beta.4 is the next integration target, not a tested host yet. The current peer range admits `2026.10.10-beta.4`; that alone does not prove SDK compatibility. Keep the dev/build/minimum-host pins on the last tested beta until the release exists.
+
+When beta.4 is published:
+
+1. Update the exact `openclaw` devDependency and lockfile, `openclaw.build.openclawVersion`, `install.minHostVersion`, `compat.pluginApi`, the peer lower bound, and `src/host-pin.test.ts` together. Update the tested-version documentation only after proof passes.
+2. Run `npm run build` and `npm run check`, then `OCFP_SMOKE_HOST_BIN=/absolute/path/to/beta.4/openclaw npm run smoke` against that exact host. The smoke uses isolated state and synthetic calendars, and now checks People RPC access for parent/read-only roles.
+3. Back up the intended host. Preview and apply `openclaw family setup --materialize-ids` so person/device ids are explicit before renaming or extending the roster. Inspect the whole-list patch before applying it.
+4. Pilot with briefs/reminders disabled (omit delivery schedules/summary channel and set member reminders to `off`) and `writes: "off"`. Check the rendered Family and People pages, parent/kid access, and the intended calendar reads before enabling writes or delivery.
+
+People currently previews patches for existing records; it does not save config or import an existing dashboard. Add people with setup and devices through plugin config. The plugin roster is the one directory: do not maintain a second competing contact store. Device reservations are IPv4-only stored metadata; they never configure the router. Existing IPv6 reservations must be removed or replaced with IPv4 before upgrading.
+
 OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Tested on OpenClaw `2026.10.10-beta.3`.** A plain npm range `>=2026.10.5 <2026.11` does not accept that beta, so this package names the beta in its peer range. After you run `openclaw update`, run the smoke to check this plugin against your new host:
 
 ```bash

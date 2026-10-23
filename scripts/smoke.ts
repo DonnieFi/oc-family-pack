@@ -26,6 +26,7 @@ import { MAX_WEEK_EVENTS, WEEK_METHOD, WeekPayloadSchema } from "../src/contract
 import { buildWeekPayload, fitsHostLimits, jsonNodeCount } from "../src/payload.ts";
 import { planAccess } from "../src/access.ts";
 import { planSetup } from "../src/setup.ts";
+import { DIRECTORY_METHOD, DIRECTORY_PREVIEW_METHOD } from "../src/directory-contract.ts";
 import { POLL_MS } from "../src/calendar-watch.ts";
 import { addDays } from "../src/week.ts";
 import { pickRefusal } from "./smoke-ports.ts";
@@ -1332,6 +1333,33 @@ async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port:
     fail(step, `alex has no operator.write after users.setRole parent: ${JSON.stringify(scopesOf(alexAgain))}`);
   }
   note(`users.setRole made alex a parent: ${scopesOf(alexAgain).join(", ")}`, step);
+  // Exercise the new People RPCs against host authorization, not only handlers.
+  const directoryCalls: [string, unknown][] = [[DIRECTORY_METHOD, {}], [DIRECTORY_PREVIEW_METHOD, { op: "materialize" }]];
+  for (const user of ["riley", "alex"]) {
+    const results: Frame[] = [];
+    for (const [method, params] of directoryCalls) {
+      // session() stops at the first refusal. Each denied method needs its own
+      // connection so both authorization checks actually reach the host.
+      const frames = await proxiedSession(port, user, [[method, params]]);
+      connected(frames, `${user} People access`);
+      const frame = frames[1];
+      if (user === "riley") {
+        if (frame?.ok !== false || !/scope/i.test(frame.error?.message ?? "") || frame.payload !== undefined) {
+          fail(step, `read-only Riley was not denied ${method} by host scope enforcement`);
+        }
+      } else if (frame?.ok !== true) {
+        fail(step, `parent Alex could not call ${method}: ${JSON.stringify(frame)}`);
+      }
+      if (frame) results.push(frame);
+    }
+    if (user === "alex") {
+      const directory = results[0]?.payload as { members?: unknown[]; demo?: boolean };
+      if (directory.demo !== true || directory.members?.length !== 4) fail(step, "People did not return the four demo members");
+      const preview = results[1]?.payload as { ok?: boolean; error?: string; patch?: string };
+      if (preview.ok !== false || !/demo/i.test(preview.error ?? "") || preview.patch !== undefined) fail(step, "People must refuse to preview a real patch in demo mode");
+    }
+  }
+  note("People directory and patch preview are denied to read-only Riley; parent Alex can view the demo directory, with real patch preview refused in demo mode", step);
   // alex now holds operator.write, so a refusal here can only mean the action is gone.
   const oldWeek = (await proxiedSession(port, "alex", [["plugins.sessionAction", { pluginId: PLUGIN_ID, actionId: "family.week", payload: {} }]]))[1];
   const oldResult = oldWeek?.payload as { ok?: boolean } | undefined;

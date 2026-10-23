@@ -1,7 +1,7 @@
 // The roster is the contact directory. These helpers materialize the ids the
 // plugin already uses and apply an edit through parseConfig. They print a
 // config patch. They do not write the Gateway config.
-import { ConfigError, MemberError, parseConfig, readMemberIdentity, slugOf } from "./config.js";
+import { ConfigError, MemberError, parseConfig, readMemberIdentity } from "./config.js";
 import { DIRECTORY_PERSISTENCE } from "./directory-contract.js";
 function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -40,6 +40,7 @@ export function matchMemberIndexes(members, token) {
 export const AMBIGUOUS_REFERENCE = (token) => `\`${token}\` matches more than one person. Use a member id that belongs to only one of them.`;
 /** Write the id the plugin already uses onto any member or device that omitted one. */
 export function materializeMembers(members) {
+    const effective = parseConfig({ members }).members;
     let changed = false;
     const next = members.map((entry, index) => {
         if (!isRecord(entry))
@@ -50,17 +51,18 @@ export function materializeMembers(members) {
             changed = true;
         }
         if (Array.isArray(copy.devices)) {
-            copy.devices = copy.devices.map((device) => {
+            copy.devices = copy.devices.map((device, deviceIndex) => {
                 if (!isRecord(device))
                     return device;
                 if (typeof device.id === "string" && device.id.trim() !== "")
                     return device;
-                if (typeof device.label !== "string" || slugOf(device.label) === "")
+                const id = effective[index]?.devices[deviceIndex]?.id;
+                if (id === undefined)
                     return device;
                 changed = true;
                 const rest = { ...device };
                 delete rest.id;
-                return { id: slugOf(device.label), ...rest };
+                return { id, ...rest };
             });
         }
         return copy;

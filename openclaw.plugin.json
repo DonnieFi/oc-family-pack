@@ -448,7 +448,8 @@
                       "address": {
                         "type": "string",
                         "minLength": 2,
-                        "maxLength": 64
+                        "maxLength": 64,
+                        "description": "Configured IPv4 address; IPv6 and observed addresses are not supported."
                       },
                       "network": {
                         "type": "string",
