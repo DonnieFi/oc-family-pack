@@ -13,11 +13,11 @@ Each person is a member in `plugins.entries.oc-family-pack.config.members`.
 - **color** (optional). A CSS color, such as `#3b82f6`. The page uses it. The setup command does not set it.
 - **discordId** (optional). 17 to 20 digits. It stays in config. The week payload never includes it.
 - **reminders** (optional). `dm`, `channel`, or `off`. Omitted means `dm`. Change it later in chat with `set_reminder_mode`. The setup command does not set it.
-- **devices** (optional). `label`, `primaryMac`, `aliasMacs`, and `source`. A MAC is a device signal. It is normalized when config is parsed, and it stays off the week payload. The setup command does not set it.
+- **devices** (optional). `id`, `label`, `hostname`, `primaryMac`, `aliasMacs`, `source`, `sharedWith`, and `reservation`. A MAC is a device signal. It is normalized when config is parsed, and it stays off the week payload. An omitted device `id` loads as a slug of the label; `--materialize-ids` writes it down. `sharedWith` lists other member ids on that one record. A second record with the same MAC is refused. `reservation` is an IP address the operator wrote down (`address`, `source`, and an optional `network`). An observed address is not stored, and a reservation does not change the router. The setup command does not set devices.
 
 - **email** (optional). Trimmed and stored in lower case. It is only stored on the person's card. Nothing in this plugin sends email, and no output shows it. Two people may share one.
 
-Someone with no email and no Discord still loads, and setup says: Riley has no email or Discord, so the bots can't reach them. Add either one to fix this. A kid's card doesn't need a parent's Discord. Sign-in is `profileId`; no phone is stored.
+Someone with no Discord account still loads, and setup says: Riley has no Discord account, so this version can't send them reminders or briefs. Email and phone stay on the contact card and are not notification routes. A kid's card doesn't need a parent's Discord. Sign-in is `profileId` or `login`. `phone` is optional and is only stored.
 
 Usernames use lower-case letters, numbers, dots, dashes, or underscores, up to 32 characters. The command says: Usernames use lower-case letters, numbers, dots, dashes or underscores. Try `alex`, not `Alex Smith`. Each person sees their username as their name in the Control UI, so use what the family calls them.
 
@@ -71,7 +71,7 @@ Discord is how this version knows who "me" is in chat. The Family page works wit
 openclaw family setup --kid riley --email riley=riley@example.com
 ```
 
-Setup checks the shape and does not repeat a bad address. The checklist and the lines above the patch do not print addresses. The patch JSON does, because `openclaw config patch` replaces the whole members list, and leaving an address out would delete it. An email stays on the card. The week, the page, and briefs do not show it. `family_contact` can read one person's email, and only for the operator.
+Setup checks the shape and does not repeat a bad address. The checklist and the lines above the patch do not print addresses. The patch JSON does, because `openclaw config patch` replaces the whole members list, and leaving an address out would delete it. An email stays on the card. The week, the Family page, and briefs do not show it. The People page shows it to a parent. `family_contact` can read one person's email, and only when the host marks the caller as the operator.
 
 ## The checklist
 

@@ -22,8 +22,8 @@ const Name = Type.String({ minLength: 1, maxLength: 200 });
 const MacInput = Type.String({ minLength: 1, maxLength: 64 });
 // Structural rules the host checks before the plugin loads. parseConfig adds the
 // cross-field rules (zone validity, owner references, uniqueness), lowercases
-// roster ids, normalizes MACs, and fills defaults. phone and aliases
-// are left to the beads that read them.
+// roster ids, normalizes MACs, and fills defaults. Phone is stored on the
+// card. An observed address is rejected; a reservation is only stored.
 export const ConfigSchema = Type.Object({
     demo: Type.Optional(Type.Boolean({ default: false })),
     timezone: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
@@ -56,16 +56,27 @@ export const ConfigSchema = Type.Object({
         name: Type.Optional(Name),
         displayName: Type.Optional(Name),
         profileId: Type.Optional(Name),
+        login: Type.Optional(Name),
+        gatewayProfileId: Type.Optional(Name),
         email: Type.Optional(Type.String({ minLength: 3, maxLength: 254 })),
+        phone: Type.Optional(Type.String({ minLength: 7, maxLength: 32 })),
         role: Type.Optional(Type.Union(ROLES.map((role) => Type.Literal(role)))),
         color: Type.Optional(Type.String({ maxLength: 100, pattern: CSS_COLOR.source })),
         discordId: Type.Optional(Type.String({ minLength: 17, maxLength: 20, pattern: DISCORD_ID.source })),
         reminders: Type.Optional(Type.Union(REMINDER_MODES.map((mode) => Type.Literal(mode)), { default: "dm" })),
         devices: Type.Optional(Type.Array(Type.Object({
+            id: Type.Optional(Name),
             label: Name,
+            hostname: Type.Optional(Name),
             primaryMac: MacInput,
             aliasMacs: Type.Optional(Type.Array(MacInput, { maxItems: MAX_ALIAS_MACS })),
             source: Name,
+            sharedWith: Type.Optional(Type.Array(Name, { maxItems: MAX_MEMBERS })),
+            reservation: Type.Optional(Type.Object({
+                address: Type.String({ minLength: 2, maxLength: 64 }),
+                network: Type.Optional(Name),
+                source: Name,
+            }, { additionalProperties: false })),
         }, { additionalProperties: false }), { maxItems: MAX_DEVICES })),
     }, { additionalProperties: false }), { maxItems: MAX_MEMBERS })),
     calendars: Type.Optional(Type.Array(Type.Object({
@@ -166,17 +177,57 @@ function atMost(items, field, max) {
     }
     return items;
 }
+const IPV4 = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+/** An IPv4 address, or a compressed-or-full IPv6 address. Hostnames are not addresses. */
+function isIpAddress(value) {
+    if (IPV4.test(value))
+        return true;
+    if (!value.includes(":") || !/^[0-9a-f:]+$/i.test(value))
+        return false;
+    const groups = value.split(":");
+    return groups.length >= 3 && groups.length <= 8 && groups.every((group) => /^[0-9a-f]{0,4}$/i.test(group));
+}
+function reservation(value, field, deviceLabel) {
+    if (!isRecord(value))
+        throw new ConfigError(field, "must be an object");
+    if ("observed" in value || "observedAddress" in value) {
+        throw new ConfigError(field, "records a configured reservation only. An observed address is not stored");
+    }
+    const address = text(value.address, `${field}.address`);
+    if (!isIpAddress(address)) {
+        throw new MemberError(`${deviceLabel}'s reserved address is not an IP address. Check it and try again.`);
+    }
+    const parsed = { address, source: text(value.source, `${field}.source`) };
+    if (value.network !== undefined)
+        parsed.network = text(value.network, `${field}.network`);
+    return parsed;
+}
 function device(value, field, memberName) {
     if (!isRecord(value)) {
         throw new ConfigError(field, "must be an object");
     }
+    if ("observed" in value || "observedAddress" in value) {
+        throw new ConfigError(field, "records a configured reservation only. An observed address is not stored");
+    }
+    const label = text(value.label, `${field}.label`);
+    const id = value.id !== undefined ? profileId(value.id, `${field}.id`) : slugOf(label);
+    if (id === "")
+        throw new ConfigError(`${field}.id`, `can't be made from the label ${label}. Give ${label} an id.`);
     const aliasMacs = atMost(list(value.aliasMacs, `${field}.aliasMacs`), `${field}.aliasMacs`, MAX_ALIAS_MACS).map((mac, index) => macAddress(mac, `${field}.aliasMacs[${index}]`, memberName));
-    return {
-        label: text(value.label, `${field}.label`),
-        primaryMac: macAddress(value.primaryMac, `${field}.primaryMac`, memberName),
+    const primaryMac = macAddress(value.primaryMac, `${field}.primaryMac`, memberName);
+    const parsed = {
+        id,
+        label,
+        primaryMac,
         aliasMacs,
         source: text(value.source, `${field}.source`),
+        sharedWith: atMost(list(value.sharedWith, `${field}.sharedWith`), `${field}.sharedWith`, MAX_MEMBERS).map((owner, index) => profileId(owner, `${field}.sharedWith[${index}]`)),
     };
+    if (value.hostname !== undefined)
+        parsed.hostname = text(value.hostname, `${field}.hostname`);
+    if (value.reservation !== undefined)
+        parsed.reservation = reservation(value.reservation, `${field}.reservation`, label);
+    return parsed;
 }
 /** A plain load error, in ux's words, that names no field and repeats no value. */
 export class MemberError extends ConfigError {
@@ -186,12 +237,44 @@ export class MemberError extends ConfigError {
     }
 }
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_SHAPE = /^\+?[0-9][0-9 ().-]{5,22}[0-9]$/;
 /** Trimmed and lowercased, or a MemberError that does not repeat the address. */
 export function memberEmail(value, displayName) {
     const email = value.trim().toLowerCase();
     if (!EMAIL_SHAPE.test(email))
         throw new MemberError(`${displayName}'s email doesn't look right. Check it and try again.`);
     return email;
+}
+/** Trimmed, or a MemberError that does not repeat the number. Stored only; nothing sends it. */
+export function memberPhone(value, displayName) {
+    const phone = value.trim();
+    if (!PHONE_SHAPE.test(phone))
+        throw new MemberError(`${displayName}'s phone doesn't look right. Check it and try again.`);
+    return phone;
+}
+/**
+ * The household id, the login, and whether `id` was written down.
+ * `login` and `profileId` are the same trusted-proxy username. An omitted id
+ * is still the login, else a slug of the name, so an old roster keeps its owners.
+ */
+export function readMemberIdentity(value, field) {
+    const displayName = text(value.name ?? value.displayName, `${field}.name`);
+    const fromLogin = value.login === undefined ? undefined : profileId(value.login, `${field}.login`);
+    const fromProfile = value.profileId === undefined ? undefined : profileId(value.profileId, `${field}.profileId`);
+    if (fromLogin !== undefined && fromProfile !== undefined && fromLogin !== fromProfile) {
+        throw new MemberError(`${displayName}'s login and profileId don't match. Use one login.`);
+    }
+    const login = fromLogin ?? fromProfile;
+    const explicitId = value.id !== undefined && !(typeof value.id === "string" && value.id.trim() === "");
+    const id = explicitId ? profileId(value.id, `${field}.id`) : (login ?? slugOf(displayName));
+    if (id === "")
+        throw new ConfigError(`${field}.id`, `can't be made from the name ${displayName}. Give ${displayName} an id.`);
+    const identity = { displayName, id, explicitId };
+    if (login !== undefined)
+        identity.login = login;
+    if (value.gatewayProfileId !== undefined)
+        identity.gatewayProfileId = text(value.gatewayProfileId, `${field}.gatewayProfileId`);
+    return identity;
 }
 /** A lowercase slug of a name: "Riley Morgan" is riley-morgan. */
 export function slugOf(name) {
@@ -208,23 +291,27 @@ function member(value, index) {
         throw new ConfigError(field, "must be an object");
     }
     // name is the field; displayName is the 0.2.0 spelling and still loads.
-    const displayName = text(value.name ?? value.displayName, `${field}.name`);
-    const login = value.profileId === undefined ? undefined : profileId(value.profileId, `${field}.profileId`);
-    const id = value.id !== undefined ? profileId(value.id, `${field}.id`) : (login ?? slugOf(displayName));
-    if (id === "")
-        throw new ConfigError(`${field}.id`, `can't be made from the name ${displayName}. Give ${displayName} an id.`);
+    const identity = readMemberIdentity(value, field);
+    const { displayName, id } = identity;
     const parsed = {
         id,
         displayName,
         role: value.role === undefined ? "guest" : oneOf(value.role, `${field}.role`, ROLES),
         devices: atMost(list(value.devices, `${field}.devices`), `${field}.devices`, MAX_DEVICES).map((entry, deviceIndex) => device(entry, `${field}.devices[${deviceIndex}]`, displayName)),
     };
-    if (login !== undefined)
-        parsed.profileId = login;
+    if (identity.login !== undefined)
+        parsed.profileId = identity.login;
+    if (identity.gatewayProfileId !== undefined)
+        parsed.gatewayProfileId = identity.gatewayProfileId;
     if (value.email !== undefined) {
         if (typeof value.email !== "string")
             throw new MemberError(`${displayName}'s email doesn't look right. Check it and try again.`);
         parsed.email = memberEmail(value.email, displayName);
+    }
+    if (value.phone !== undefined) {
+        if (typeof value.phone !== "string")
+            throw new MemberError(`${displayName}'s phone doesn't look right. Check it and try again.`);
+        parsed.phone = memberPhone(value.phone, displayName);
     }
     if (value.color !== undefined) {
         const color = text(value.color, `${field}.color`);
@@ -378,6 +465,58 @@ function clash(members, key, line) {
         seen.set(value, entry.displayName);
     }
 }
+/** One device record per id and per MAC. A shared device lists the other people; it is not copied. */
+function checkDevices(members) {
+    const memberIds = new Set(members.map((entry) => entry.id));
+    const deviceIds = new Map();
+    const macs = new Map();
+    for (const member of members) {
+        const ownIds = new Set();
+        const ownMacs = new Set();
+        for (const entry of member.devices) {
+            if (ownIds.has(entry.id))
+                throw new MemberError(`${member.displayName} has two devices with the id ${entry.id}. Give one of them its own id.`);
+            ownIds.add(entry.id);
+            const otherDevice = deviceIds.get(entry.id);
+            if (otherDevice !== undefined) {
+                throw new MemberError(`${member.displayName} and ${otherDevice} both have a device id ${entry.id}. A shared device is one record with sharedWith, not a second copy.`);
+            }
+            deviceIds.set(entry.id, member.displayName);
+            for (const mac of [entry.primaryMac, ...entry.aliasMacs]) {
+                if (ownMacs.has(mac))
+                    throw new MemberError(`${member.displayName}'s ${entry.label} lists the same MAC twice.`);
+                ownMacs.add(mac);
+                const otherMac = macs.get(mac);
+                if (otherMac !== undefined) {
+                    throw new MemberError(`${member.displayName} and ${otherMac} have devices that use the same MAC. A shared device is one record with sharedWith, not a second copy.`);
+                }
+                macs.set(mac, member.displayName);
+            }
+            const shares = new Set();
+            for (const share of entry.sharedWith) {
+                if (share === member.id)
+                    throw new MemberError(`${member.displayName}'s ${entry.label} already belongs to ${member.displayName}. sharedWith names the other people.`);
+                if (!memberIds.has(share))
+                    throw new MemberError(`${member.displayName}'s ${entry.label} shares with ${share}, and that person is not in the family.`);
+                if (shares.has(share))
+                    throw new MemberError(`${member.displayName}'s ${entry.label} repeats ${share} in sharedWith.`);
+                shares.add(share);
+            }
+        }
+    }
+}
+/** An id and someone else's login must not be the same string, or a reference would name two people. */
+function checkIdentityNames(members) {
+    for (const member of members) {
+        for (const other of members) {
+            if (other.id === member.id)
+                continue;
+            if (other.profileId === member.id) {
+                throw new MemberError(`${member.id} is ${member.displayName}'s id and ${other.displayName}'s login. Use different values so a reference names one person.`);
+            }
+        }
+    }
+}
 export function parseConfig(raw) {
     const value = raw === undefined || raw === null ? {} : raw;
     if (!isRecord(value)) {
@@ -393,6 +532,9 @@ export function parseConfig(raw) {
     // Discord identity is this id matched to the sender, so two members cannot share one.
     clash(members, (entry) => entry.discordId, (a, b) => `${a} and ${b} have the same Discord account. Each Discord account can belong to only one person.`);
     clash(members, (entry) => entry.id, (a, b, id) => `Two people would share the ID ${id} (${a} and ${b}). Give one of them its own id.`);
+    clash(members, (entry) => entry.gatewayProfileId, (a, b) => `${a} and ${b} have the same Gateway profile. Each profile can belong to only one person.`);
+    checkIdentityNames(members);
+    checkDevices(members);
     const profileIds = new Set(members.map((entry) => entry.id));
     const calendars = list(value.calendars, "calendars").map((entry, index) => calendar(entry, index, profileIds));
     unique(calendars.map((entry) => entry.id), "calendars[].id");

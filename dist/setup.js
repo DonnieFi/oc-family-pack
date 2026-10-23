@@ -3,6 +3,7 @@
 // here writes config, stores a password, or calls the Gateway.
 import { detectAccess, outsideSignIn, people, PROFILE_STEP, ROLES, SCOPES } from "./access.js";
 import { DISCORD_ID, MemberError, memberEmail, slugOf } from "./config.js";
+import { AMBIGUOUS_REFERENCE, MATERIALIZE_INTRO, matchMemberIndexes, planMaterialize } from "./directory.js";
 import { WEATHER_SETUP_HINT } from "./weather-ec.js";
 const CONFIG_PATH = "plugins.entries.oc-family-pack.config";
 const DISCORD_HELP = "Optional. In Discord, turn on Developer Mode, then right-click the person and pick Copy User ID.";
@@ -17,8 +18,8 @@ function record(value) {
 export function familyConfig(host) {
     return record(record(record(record(record(host).plugins).entries)["oc-family-pack"]).config);
 }
-/** ux's warning for a member the bots have no way to reach. Temporary wording is ux's call. */
-export const NO_CHANNEL = (name) => `${name} has no email or Discord, so the bots can't reach them. Add either one to fix this.`;
+/** Discord is the only delivery path. Email and phone are stored and do not make someone reachable. */
+export const NO_CHANNEL = (name) => `${name} has no Discord account, so this version can't send them reminders or briefs. Email and phone stay on the contact card and are not notification routes.`;
 /** The member's Control UI login, if it has one. Never derived. */
 function loginOf(member) {
     const id = record(member).profileId;
@@ -32,11 +33,11 @@ function nameOf(member) {
             return value.trim();
     return "";
 }
-/** Members with neither an email nor a Discord id. */
+/** Members with no Discord id. An email or a phone does not count as a way to reach them. */
 function unreachable(host) {
     const members = familyConfig(host).members;
     return (Array.isArray(members) ? members : [])
-        .filter((member) => record(member).email === undefined && record(member).discordId === undefined)
+        .filter((member) => record(member).discordId === undefined)
         .map((member) => NO_CHANNEL(nameOf(member)));
 }
 /** The key setup matches a member by: the login, else the id, else the slug of the name, as parseConfig derives it. */
@@ -160,47 +161,72 @@ function emailsOf(pairs) {
  * A Discord ID changes only that person's `discordId`. An email changes only that person's `email`.
  * The patch copies every stored field, including an email, because leaving one out would delete it.
  */
+function locate(members, token) {
+    const hits = matchMemberIndexes(members, token);
+    if (hits.length > 1)
+        return { error: AMBIGUOUS_REFERENCE(token) };
+    const index = hits[0];
+    return index === undefined ? undefined : { index };
+}
 function membersPatch(existing, list, ids, emails) {
-    const taken = new Set(existing.map(profileId));
-    const skipped = list.filter((person) => taken.has(person.name)).map((person) => `${person.name} is already set up, so that entry was left as it is.`);
-    const added = list
-        .filter((person) => !taken.has(person.name))
-        .map((person) => ({
-        profileId: person.name,
-        displayName: person.name[0]?.toUpperCase() + person.name.slice(1),
-        role: person.role,
-        ...(ids.has(person.name) ? { discordId: ids.get(person.name) } : {}),
-        ...(emails.has(person.name) ? { email: emails.get(person.name) } : {}),
-    }));
-    const known = new Set([...taken, ...added.map((member) => member.profileId)]);
-    const stranger = [...ids.keys(), ...emails.keys()].find((name) => !known.has(name));
-    if (stranger)
-        return { skipped, error: `\`${stranger}\` isn't in the family yet. Add them with \`--parent\`, \`--kid\` or \`--guest\` in the same command.` };
+    const skipped = [];
+    const added = [];
+    for (const person of list) {
+        const found = locate(existing, person.name);
+        if (found && "error" in found)
+            return { skipped, error: found.error };
+        if (found) {
+            skipped.push(`${person.name} is already set up, so that entry was left as it is.`);
+            continue;
+        }
+        added.push({
+            id: person.name,
+            profileId: person.name,
+            displayName: person.name[0]?.toUpperCase() + person.name.slice(1),
+            role: person.role,
+            ...(ids.has(person.name) ? { discordId: ids.get(person.name) } : {}),
+            ...(emails.has(person.name) ? { email: emails.get(person.name) } : {}),
+        });
+    }
+    const working = [...existing, ...added];
     let changed = added.length;
-    const kept = existing.map((entry) => {
-        const key = profileId(entry);
-        const discordId = ids.get(key);
-        const email = emails.get(key);
-        const current = record(entry);
+    const apply = (token, write) => {
+        const found = locate(working, token);
+        if (found === undefined)
+            return { error: `\`${token}\` isn't in the family yet. Add them with \`--parent\`, \`--kid\` or \`--guest\` in the same command.` };
+        if ("error" in found)
+            return found;
+        const current = record(working[found.index]);
         const next = { ...current };
-        let touched = false;
-        if (discordId !== undefined && current.discordId !== discordId) {
-            next.discordId = discordId;
-            touched = true;
-        }
-        if (email !== undefined && current.email !== email) {
-            next.email = email;
-            touched = true;
-        }
-        if (!touched)
-            return entry;
+        if (!write(next))
+            return undefined;
         changed += 1;
-        return next;
-    });
-    const members = [...kept, ...added];
+        working[found.index] = next;
+        return undefined;
+    };
+    for (const [token, discordId] of ids) {
+        const result = apply(token, (next) => {
+            if (next.discordId === discordId)
+                return false;
+            next.discordId = discordId;
+            return true;
+        });
+        if (result?.error)
+            return { skipped, error: result.error };
+    }
+    for (const [token, email] of emails) {
+        const result = apply(token, (next) => {
+            if (next.email === email)
+                return false;
+            next.email = email;
+            return true;
+        });
+        if (result?.error)
+            return { skipped, error: result.error };
+    }
     // parseConfig refuses a shared id, so catch it here instead of in the patch.
     const owners = new Map();
-    for (const member of members) {
+    for (const member of working) {
         const id = record(member).discordId;
         if (typeof id !== "string")
             continue;
@@ -211,7 +237,7 @@ function membersPatch(existing, list, ids, emails) {
     }
     if (changed === 0)
         return { skipped };
-    const patch = { plugins: { entries: { "oc-family-pack": { config: { members } } } } };
+    const patch = { plugins: { entries: { "oc-family-pack": { config: { members: working } } } } };
     return { skipped, patch: JSON.stringify(patch, null, 2) };
 }
 /** The Discord account the family uses: the only one configured, or OpenClaw's default. */
@@ -250,6 +276,21 @@ function discordHint(host) {
 export function planSetup(host, input, gog, hostZone) {
     const list = steps(host, gog, hostZone);
     const checklist = list.map((step) => `${step.name}: ${step.done ? "Done" : "To do"}`);
+    if (input.materializeIds) {
+        const namedPeople = (input.parent ?? []).length + (input.kid ?? []).length + (input.guest ?? []).length > 0;
+        if (namedPeople || (input.discord ?? []).length > 0 || (input.email ?? []).length > 0) {
+            return { ok: false, text: "Run `--materialize-ids` on its own." };
+        }
+        const config = familyConfig(host);
+        const existing = Array.isArray(config.members) ? config.members : [];
+        const calendars = Array.isArray(config.calendars) ? config.calendars : [];
+        const preview = planMaterialize(existing, calendars);
+        if (!preview.ok)
+            return { ok: false, text: preview.error };
+        if (!preview.changed)
+            return { ok: true, text: "Every member and device already has an id. No changes to make." };
+        return { ok: false, text: [MATERIALIZE_INTRO, "", PATCH_INTRO, `${preview.patch}\n`].join("\n") };
+    }
     const named = (input.parent ?? []).length + (input.kid ?? []).length + (input.guest ?? []).length > 0;
     const asked = named || (input.discord ?? []).length > 0 || (input.email ?? []).length > 0;
     if (asked) {

@@ -9,7 +9,7 @@ Version 0.2.0.
 [![Version](https://img.shields.io/github/package-json/v/DonnieFi/oc-family-pack?label=version&color=e08a3a)](package.json)
 [![Status](https://img.shields.io/badge/status-0.2.0-orange)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/github/license/DonnieFi/oc-family-pack?color=4ea674)](LICENSE)
-[![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%89%A5%202026.10.5-ff5c5c)](https://docs.openclaw.ai/plugins/feature-plugins)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%89%A5%202026.10.10--beta.3-ff5c5c)](https://docs.openclaw.ai/plugins/feature-plugins)
 [![Plugin type](https://img.shields.io/badge/plugin-feature-14b8a6)](https://docs.openclaw.ai/plugins/feature-plugins)
 [![Node](https://img.shields.io/badge/node-%E2%89%A5%2024.16-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
@@ -71,7 +71,7 @@ The pictures below are the demo week (Alex, Sam, Riley, and Jordan). Demo mode d
 
 | Requirement | Why |
 | --- | --- |
-| OpenClaw `2026.10.5` or newer, before `2026.11` | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Tested on `2026.10.5`; see [Development](#development) for the post-update smoke. |
+| OpenClaw `2026.10.10-beta.3` or newer, before `2026.11` | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Tested on `2026.10.10-beta.3`. npm `latest` `2026.10.6` is an earlier semver and is not this build. See [Development](#development) for the post-update smoke. |
 | Node.js `>=24.16.0 <25` or `>=26.1.0` | Matches the OpenClaw runtime |
 | [`gog`](https://github.com/openclaw/gogcli) with Calendar access | Reads and writes Google Calendar using your existing sign-in. `gog` runs on the Gateway host |
 | **Custom plugin UI** lab enabled | Required for native pages from non-bundled plugins |
@@ -113,7 +113,7 @@ Then open **Family** from the Control UI sidebar. The page is `/plugin?plugin=oc
 
 ## Configuration
 
-Family Pack reads `plugins.entries["oc-family-pack"].config`. Each person needs a `name`; `email`, `discordId`, and `profileId` are optional. Someone with no email and no Discord still loads, and setup warns that the bots can't reach them. `id` is the internal key (it defaults to `profileId`, else a slug of the name). The page and `family.members` call it `memberId`. `email` is stored on the card. The week, the page, briefs, and logs do not show it. Setup prints it back to the parent running it, inside the config patch. `family_contact` can read one person's email, and only for the operator. A `profileId`, when set, is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. Family Pack matches it exactly, so it must be the same name the Gateway signs that person in as. It is not the Gateway's internal profile id. A member id sent by the browser is not identity. A calendar's owners are member ids. A school calendar belongs to the student.
+Family Pack reads `plugins.entries["oc-family-pack"].config`. Each person needs a `name`; `email`, `phone`, `discordId`, and `profileId` are optional. Someone with no Discord account still loads, and setup warns that this version can't send them reminders or briefs. Email and phone are stored on the contact card and are not notification routes. `id` is the household person id. When it is omitted it still loads as the login, else a slug of the name, so an existing roster keeps its calendar owners. `openclaw family setup --materialize-ids` prints a patch that writes those ids down. After that, changing a name or a login does not change the id. The week page and `family.members` call it `memberId`. `email` and `phone` are stored on the card. The week, briefs, and logs do not show them. Setup prints an email back to the parent running it, inside the config patch. `family_contact` can read one person's email and phone, and only for the operator. A `profileId`, when set, is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. `login` is another name for that same field. Family Pack matches it exactly, so it must be the same name the Gateway signs that person in as. It is not the Gateway's internal profile id. `gatewayProfileId`, when set, is that internal profile id, and the page matches it only when the host attests the profile. A member id sent by the browser is not identity. A calendar's owners are member ids. A school calendar belongs to the student. The People page shows the same roster and previews a config patch. It does not write the Gateway config.
 
 ```json5
 {
@@ -271,7 +271,7 @@ npm run check      # typecheck, script typecheck, tests, validate, build --check
 
 After browser-only changes, rebuild and use **Plugins → Advanced → Customize UI → Reload plugin UI**. Backend changes need a plugin reload.
 
-OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Tested on OpenClaw `2026.10.5`.** After you run `openclaw update`, run the smoke to check this plugin against your new host:
+OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Tested on OpenClaw `2026.10.10-beta.3`.** A plain npm range `>=2026.10.5 <2026.11` does not accept that beta, so this package names the beta in its peer range. After you run `openclaw update`, run the smoke to check this plugin against your new host:
 
 ```bash
 npm run smoke

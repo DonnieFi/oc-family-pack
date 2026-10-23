@@ -18,22 +18,18 @@ function body(result: { content: { text: string }[] }): { id: string; name: stri
   return JSON.parse(result.content[0]!.text) as { id: string; name: string; email?: string; discordId?: string };
 }
 
-test("the operator gets one member, and a direct operator does too", async () => {
+test("the operator gets one member, and a caller who is not the owner is refused", async () => {
   const owner = await familyContact(config(), { senderIsOwner: true }).execute("call", { id: "riley" });
   assert.deepEqual(body(owner), { id: "riley", name: "Riley", email: EMAIL, discordId: "100000000000000002" });
   assert.deepEqual(owner.details, { status: "ok" });
-  const direct = await familyContact(config(), { directOperator: true }).execute("call", { id: "Alex" });
-  assert.equal(body(direct).email, "alex@example.com");
-  assert.equal(body(direct).id, "alex");
+  const direct = await familyContact(config(), { senderIsOwner: false }).execute("call", { id: "alex" });
+  assert.equal(direct.content[0]?.text, "Only the operator can look up a contact.");
+  assert.equal(direct.content[0]?.text.includes("alex@example.com"), false);
+  assert.deepEqual(direct.details, { status: "refused" });
 });
 
 test("a kid, a parent who is not the operator, and a guest are refused, and the refusal names no address", async () => {
-  const facts = [
-    {},
-    { senderIsOwner: false },
-    { directOperator: false },
-    { channel: "discord" },
-  ];
+  const facts = [{}, { senderIsOwner: false }];
   for (const fact of facts) {
     const result = await familyContact(config(), fact).execute("call", { id: "riley" });
     assert.equal(result.content[0]?.text, "Only the operator can look up a contact.");

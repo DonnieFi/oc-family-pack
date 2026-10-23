@@ -49,7 +49,7 @@ test("the contract registers the read queries and the page's one write action, a
   assert.deepEqual(Object.keys(contract.events), ["calendar-changed", "calendar-checked"]);
 });
 
-test("queries are operator.read session actions, the page write is operator.write, the agent tools are the schedule, garbage day and the four calendar writes with their first-running approval hook, the week is an operator.read Gateway method, and there is no command adapter", () => {
+test("queries are operator.read session actions, the page write is operator.write, the agent tools are the schedule, garbage day and the four calendar writes with their first-running approval hook, the week is an operator.read Gateway method, the directory is operator.write, and there is no command adapter", () => {
   const actions: { id: string; requiredScopes: string[] }[] = [];
   const tools: { name: string; optional?: boolean }[] = [];
   const methods: { method: string; scope?: string }[] = [];
@@ -125,6 +125,8 @@ test("queries are operator.read session actions, the page write is operator.writ
   assert.deepEqual(hooks, [{ name: "before_tool_call", priority: CALENDAR_HOOK_PRIORITY, matcher: writes }]);
   assert.deepEqual(methods, [
     { method: "family.week", scope: "operator.read" },
+    { method: "family.directory", scope: "operator.write" },
+    { method: "family.directory.preview", scope: "operator.write" },
     { method: "family.deliveryStatus", scope: "operator.read" },
     { method: "family.todayHome", scope: "operator.write" },
   ]);

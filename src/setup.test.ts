@@ -105,7 +105,7 @@ test("adding riley keeps alex exactly as written and puts riley after him", () =
   assert.deepEqual(Object.keys(config), ["members"]);
   const members = config.members as Record<string, unknown>[];
   assert.equal(JSON.stringify(members[0]), JSON.stringify(ALEX));
-  assert.deepEqual(members[1], { profileId: "riley", displayName: "Riley", role: "kid" });
+  assert.deepEqual(members[1], { id: "riley", profileId: "riley", displayName: "Riley", role: "kid" });
   assert.equal(members.length, 2);
   assert.ok(result.text.indexOf(PATCH_INTRO) < result.text.indexOf("{"), "the dry-run line comes before the patch");
 });
@@ -173,7 +173,7 @@ test("a Discord ID needs a person in the family, which can be someone added in t
   const added = planSetup(host(complete), { kid: ["riley"], discord: [`riley=${SNOWFLAKE}`] }, READY, "UTC");
   const members = patchOf(added.text).plugins.entries["oc-family-pack"].config.members as Record<string, unknown>[];
   assert.equal(JSON.stringify(members[0]), JSON.stringify(ALEX));
-  assert.deepEqual(members[1], { profileId: "riley", displayName: "Riley", role: "kid", discordId: SNOWFLAKE });
+  assert.deepEqual(members[1], { id: "riley", profileId: "riley", displayName: "Riley", role: "kid", discordId: SNOWFLAKE });
 });
 
 test("two people can't share a Discord ID, and an ID that's already set is no change", () => {
@@ -248,6 +248,6 @@ test("setup reads only pure modules: no Gateway, process, file or network import
   const { readFile } = await import("node:fs/promises");
   const source = await readFile(new URL("./setup.ts", import.meta.url), "utf8");
   const imports = [...source.matchAll(/^import .* from "([^"]+)";$/gm)].map((match) => match[1]);
-  assert.deepEqual(imports.sort(), ["./access.ts", "./config.ts", "./gog-setup.ts", "./weather-ec.ts"]);
+  assert.deepEqual(imports.sort(), ["./access.ts", "./config.ts", "./directory.ts", "./gog-setup.ts", "./weather-ec.ts"]);
   assert.match(source, /^import type \{ GogSetupPlan \} from "\.\/gog-setup\.ts";$/m);
 });

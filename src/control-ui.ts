@@ -17,6 +17,8 @@ import { roundHalfEven } from "./recommendation.ts";
 import type { CalendarRef, FamilyEvent, Member, WeekPayload } from "./types.ts";
 import { addDays, boundWeekStart, localDate, pageWeekStart } from "./week.ts";
 import { somethingWrongLine } from "./write-lines.ts";
+import { PEOPLE_PAGE_ID } from "./directory-contract.ts";
+import { mountPeoplePage } from "./directory-ui.ts";
 import "./control-ui.css";
 
 const PAGE_ID = "family";
@@ -1129,6 +1131,8 @@ export default defineControlUiPlugin({
   activate(host) {
     host.ui.registerNavigation({ id: PAGE_ID, label: "Family", page: { id: PAGE_ID }, icon: "calendarClock" });
     host.ui.registerPage({ id: PAGE_ID, label: "Family", mount: mountFamilyPage });
+    host.ui.registerNavigation({ id: PEOPLE_PAGE_ID, label: "People", page: { id: PEOPLE_PAGE_ID }, icon: "users" });
+    host.ui.registerPage({ id: PEOPLE_PAGE_ID, label: "People", mount: mountPeoplePage });
     host.ui.registerWidget({ id: TODAY_WIDGET_ID, label: "Today", mount: mountTodayWidget as unknown as ControlUiWidget["mount"] });
     void settleTodayHome(host, () => {});
   },

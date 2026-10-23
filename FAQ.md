@@ -160,19 +160,19 @@ Authelia.
 
 ## What is a family member?
 
-A member is the household's record of a person, in `plugins.entries.oc-family-pack.config.members`. Only `name` is required. `id` is the internal key: an explicit `id`, otherwise `profileId`, otherwise a lower-case slug of the name. `role` is `parent`, `kid`, or `guest`, and defaults to guest. Optional fields are `profileId`, `email`, `color`, `discordId`, `reminders` (`dm`, `channel`, or `off`), and `devices`. `displayName` is the older spelling of `name` and still loads.
+A member is the household's record of a person, in `plugins.entries.oc-family-pack.config.members`. Only `name` is required. `id` is the household person id: an explicit `id`, otherwise the login, otherwise a lower-case slug of the name. Write the id down with `openclaw family setup --materialize-ids` before renaming someone or changing their login. `role` is `parent`, `kid`, or `guest`, and defaults to guest. Optional fields are `profileId` (or `login`), `gatewayProfileId`, `email`, `phone`, `color`, `discordId`, `reminders` (`dm`, `channel`, or `off`), and `devices`. `displayName` is the older spelling of `name` and still loads.
 
-`profileId` is the sign-in username, lower case, matched exactly to the trusted-proxy user. It is not the Gateway's internal profile id, and it is never made up from the name. Someone with no `profileId` is not that person on the Family page; they still count in chat when their `discordId` matches. Setup's Members step stays To do until there is a parent. The chips on the Family page only dim events. They do not add a person, and they are not identity. The fields and the steps are in [SETUP.md](SETUP.md).
+`profileId` and `login` are the sign-in username, lower case, matched exactly to the trusted-proxy user. They are not the Gateway's internal profile id, and the login is never made up from the name. `gatewayProfileId` is that internal id, matched only when the host attests it on the connection. Someone with no login is not that person on the Family page unless a host-attested profile id matches; they still count in chat when their `discordId` matches. Setup's Members step stays To do until there is a parent. The chips on the Family page only dim events. They do not add a person, and they are not identity. The fields and the steps are in [SETUP.md](SETUP.md).
 
 ## How do I add someone?
 
 `openclaw family setup --parent alex --kid riley` prints a members patch and does not save it. Usernames are lower case: letters, numbers, dots, dashes, and underscores, up to 32 characters. `alex` is valid. `Alex Smith` is not. The display name becomes the username with the first letter capitalized. Someone already in the config is left unchanged. Pass `--guest sam` for a guest.
 
-Apply it with `openclaw config patch --stdin --dry-run`, then again without `--dry-run`. The Family page does not add people. Setup does.
+Apply it with `openclaw config patch --stdin --dry-run`, then again without `--dry-run`. The People page shows the same roster and can preview a patch. It does not save, and it does not keep a second copy of the family.
 
 ## Where do email and phone go?
 
-An email can be stored on the member with `openclaw family setup --email alex=alex@example.com`. Sign-in is the `profileId`. The week, the page, briefs, and logs do not show the address. `family_contact` can read one person's email, and only for the operator. No phone number is stored. A Discord user id goes in `discordId`, set with `openclaw family setup --discord alex=200000000000000001`.
+An email can be stored on the member with `openclaw family setup --email alex=alex@example.com`. A phone can be stored as `phone` on the same member. Neither one sends mail or SMS. Sign-in is the `profileId` (or `login`). The week, briefs, and logs do not show the address or the number. The People page shows them to a parent. `family_contact` can read one person's email and phone, and only for the operator. Reminders and briefs in this version go through Discord. A Discord user id goes in `discordId`, set with `openclaw family setup --discord alex=200000000000000001`. `--email person-id=address` finds that person by `id` even when the login is different. If the name matches more than one person, setup stops instead of guessing.
 
 ## How do I set a Discord user id?
 

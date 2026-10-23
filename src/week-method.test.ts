@@ -21,6 +21,30 @@ test("the shared secret with no signed-in user is the owner; an attested user is
   assert.deepEqual(viewerOf(proxied("Alex")), { kind: "person", username: "alex" });
   assert.deepEqual(viewerOf(proxied("  Alex  ")), { kind: "person", username: "alex" });
   assert.deepEqual(viewerOf(client({ usesSharedGatewayAuth: false, authenticatedUserId: "alex" })), { kind: "person", username: "alex" });
+  assert.deepEqual(
+    viewerOf(client({ authenticatedUserId: "alex", authenticatedUserProfile: { profileId: " profile-alex " } })),
+    { kind: "person", username: "alex", gatewayProfileId: "profile-alex" },
+  );
+  assert.deepEqual(viewerOf(client({ authenticatedUserProfile: { profileId: "profile-alex" } })), {
+    kind: "person",
+    username: undefined,
+    gatewayProfileId: "profile-alex",
+  });
+  // This host attaches gateway-owner to a device token that has no login.
+  assert.deepEqual(
+    viewerOf(client({
+      usesSharedGatewayAuth: true,
+      isDeviceTokenAuth: true,
+      authenticatedUserProfile: { profileId: "gateway-owner", displayName: "Gateway owner", hasAvatar: false, updatedAt: 1 },
+    })),
+    { kind: "owner" },
+  );
+  assert.deepEqual(
+    viewerOf(client({ usesSharedGatewayAuth: true, authenticatedUserId: "alex", authenticatedUserProfile: { profileId: "profile-alex" } })),
+    { kind: "person", username: "alex", gatewayProfileId: "profile-alex" },
+  );
+  // preparedSessionProfile is a lifecycle recipient, not a sign-in identity.
+  assert.deepEqual(viewerOf(client({ usesSharedGatewayAuth: true, preparedSessionProfile: { profileId: "alex" } })), { kind: "owner" });
   for (const other of [
     client({ usesSharedGatewayAuth: false, authPolicy: { generation: "g" } }),
     // A CLI-paired device token is not shared auth, so it is a guest.
@@ -59,6 +83,14 @@ test("a kid's family.week has shared, school and their own calendars only", asyn
 test("a parent and the token owner get the whole household", async () => {
   assert.deepEqual(await labels(proxied("alex")), EVERYTHING);
   assert.deepEqual(await labels(TOKEN), EVERYTHING);
+  assert.deepEqual(
+    await labels(client({
+      usesSharedGatewayAuth: true,
+      isDeviceTokenAuth: true,
+      authenticatedUserProfile: { profileId: "gateway-owner", displayName: "Gateway owner", hasAvatar: false, updatedAt: 1 },
+    })),
+    EVERYTHING,
+  );
 });
 
 test("a session with neither the shared secret nor a signed-in user sees shared calendars only", async () => {

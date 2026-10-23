@@ -89,10 +89,12 @@ test("a hyphenated MAC is stored lowercase and colon-separated", () => {
   });
   assert.deepEqual(config.members[0]?.devices, [
     {
+      id: "phone",
       label: "Phone",
       primaryMac: "aa:bb:cc:dd:ee:01",
       aliasMacs: ["aa:bb:cc:dd:ee:02", "aa:bb:cc:dd:ee:03", "aa:bb:cc:dd:ee:04", "aa:bb:cc:dd:ee:05"],
       source: "dhcp",
+      sharedWith: [],
     },
   ]);
   assert.equal(config.members[0]?.discordId, "100000000000000001");

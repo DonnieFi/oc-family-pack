@@ -191,8 +191,8 @@ test("gate (c): an email appears in no output at all, operator results included"
     outputs.push(planSetup(host, { kid: ["jordan"], email: ["jordan=not-an-email"] }, { steps: [] } as never, TZ));
     const ownerCard = await familyContact(config, { senderIsOwner: true }).execute("call", { id: "riley" });
     assert.equal(JSON.parse(ownerCard.content[0]!.text).email, EMAIL);
-    const directCard = await familyContact(config, { directOperator: true }).execute("call", { id: "alex" });
-    assert.equal(JSON.parse(directCard.content[0]!.text).email, "alex.morgan@outlook.com");
+    const directCard = await familyContact(config, { senderIsOwner: false }).execute("call", { id: "alex" });
+    assert.equal(directCard.details.status, "refused");
     outputs.push(await familyContact(config, {}).execute("call", { id: "riley" }));
     outputs.push(await familyContact(config, { senderIsOwner: true }).execute("call", { id: "nope" }));
     outputs.push(await familyContact(config, { senderIsOwner: true }).execute("call", { id: EMAIL }));
@@ -216,9 +216,12 @@ test("gate (c): an email appears in no output at all, operator results included"
 test("setup warns, in ux's words, about a member bots can't reach, and says nothing about a missing login", () => {
   const host = (members: unknown[]) => ({ plugins: { entries: { "oc-family-pack": { config: { timezone: TZ, members } } } } });
   const text = planSetup(host([{ name: "Riley", role: "kid" }, { name: "Alex", role: "parent", discordId: "100000000000000001" }, { name: "Sam", email: "sam@example.org" }]), {}, { steps: [] } as never, TZ).text;
-  assert.equal(NO_CHANNEL("Riley"), "Riley has no email or Discord, so the bots can't reach them. Add either one to fix this.");
+  assert.equal(
+    NO_CHANNEL("Riley"),
+    "Riley has no Discord account, so this version can't send them reminders or briefs. Email and phone stay on the contact card and are not notification routes.",
+  );
   assert.ok(text.includes(NO_CHANNEL("Riley")), text);
   assert.equal(text.includes(NO_CHANNEL("Alex")), false);
-  assert.equal(text.includes(NO_CHANNEL("Sam")), false);
+  assert.ok(text.includes(NO_CHANNEL("Sam")), text);
   assert.equal(/Control UI login|profileId/i.test(text), false, text);
 });

@@ -323,7 +323,8 @@ export function registerFamilyCli(
     .option("--guest <name...>", "Guests to add to the family")
     .option("--discord <name=id...>", "Discord user IDs, like alex=123456789012345678")
     .option("--email <name=address...>", "Email addresses, like riley=riley@example.com")
-    .action(async (opts: AccessOptions & { discord?: string[]; email?: string[] }) => {
+    .option("--materialize-ids", "Print a patch that writes the member and device ids this config already uses")
+    .action(async (opts: AccessOptions & { discord?: string[]; email?: string[]; materializeIds?: boolean }) => {
       const gog = await diagnoseGog(deps.run, deps.gogPath ? { gogPath: deps.gogPath } : {});
       const result = planSetup(
         deps.host,
@@ -333,6 +334,7 @@ export function registerFamilyCli(
           ...(opts.guest ? { guest: opts.guest } : {}),
           ...(opts.discord ? { discord: opts.discord } : {}),
           ...(opts.email ? { email: opts.email } : {}),
+          ...(opts.materializeIds ? { materializeIds: true } : {}),
         },
         gog,
         deps.hostZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,

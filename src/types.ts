@@ -22,25 +22,58 @@ export type CalendarKind = "personal" | "shared" | "school";
 /** The operator's switch for calendar changes: on, every change waits for approval, or none at all. */
 export type WriteMode = "on" | "confirm" | "off";
 
-/** A device signal. MACs are already lowercase and colon-separated; they are not a person identity. */
-export type MemberDevice = {
-  label: string;
-  primaryMac: string;
-  aliasMacs: string[];
+/**
+ * A configured address reservation. This is what the operator wrote down.
+ * It is not an observed address, and storing it does not change a router.
+ */
+export type DeviceReservation = {
+  address: string;
+  network?: string;
   source: string;
 };
 
-export type MemberConfig = {
-  /** The internal key: owners, briefs, delivery and Today use it. Defaults to profileId, else a slug of the name. */
+/**
+ * A device record. MACs are already lowercase and colon-separated.
+ * They are not a person identity and they grant nothing.
+ * `id` stays put once it is written. `sharedWith` names other member ids on this one record.
+ */
+export type MemberDevice = {
   id: string;
-  /** The Control UI login (trusted-proxy username). Optional and never derived. */
+  label: string;
+  hostname?: string;
+  primaryMac: string;
+  aliasMacs: string[];
+  source: string;
+  reservation?: DeviceReservation;
+  sharedWith: string[];
+};
+
+export type MemberConfig = {
+  /**
+   * The household person id. Owners, briefs, delivery, and Today use it.
+   * An omitted id still loads as the login, else a slug of the name, so old
+   * config keeps the same owners. Once `id` is written, a name or login change
+   * does not change it.
+   */
+  id: string;
+  /**
+   * The Control UI login: the trusted-proxy username. Optional, never derived,
+   * and not the Gateway's internal profile id. `login` in config is the same field.
+   */
   profileId?: string;
+  /**
+   * The Gateway profile id from the host-attested client profile, when the
+   * operator has linked one. It is not inferred, and it is not the login.
+   */
+  gatewayProfileId?: string;
   displayName: string;
-  /** Stored on the card only. Nothing in the plugin sends email or shows it. */
+  /** Stored on the card only. Nothing in the plugin sends email or shows it on the week. */
   email?: string;
+  /** Stored on the card only. Nothing in the plugin sends SMS. */
+  phone?: string;
   color?: string;
   role: MemberRole;
-  /** Discord sender id. Stays in config; never copied onto the week payload. */
+  /** Discord sender id. Stays in config; never copied onto the week payload. This version delivers through it. */
   discordId?: string;
   /** How this person gets event reminders. Omitted means a direct message. A chat change overrides it. */
   reminders?: ReminderMode;

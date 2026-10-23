@@ -17,7 +17,9 @@ import { pageWrite } from "./page-write.js";
 import { briefDirectory, startBriefs } from "./briefs.js";
 import { deliver } from "./discord-delivery.js";
 import { SET_REMINDER_MODE_TOOL, SetReminderModeSchema, reminderTool, startReminders } from "./reminders.js";
-import { FAMILY_CONTACT_TOOL, FamilyContactSchema, familyContact } from "./contact.js";
+import { FAMILY_CONTACT_TOOL, FamilyContactSchema, contactAuthority, familyContact } from "./contact.js";
+import { DIRECTORY_METHOD, DIRECTORY_PREVIEW_METHOD } from "./directory-contract.js";
+import { directoryMethod, directoryPreviewMethod } from "./directory-method.js";
 import { TODAY_HOME_METHOD } from "./today-home.js";
 import { todayHomeMethod } from "./today-home-method.js";
 import { startHouseholds } from "./households.js";
@@ -177,10 +179,7 @@ const plugin = defineFeaturePlugin({
             senderIsOwner: ctx.senderIsOwner,
             directOperator: ctx.conversationReadOrigin === "direct-operator",
         }), { name: SET_REMINDER_MODE_TOOL, optional: true });
-        api.registerTool((ctx) => familyContact(config, {
-            senderIsOwner: ctx.senderIsOwner,
-            directOperator: ctx.conversationReadOrigin === "direct-operator",
-        }), { name: FAMILY_CONTACT_TOOL, optional: true });
+        api.registerTool((ctx) => familyContact(config, { senderIsOwner: contactAuthority(ctx) }), { name: FAMILY_CONTACT_TOOL, optional: true });
         // The week is a Gateway method, not a feature query, because only a Gateway
         // method sees who signed in. Same operator.read scope the queries get.
         api.session.controls.registerControlUiDescriptor({
@@ -190,6 +189,11 @@ const plugin = defineFeaturePlugin({
             requiredScopes: ["operator.read"],
         });
         api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant })), { scope: "operator.read" });
+        // operator.write: a kid can read the week and cannot read contact details.
+        const directoryConfig = () => config;
+        const directoryRaw = () => api.pluginConfig;
+        api.registerGatewayMethod(DIRECTORY_METHOD, directoryMethod(directoryConfig, directoryRaw), { scope: "operator.write" });
+        api.registerGatewayMethod(DIRECTORY_PREVIEW_METHOD, directoryPreviewMethod(directoryConfig, directoryRaw), { scope: "operator.write" });
         api.registerGatewayMethod(DELIVERY_STATUS_METHOD, deliveryStatusMethod(() => store, () => (config.demo ? DEMO_MEMBERS : config.members)), { scope: "operator.read" });
         // operator.write so a kid cannot consume the one-time Home seed.
         api.registerGatewayMethod(TODAY_HOME_METHOD, todayHomeMethod(() => store), { scope: "operator.write" });

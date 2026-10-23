@@ -25,7 +25,7 @@ Every calendar write from chat goes through one `before_tool_call` hook that run
 
 The four write tools, `set_reminder_mode`, and `family_contact` are optional tools. On a `full` tool profile, the agent can already see the calendar tools. What protects your calendar is the `writes` setting and the parent rule, not tool visibility. With no profile, or a narrower one, they appear only after the operator adds them with `tools.alsoAllow`.
 
-`family_contact` is the one tool that returns an email. It answers only when the caller is the operator (`senderIsOwner`, or a direct operator session). A kid, a guest, and any other member are refused before the roster is read. It takes one member id and does not list the family. The refusal does not include an address. Nothing else in the plugin — the week, the page, briefs, widgets, or logs — includes an email.
+`family_contact` is the one tool that returns an email. It answers only when the host sets `senderIsOwner`. A direct-operator session is not enough: the host uses that flag for read visibility, not as a grant. A kid, a guest, and any other member are refused before the roster is read. It takes one member id and does not list the family. The refusal does not include an address. The week, briefs, widgets, and logs do not include an email. The People page shows contact details only to a sign-in with `operator.write`.
 
 ## What it stores
 

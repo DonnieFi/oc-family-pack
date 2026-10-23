@@ -23,7 +23,17 @@ test("discord ids and device MACs stay off the week payload", async () => {
         displayName: "Riley",
         role: "kid",
         discordId: "100000000000000001",
-        devices: [{ label: "Phone", primaryMac: "AA-BB-CC-DD-EE-01", aliasMacs: ["AA:BB:CC:DD:EE:02"], source: "dhcp" }],
+        phone: "+1 902 555 0101",
+        devices: [
+          {
+            label: "Phone",
+            hostname: "riley-phone",
+            primaryMac: "AA-BB-CC-DD-EE-01",
+            aliasMacs: ["AA:BB:CC:DD:EE:02"],
+            source: "dhcp",
+            reservation: { address: "192.168.1.41", source: "operator" },
+          },
+        ],
       },
       { profileId: "Alex", displayName: "Alex", role: "parent" },
     ],
@@ -42,6 +52,9 @@ test("discord ids and device MACs stay off the week payload", async () => {
   assert.equal(wire.includes("primaryMac"), false);
   assert.equal(wire.includes("aa:bb:cc:dd:ee:01"), false);
   assert.equal(wire.includes("aa:bb:cc:dd:ee:02"), false);
+  assert.equal(wire.includes("902"), false);
+  assert.equal(wire.includes("192.168.1.41"), false);
+  assert.equal(wire.includes("riley-phone"), false);
   assert.equal(wire.includes("school-feed@group.calendar.google.com"), false, "calendars travel as keys");
 });
 

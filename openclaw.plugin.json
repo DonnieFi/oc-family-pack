@@ -321,10 +321,25 @@
               "minLength": 1,
               "maxLength": 200
             },
+            "login": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "gatewayProfileId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
             "email": {
               "type": "string",
               "minLength": 3,
               "maxLength": 254
+            },
+            "phone": {
+              "type": "string",
+              "minLength": 7,
+              "maxLength": 32
             },
             "role": {
               "anyOf": [
@@ -380,7 +395,17 @@
                   "source"
                 ],
                 "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
                   "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "hostname": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
@@ -403,6 +428,40 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
+                  },
+                  "sharedWith": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "maxItems": 32
+                  },
+                  "reservation": {
+                    "type": "object",
+                    "required": [
+                      "address",
+                      "source"
+                    ],
+                    "properties": {
+                      "address": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 64
+                      },
+                      "network": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "source": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      }
+                    },
+                    "additionalProperties": false
                   }
                 },
                 "additionalProperties": false
@@ -468,9 +527,9 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/f86cf8d81d86087f7df12db53a13c6b851d0c05cbfd435d8e123becc8a3549c6/index.js",
+    "entry": "dist/control-ui/63ef6a2e04f57e48f20fc3eaa65e367a5f3370cc3c7c72bbaeece8d8926bdb26/index.js",
     "styles": [
-      "dist/control-ui/f86cf8d81d86087f7df12db53a13c6b851d0c05cbfd435d8e123becc8a3549c6/index.css"
+      "dist/control-ui/63ef6a2e04f57e48f20fc3eaa65e367a5f3370cc3c7c72bbaeece8d8926bdb26/index.css"
     ]
   },
   "contracts": {
