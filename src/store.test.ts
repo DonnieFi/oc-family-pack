@@ -90,8 +90,8 @@ test("a first start applies 0001 to 0005 and a second start applies nothing", as
   const { openFamilyStore } = await loadStore();
   try {
     const first = await openFamilyStore({ stateDir });
-    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed"]);
-    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed"]);
+    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind"]);
+    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind"]);
     assert.deepEqual(first.ready.unknown, []);
     assert.equal(first.ready.journalMode, "wal");
     assert.equal(first.ready.isMainThread, false);
@@ -101,13 +101,13 @@ test("a first start applies 0001 to 0005 and a second start applies nothing", as
     assert.equal(status.scriptUrl.endsWith("/dist/store-worker.js"), true);
     assertPermissions(dbPath(stateDir));
     const rows = migrationRows(dbPath(stateDir));
-    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed"]);
+    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind"]);
     const appliedAt = rows[0]?.applied_at;
     await first.stop();
 
     const second = await openFamilyStore({ stateDir });
     assert.deepEqual(second.ready.appliedNow, []);
-    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed"]);
+    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind"]);
     assert.equal(second.ready.journalMode, "wal");
     assertPermissions(dbPath(stateDir));
     const again = migrationRows(dbPath(stateDir));
@@ -141,7 +141,7 @@ test("the delivery log is strict and append-only, and a key is sent at most once
   try {
     const base = { kind: "daily", target: "family" } as const;
     const failed = await store.appendDeliveryLog({ ...base, deliveryKey: "daily-summary:2026-11-01", status: "failed", errorKind: "no-channel", errorDetail: "no Discord id" });
-    assert.equal(await store.deliveryDone("daily-summary:2026-11-01"), false, "failed is tried again");
+    assert.equal(await store.deliveryDone("daily-summary:2026-11-01"), true, "a pre-send no-channel failure is final");
     for (const status of ["held", "unknown", "partial"] as const) {
       const key = `daily-summary:${status}`;
       await store.appendDeliveryLog({ ...base, deliveryKey: key, status, errorKind: "other", errorDetail: "x" });
@@ -500,6 +500,21 @@ test("fake timers fire the 5 second terminate fallback", async () => {
   } finally {
     mock.timers.reset();
     await worker?.terminate().catch(() => undefined);
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("the latest delivery keeps the target namespace", async () => {
+  const stateDir = tempState();
+  const { openFamilyStore } = await loadStore();
+  const store = await openFamilyStore({ stateDir });
+  try {
+    await store.appendDeliveryLog({ deliveryKey: "daily:one", kind: "daily", target: "family", targetKind: "channel", status: "sent", receiptJson: "{}" });
+    assert.deepEqual(await store.latestDelivery(), { kind: "daily", status: "sent", target: "family", targetKind: "channel" });
+    await store.appendDeliveryLog({ deliveryKey: "reminder:one", kind: "reminder", target: "alex", targetKind: "member", status: "failed", errorKind: "no-channel", errorDetail: "x" });
+    assert.deepEqual(await store.latestDelivery(), { kind: "reminder", status: "failed", target: "alex", targetKind: "member" });
+  } finally {
+    await store.stop();
     rmSync(stateDir, { recursive: true, force: true });
   }
 });

@@ -179,10 +179,10 @@ function agentRpc(owner: boolean): Caller {
   };
 }
 
-const SLEEPOVER = { calendar: "Donnie", title: "Sleepover", start: "2026-10-09T16:30:00-03:00", end: "2026-10-10T09:00:00-03:00" };
-const TITLE = "Penny wants to add **Sleepover** to Donnie's calendar";
-const DESCRIPTION = "Penny asked on Discord. Sleepover, Friday October 9 at 4:30 PM, on Donnie's calendar.";
-const CREATED = "Added **Sleepover** to Donnie's calendar, Friday October 9 at 4:30 PM.";
+const SLEEPOVER = { calendar: "Family", title: "Sleepover", start: "2026-10-09T16:30:00-03:00", end: "2026-10-10T09:00:00-03:00" };
+const TITLE = "Penny wants to add **Sleepover** to the Family calendar";
+const DESCRIPTION = "Penny asked on Discord. Sleepover, Friday October 9 at 4:30 PM, on the Family calendar.";
+const CREATED = "Added **Sleepover** to the Family calendar, Friday October 9 at 4:30 PM.";
 const NOT_APPROVED = "That didn't get approved, so I didn't add **Sleepover**. Ask again when Donnie or Britta is around.";
 const TIMED_OUT = "Nobody answered in 10 minutes, so I didn't add **Sleepover**. Ask again when Donnie or Britta is around.";
 const WRONG = "Something went wrong checking that, so I didn't add **Sleepover**.";
@@ -287,7 +287,7 @@ test("the key is the one the write log stores for the committed write", async ()
 
 // ---- A kid's write waits for a parent ----
 
-test("a kid's add to a parent's calendar asks for approval with ux's title and description, the 10-minute timeout, and allow-once or deny only", async () => {
+test("a kid's add to a shared family calendar asks for approval with ux's title and description, the 10-minute timeout, and allow-once or deny only", async () => {
   const s = setup();
   const outcome = await hostCall(s, discord(PENNY_ID), SLEEPOVER, {
     decide: (approval) => {
@@ -324,7 +324,7 @@ test("an explicit deny writes one `denied` row with no event id and never reache
   assert.equal(s.gog.calls.length, 0);
   assert.deepEqual(statuses(s), ["denied"]);
   assert.equal(s.log.rows[0]!.eventId, undefined);
-  assert.equal(s.log.rows[0]!.calendarId, DONNIE_CAL);
+  assert.equal(s.log.rows[0]!.calendarId, "family@group.calendar.google.com");
 });
 
 test("our timeout writes `timed-out` and the tool result is our timed-out line, its minutes read from the constant", async () => {
@@ -388,10 +388,10 @@ test("a long event name is cut with … to fit 80; the person's name and the cal
   const approval = outcome.approval!;
   assert.ok([...approval.title].length <= APPROVAL_TITLE_MAX, approval.title);
   assert.ok(approval.title.startsWith("Penny wants to add **Sleepover and pizza"));
-  assert.ok(approval.title.endsWith("…** to Donnie's calendar"));
+  assert.ok(approval.title.endsWith("…** to the Family calendar"));
   assert.ok([...approval.description].length <= APPROVAL_DESCRIPTION_MAX);
   assert.ok(approval.description.startsWith("Penny asked on Discord. Sleepover and pizza"));
-  assert.ok(approval.description.endsWith("…, Friday October 9 at 4:30 PM, on Donnie's calendar."));
+  assert.ok(approval.description.endsWith("…, Friday October 9 at 4:30 PM, on the Family calendar."));
 });
 
 test("a long person's name is never cut; the event name gives way", async () => {
@@ -410,9 +410,9 @@ test("a long person's name is never cut; the event name gives way", async () => 
 
 test("an all-day add reads like Bernie without a time", async () => {
   const s = setup();
-  const outcome = await hostCall(s, discord(PENNY_ID), { calendar: "Donnie", title: "Sleepover", start: "2026-10-09", allDay: true });
-  assert.equal(outcome.approval!.description, "Penny asked on Discord. Sleepover, Friday October 9, on Donnie's calendar.");
-  assert.equal(outcome.text, "Added **Sleepover** to Donnie's calendar, Friday October 9.");
+  const outcome = await hostCall(s, discord(PENNY_ID), { calendar: "Family", title: "Sleepover", start: "2026-10-09", allDay: true });
+  assert.equal(outcome.approval!.description, "Penny asked on Discord. Sleepover, Friday October 9, on the Family calendar.");
+  assert.equal(outcome.text, "Added **Sleepover** to the Family calendar, Friday October 9.");
 });
 
 test("tools.invoke has no requester: Someone, and 'Asked outside Discord.'; never an id, a session key, or tool:owner", async () => {
@@ -420,8 +420,8 @@ test("tools.invoke has no requester: Someone, and 'Asked outside Discord.'; neve
     const s = setup();
     const caller = invoke(admin);
     const outcome = await hostCall(s, caller, SLEEPOVER, { decide: () => "deny" });
-    assert.equal(outcome.approval!.title, "Someone wants to add **Sleepover** to Donnie's calendar");
-    assert.equal(outcome.approval!.description, "Asked outside Discord. Sleepover, Friday October 9 at 4:30 PM, on Donnie's calendar.");
+    assert.equal(outcome.approval!.title, "Someone wants to add **Sleepover** to the Family calendar");
+    assert.equal(outcome.approval!.description, "Asked outside Discord. Sleepover, Friday October 9 at 4:30 PM, on the Family calendar.");
     const text = JSON.stringify([outcome.approval!.title, outcome.approval!.description]);
     assert.ok(!text.includes(caller.hook.sessionKey!) && !text.includes("tool:owner") && !text.includes("tool"));
     assert.equal(s.log.rows[0]!.requester, "tool");
@@ -446,8 +446,8 @@ test("HTTP /tools/invoke with a discord channel header and Donnie's id everywher
     },
   });
   assert.deepEqual(atDecision, { gog: 0, rows: 0 });
-  assert.equal(outcome.approval!.title, "Someone wants to add **Sleepover** to Donnie's calendar");
-  assert.equal(outcome.approval!.description, "Asked outside Discord. Sleepover, Friday October 9 at 4:30 PM, on Donnie's calendar.");
+  assert.equal(outcome.approval!.title, "Someone wants to add **Sleepover** to the Family calendar");
+  assert.equal(outcome.approval!.description, "Asked outside Discord. Sleepover, Friday October 9 at 4:30 PM, on the Family calendar.");
   assert.equal(outcome.text, CREATED);
   assert.equal(s.gog.creates(), 1);
   assert.deepEqual(statuses(s), ["committed"]);
@@ -464,7 +464,7 @@ test("an agent-RPC call with channel discord and no host sender is `tool` on bot
     assert.equal(deriveBaseKey(s.config, factsFromTool(caller.tool), SLEEPOVER), hookKey);
     assert.equal(hookKey, deriveBaseKey(s.config, { sessionKey: caller.hook.sessionKey }, SLEEPOVER), "the same key as any off-Discord call");
     const outcome = await hostCall(s, caller, SLEEPOVER);
-    assert.equal(outcome.approval!.title, "Someone wants to add **Sleepover** to Donnie's calendar");
+    assert.equal(outcome.approval!.title, "Someone wants to add **Sleepover** to the Family calendar");
     assert.equal(outcome.text, CREATED);
     assert.deepEqual(statuses(s), ["committed"]);
     assert.equal(s.log.rows[0]!.requester, "tool");
@@ -496,7 +496,7 @@ test("a sender on a channel that isn't Discord is `tool` in the hook and the too
       assert.equal(hookKey, deriveBaseKey(s.config, { sessionKey: caller.hook.sessionKey }, SLEEPOVER), `${channel}: the hook keys it like any off-Discord call`);
       assert.equal(deriveBaseKey(s.config, factsFromTool(caller.tool), SLEEPOVER), hookKey, channel);
       const outcome = await hostCall(s, caller, SLEEPOVER);
-      assert.equal(outcome.approval?.title, "Someone wants to add **Sleepover** to Donnie's calendar", `${channel} ${senderId}`);
+      assert.equal(outcome.approval?.title, "Someone wants to add **Sleepover** to the Family calendar", `${channel} ${senderId}`);
       assert.equal(outcome.text, CREATED);
       assert.deepEqual(statuses(s), ["committed"]);
       assert.equal(s.log.rows[0]!.requester, "tool");
@@ -512,7 +512,7 @@ test("WS tools.invoke is `tool` whether or not the caller asks for direct-operat
       const caller = invoke(admin, origin);
       assert.equal(deriveBaseKey(s.config, factsFromTool(caller.tool), SLEEPOVER), deriveBaseKey(s.config, factsFromHook(caller.hook), SLEEPOVER));
       const outcome = await hostCall(s, caller, SLEEPOVER);
-      assert.equal(outcome.approval!.title, "Someone wants to add **Sleepover** to Donnie's calendar");
+      assert.equal(outcome.approval!.title, "Someone wants to add **Sleepover** to the Family calendar");
       assert.equal(outcome.text, CREATED);
       assert.deepEqual(statuses(s), ["committed"]);
       assert.equal(s.log.rows[0]!.requester, "tool");
@@ -570,7 +570,7 @@ test("writes confirm sends a parent's call for approval too", async () => {
   const outcome = await hostCall(s, discord(DONNIE_ID), SLEEPOVER, {
     decide: (approval) => {
       asked = true;
-      assert.equal(approval.title, "Donnie wants to add **Sleepover** to Donnie's calendar");
+      assert.equal(approval.title, "Donnie wants to add **Sleepover** to the Family calendar");
       return "deny";
     },
   });
@@ -827,4 +827,14 @@ test("gog fails at write time: read-only flips the grant and says so; anything e
 test("other tools pass through the hook untouched", async () => {
   const s = setup();
   assert.equal(await s.hooks[0]!.handler({ toolName: "family_schedule", params: { [STAMP_PARAM]: "x" } }, discord(PENNY_ID).hook), undefined);
+});
+
+test("a kid cannot learn a hidden calendar through an approval prompt", async () => {
+  const s = setup();
+  const outcome = await hostCall(s, discord(PENNY_ID), { ...SLEEPOVER, calendar: "Donnie" }, {
+    decide: () => assert.fail("no approval for a calendar the kid cannot see"),
+  });
+  assert.equal(outcome.blocked, "Something went wrong checking that, so I didn't add that event.");
+  assert.deepEqual(s.log.rows, []);
+  assert.equal(s.gog.calls.length, 0);
 });

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { parseConfig } from "./config.ts";
 import { todayHomeMethod } from "./today-home-method.ts";
 import { homeSessionKey, seededFlag, todayHomeDecision, todayOnHome, todayPutParams, widgetsOf, TODAY_KIND } from "./today-home.ts";
+import { viewerOf } from "./week-method.ts";
 
 const onHome = [{ name: "family-today", pluginKind: TODAY_KIND }];
 
@@ -41,6 +43,8 @@ test("a week payload is not a seed read and not a board", () => {
 });
 
 test("the seed method claims once and does not claim when the store is closed", async () => {
+  const config = parseConfig({ demo: true, timezone: "UTC" });
+  const owner = { usesSharedGatewayAuth: true } as unknown as NonNullable<Parameters<typeof viewerOf>[0]>;
   let seeded = false;
   let claims = 0;
   const method = todayHomeMethod(() => ({
@@ -50,23 +54,24 @@ test("the seed method claims once and does not claim when the store is closed", 
       seeded = true;
       return { inserted: claims === 1 };
     },
-  }));
+  }), () => config);
   const answers: unknown[] = [];
   const respond = (_ok: boolean, payload?: unknown) => {
     answers.push(payload);
   };
-  await method({ params: {}, respond });
-  await method({ params: { claim: true }, respond });
-  await method({ params: { claim: true }, respond });
+  await method({ params: {}, client: owner, respond });
+  await method({ params: { claim: true }, client: owner, respond });
+  await method({ params: { claim: true }, client: owner, respond });
   assert.deepEqual(answers, [{ seeded: false }, { seeded: true }, { seeded: true }]);
   assert.equal(claims, 2);
-  const closed = todayHomeMethod(() => undefined);
+  const closed = todayHomeMethod(() => undefined, () => config);
   const closedAnswers: unknown[] = [];
-  await closed({ params: { claim: true }, respond: (_ok, payload) => closedAnswers.push(payload) });
+  await closed({ params: { claim: true }, client: owner, respond: (_ok, payload) => closedAnswers.push(payload) });
   assert.deepEqual(closedAnswers, [{ seeded: false }]);
   let refused = false;
   await method({
     params: { claim: "yes" },
+    client: owner,
     respond: (ok) => {
       refused = ok === false;
     },

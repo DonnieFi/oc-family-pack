@@ -61,3 +61,7 @@ test("the page method returns a sentence, the empty line, or the check failure, 
   assert.equal(JSON.stringify(answers).includes("200000000000000099"), false);
   assert.equal(JSON.stringify(answers).includes("disk"), false);
 });
+
+test("a channel target is not shown as a person even when its key looks like one", () => {
+  assert.deepEqual(deliveryStatusLine({ kind: "daily", status: "sent", target: "alex", targetKind: "channel" }, ROSTER), { line: "Daily brief sent.", failed: false });
+});

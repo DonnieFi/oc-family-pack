@@ -34,7 +34,7 @@ export function requesterTag(requester) {
             // Off Discord the owner flag names no person, and the hook can't see it on tools.invoke.
             return "tool";
         case "page":
-            return "page";
+            return requester.memberId === undefined ? "page" : `page:${requester.memberId}`;
         case "other":
             return "other";
     }
@@ -628,7 +628,7 @@ async function seriesOf(deps, calendarId, seriesId) {
 }
 /** The pipeline entry for update, move and delete: the gate (source and destination), then changeEvent. */
 export async function submitChange(deps, submission) {
-    const requester = resolveWriteRequester(deps.config.members, submission.context);
+    const requester = deps.requester ?? resolveWriteRequester(deps.config.members, submission.context);
     const gate = gateWrite({
         writes: deps.config.writes,
         grant: deps.grant.get(),
@@ -663,7 +663,7 @@ export async function submitChange(deps, submission) {
  * before_tool_call hook (calendar-create.ts) and come back with `table`.
  */
 export async function submitCreate(deps, submission) {
-    const requester = resolveWriteRequester(deps.config.members, submission.context);
+    const requester = deps.requester ?? resolveWriteRequester(deps.config.members, submission.context);
     const gate = gateWrite({
         writes: deps.config.writes,
         grant: deps.grant.get(),

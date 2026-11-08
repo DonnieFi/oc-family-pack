@@ -9,14 +9,16 @@ import {
   type ControlUiWidget,
 } from "openclaw/plugin-sdk/control-ui";
 import { createFeatureClient } from "openclaw/plugin-sdk/feature-contract";
-import { CALENDAR_WRITE_ACTION, contract, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.ts";
+import { contract, PAGE_WRITE_METHOD, TODAY_VIEW_METHOD, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.ts";
 import { homeSessionKey, seededFlag, todayHomeDecision, todayPutParams, widgetsOf, TODAY_HOME_METHOD } from "./today-home.ts";
 import { DELIVERY_STATUS_METHOD } from "./delivery-status.ts";
 import { mixTowardInk } from "./contrast.ts";
 import { roundHalfEven } from "./recommendation.ts";
-import type { CalendarRef, FamilyEvent, Member, WeekPayload } from "./types.ts";
+import type { CalendarRef, FamilyEvent, Member, TodayPayload, WeekPayload } from "./types.ts";
 import { addDays, boundWeekStart, localDate, pageWeekStart } from "./week.ts";
 import { somethingWrongLine } from "./write-lines.ts";
+
+type PageWriteResult = { ok: boolean; message: string };
 import { PEOPLE_PAGE_ID } from "./directory-contract.ts";
 import { mountPeoplePage } from "./directory-ui.ts";
 import "./control-ui.css";
@@ -788,7 +790,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       sync();
       let message: string;
       try {
-        const result = await feature.invoke(CALENDAR_WRITE_ACTION, { ...input, id: event.id, requestId: newRequestId() });
+        const result = await host.request<PageWriteResult>(PAGE_WRITE_METHOD, { ...input, id: event.id, requestId: newRequestId() });
         message = result.message;
       } catch {
         // Never the host's text: the same line the Gateway gives for a write that did not happen.
@@ -1086,7 +1088,7 @@ export function mountTodayWidget(container: HTMLElement, initial: ControlUiViewC
     }
     if (!answered) showLoading();
     const current = ++generation;
-    feature.invoke("family.today", {}).then(
+    host.request<TodayPayload>(TODAY_VIEW_METHOD, {}).then(
       (today) => {
         if (disposed || current !== generation) return;
         const highlights = today.highlights;

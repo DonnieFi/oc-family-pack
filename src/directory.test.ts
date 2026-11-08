@@ -267,10 +267,11 @@ test("the directory methods return the roster to a parent and a preview that doe
   };
   const config = parseConfig(raw);
   const seen: unknown[] = [];
+  const owner = { usesSharedGatewayAuth: true } as never;
   const respond = (ok: boolean, payload?: unknown) => {
     seen.push(ok ? payload : "bad");
   };
-  await directoryMethod(() => config, () => raw)({ respond });
+  await directoryMethod(() => config, () => raw)({ client: owner, respond });
   const body = seen[0] as { members: { id: string; login?: string; email?: string }[]; persistence: string };
   assert.equal(body.members[0]?.id, "person-riley");
   assert.equal(body.members[0]?.login, "riley-login");
@@ -278,7 +279,7 @@ test("the directory methods return the roster to a parent and a preview that doe
   assert.match(body.persistence, /does not write the Gateway config/);
 
   seen.length = 0;
-  await directoryPreviewMethod(() => config, () => raw)({ params: { op: "edit", edits: [{ id: "person-riley", login: "riley-home" }] }, respond });
+  await directoryPreviewMethod(() => config, () => raw)({ client: owner, params: { op: "edit", edits: [{ id: "person-riley", login: "riley-home" }] }, respond });
   const preview = seen[0] as { ok: boolean; patch: string };
   assert.equal(preview.ok, true);
   assert.match(preview.patch, /"id": "person-riley"/);
@@ -287,7 +288,7 @@ test("the directory methods return the roster to a parent and a preview that doe
 
   seen.length = 0;
   const demo = parseConfig({ demo: true, timezone: "UTC" });
-  await directoryPreviewMethod(() => demo, () => raw)({ params: { op: "edit", edits: [{ id: "alex", login: "alex-home" }] }, respond });
+  await directoryPreviewMethod(() => demo, () => raw)({ client: owner, params: { op: "edit", edits: [{ id: "alex", login: "alex-home" }] }, respond });
   assert.match(JSON.stringify(seen[0]), /Turn demo off/);
 });
 
@@ -332,4 +333,51 @@ test("reservations accept only strict IPv4 literals, never IPv6 or malformed add
   for (const address of [":::", "1:2:3", "2001:db8::1", "2001:db8:0:0:0:0:0::", "::ffff:192.168.1.40", "256.1.1.1", "192.168.001.40", "192.168.1", "phone.lan", "192.168.1.40/24"]) {
     assert.throws(() => parseConfig(config(address)), /must be an IPv4 address/, address);
   }
+});
+
+test("one preview can apply several cards, with aliases, role and reminder changes", () => {
+  const raw = [
+    { id: "alex", name: "Alex", role: "parent", profileId: "alex" },
+    { id: "riley", name: "Riley", role: "kid", profileId: "riley" },
+  ];
+  const result = planDirectoryEdit(raw, [
+    { id: "alex", aliases: ["Dad"], color: "#3366ff" },
+    { id: "riley", displayName: "Riley S", role: "guest", reminders: "off" },
+  ]);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const patch = JSON.parse(result.patch) as { plugins: { entries: { "oc-family-pack": { config: { members: Record<string, unknown>[] } } } } };
+  const members = patch.plugins.entries["oc-family-pack"].config.members;
+  assert.deepEqual(members[0]?.aliases, ["dad"]);
+  assert.equal(members[0]?.color, "#3366ff");
+  assert.equal(members[1]?.name, "Riley S");
+  assert.equal(members[1]?.role, "guest");
+  assert.equal(members[1]?.reminders, "off");
+});
+
+test("a roster kid with operator.write still cannot read or edit the directory", async () => {
+  const raw = {
+    members: [
+      { id: "alex", profileId: "alex", name: "Alex", role: "parent" },
+      { id: "riley", profileId: "riley", name: "Riley", role: "kid" },
+    ],
+  };
+  const config = parseConfig(raw);
+  const kid = { authenticatedUserId: "riley" } as never;
+  const seen: unknown[] = [];
+  const respond = (_ok: boolean, payload?: unknown) => seen.push(payload);
+  await directoryMethod(() => config, () => raw)({ client: kid, respond });
+  assert.match(JSON.stringify(seen[0]), /for a parent/);
+  seen.length = 0;
+  await directoryPreviewMethod(() => config, () => raw)({ client: kid, params: { op: "edit", edits: [{ id: "riley", login: "new" }] }, respond });
+  assert.deepEqual(seen[0], { ok: false, error: "People is for a parent. This sign-in can read the week, and it cannot see emails, phone numbers, Discord ids, or devices." });
+});
+
+test("clearing the alias field removes stored aliases", () => {
+  const raw = [{ id: "alex", name: "Alex", role: "parent", aliases: ["dad"] }];
+  const result = planDirectoryEdit(raw, [{ id: "alex", aliases: [] }]);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const patch = JSON.parse(result.patch) as { plugins: { entries: { "oc-family-pack": { config: { members: Record<string, unknown>[] } } } } };
+  assert.equal("aliases" in patch.plugins.entries["oc-family-pack"].config.members[0]!, false);
 });

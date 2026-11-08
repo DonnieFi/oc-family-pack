@@ -49,3 +49,14 @@ test("a username matches only the exact profileId", () => {
     assert.deepEqual(seen(person(near)), ["family"], near);
   }
 });
+
+test("a gateway profile and a username that name different people fail closed", () => {
+  const g: Pick<Config, "members" | "calendars"> = {
+    ...config,
+    members: config.members.map((entry) =>
+      entry.id === "alex" ? { ...entry, gatewayProfileId: "prof-alex" } : entry.id === "riley" ? { ...entry, gatewayProfileId: "prof-riley" } : entry,
+    ),
+  };
+  assert.deepEqual([...visibleCalendarIds(g, { kind: "person", username: "alex", gatewayProfileId: "prof-riley" })], ["family"]);
+  assert.deepEqual([...visibleCalendarIds(g, { kind: "person", username: "alex", gatewayProfileId: "prof-alex" })].sort(), [...ALL].sort());
+});

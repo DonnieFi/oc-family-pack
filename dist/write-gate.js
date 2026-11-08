@@ -1,4 +1,4 @@
-import { approvers, pageRole, writeRight } from "./write-permissions.js";
+import { approvers, pageIsParent, writeRight } from "./write-permissions.js";
 /** A page session without operator.write or operator.admin. */
 export const VIEW_ONLY = "This page is view-only for you, so I didn't change anything.";
 /** `writes: "off"` in the plugin config. */
@@ -17,7 +17,7 @@ export const READ_ONLY = "I can only read the calendars right now, so I didn't c
  * isn't sent for approval again; steps 0-2 always run.
  */
 export function gateWrite(input) {
-    if (input.requester.from === "page" && pageRole(input.requester.client) !== "parent")
+    if (input.requester.from === "page" && !pageIsParent(input.requester))
         return { decision: "refused", message: VIEW_ONLY };
     if (input.writes === "off")
         return { decision: "refused", message: WRITES_OFF };

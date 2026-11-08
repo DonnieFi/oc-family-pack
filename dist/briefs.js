@@ -95,16 +95,17 @@ async function buildBrief(deps, brief, now) {
     };
 }
 function rowOf(key, kind, target, outcome) {
+    const base = { deliveryKey: key, kind, target, targetKind: kind === "alert" ? "member" : "channel" };
     switch (outcome.status) {
         case "sent":
-            return { deliveryKey: key, kind, target, status: "sent", receiptJson: JSON.stringify(outcome.receipt) };
+            return { ...base, status: "sent", receiptJson: JSON.stringify(outcome.receipt) };
         case "partial":
-            return { deliveryKey: key, kind, target, status: "partial", errorKind: outcome.errorKind, errorDetail: outcome.detail, receiptJson: JSON.stringify(outcome.receipt) };
+            return { ...base, status: "partial", errorKind: outcome.errorKind, errorDetail: outcome.detail, receiptJson: JSON.stringify(outcome.receipt) };
         case "claimed":
             // The host already holds this key: sent before, in flight, or lost in a crash mid-send.
-            return { deliveryKey: key, kind, target, status: "unknown", errorKind: "other", errorDetail: "host already holds this delivery key (claimed)" };
+            return { ...base, status: "unknown", errorKind: "other", errorDetail: "host already holds this delivery key (claimed)" };
         default:
-            return { deliveryKey: key, kind, target, status: outcome.status, errorKind: outcome.errorKind, errorDetail: outcome.detail };
+            return { ...base, status: outcome.status, errorKind: outcome.errorKind, errorDetail: outcome.detail };
     }
 }
 const LABEL = { daily: "daily brief", weekly: "weekly brief", reminder: "reminder", household: "household brief", alert: "alert" };
@@ -132,7 +133,7 @@ export async function alertDeliveryFailure(deps, store, kind, target, textFor) {
     const streak = await store.deliveryStreakStart(kind, target);
     if (!streak || streak.status === "sent")
         return;
-    const parents = (deps.config.demo ? DEMO_MEMBERS : deps.config.members).filter((member) => member.role === "parent");
+    const parents = (deps.config.demo ? DEMO_MEMBERS : deps.config.members).filter((member) => member.role === "parent" && member.discordId !== undefined);
     for (const parent of parents) {
         const key = `alert:${kind}:${target}:${streak.id}:${parent.id}`;
         if (await store.deliveryDone(key))
@@ -170,6 +171,8 @@ export async function briefTick(deps, now) {
 }
 /** Polls every minute from now; ticks never overlap. Returns the stop function. */
 export function startBriefs(deps, now = Date.now) {
+    if (deps.config.demo)
+        return () => { };
     let running = false;
     const tick = async () => {
         if (running)
@@ -192,5 +195,9 @@ export function startBriefs(deps, now = Date.now) {
 }
 /** The directory `deliver` reads ids from: roster members and configured channels. */
 export function briefDirectory(config) {
-    return { members: config.members, channels: config.channels ?? {} };
+    return {
+        members: config.members,
+        channels: config.channels ?? {},
+        ...(config.discordAccount !== undefined ? { account: config.discordAccount } : {}),
+    };
 }

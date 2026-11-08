@@ -488,7 +488,7 @@ test("store failure before gog: ux's line with the op's verb, never the store's 
   );
   assert.deepEqual(s.gog.writes(), []);
   assert.deepEqual(s.log.rows.map((row) => [row.op, row.status]), [["create", "failed"], ["update", "failed"], ["move", "failed"], ["delete", "failed"]]);
-  const page = await s.page(pageInput({ op: "delete", id: wire("c0", event) }), parentPage());
+  const page = await submit(s, pageInput({ op: "delete", id: wire("c0", event) }), parentPage());
   assert.deepEqual(page, { ok: false, message: "Something went wrong checking that, so I didn't delete **Dentist**." });
 });
 
@@ -514,7 +514,7 @@ test("store failure after gog wrote: the normal success line and no warning", as
   assert.equal(s.gog.writes().length, 3);
   assert.deepEqual(s.log.rows, []);
   const d = seed(s);
-  assert.deepEqual(await s.page(pageInput({ op: "delete", id: wire("c0", d) }), parentPage()), { ok: true, message: DELETED });
+  assert.deepEqual(await submit(s, pageInput({ op: "delete", id: wire("c0", d) }), parentPage()), { ok: true, message: DELETED });
 });
 
 test("an outcome row the store won't take leaves the parent's answer standing", async () => {
@@ -538,7 +538,7 @@ function parentPage(scopes: string[] = ["operator.read", "operator.write"]): Fea
   return { source: "session-action", api: {}, action: { pluginId: "oc-family-pack", actionId: "family.calendar.write", payload: {}, client: { connId: "p", scopes } } } as unknown as FeatureInvocationContext;
 }
 function submit(s: Setup, input: CalendarWrite, context = parentPage()): Promise<PageWriteResult> {
-  return s.page(input, context);
+  return s.page(input, context, undefined, { kind: "owner" });
 }
 
 test("the page answers with ok and ux's line only, and tells open pages which calendars changed", async () => {
@@ -590,8 +590,14 @@ test("ux's locked lines for a change that can't go ahead", async () => {
   assert.deepEqual(await call(s, "calendar_update", DONNIE_ID, { event: wire("c0", event), start: "next Tuesday-ish" }), { blocked: UNREADABLE_TIME });
   assert.deepEqual(await call(s, "calendar_update", DONNIE_ID, { event: wire("c0", event), start: "2026-10-14T12:00:00-03:00", end: "2026-10-14T11:00:00-03:00" }), { blocked: END_BEFORE_START_CHANGE });
   assert.deepEqual(await call(s, "calendar_move", DONNIE_ID, { event: wire("c0", event), calendar: "Grandma" }), { blocked: "I couldn't find a calendar called Grandma, so nothing changed." });
-  assert.equal((await call(s, "calendar_update", CALLA_ID, { event: wire("c0", event), title: "X" }, "deny")).approval?.title, "Calla wants to change **Dentist** on Donnie's calendar");
-  assert.equal((await call(s, "calendar_delete", CALLA_ID, { event: wire("c0", event) }, "deny")).approval?.title, "Calla wants to delete **Dentist** from Donnie's calendar");
+  const hiddenUpdate = await call(s, "calendar_update", CALLA_ID, { event: wire("c0", event), title: "X" }, "deny");
+  assert.equal(hiddenUpdate.approval, undefined, "a hidden calendar must not leak into the approval");
+  assert.ok(hiddenUpdate.blocked);
+  const hiddenDelete = await call(s, "calendar_delete", CALLA_ID, { event: wire("c0", event) }, "deny");
+  assert.equal(hiddenDelete.approval, undefined, "a hidden calendar must not leak into the approval");
+  assert.ok(hiddenDelete.blocked);
+  const familyEvent = seed(s, { calendarId: FAMILY_CAL });
+  assert.equal((await call(s, "calendar_update", CALLA_ID, { event: wire("c1", familyEvent), title: "X" }, "deny")).approval?.title, "Calla wants to change **Dentist** on the Family calendar");
   assert.deepEqual(await submit(s, pageInput({ op: "create", calendarKey: "c9", title: "Sleepover", start: "2026-10-09T19:30:00Z", end: "2026-10-10T12:00:00Z" })), {
     ok: false,
     message: "I couldn't find that calendar, so I didn't add **Sleepover**.",
@@ -809,6 +815,20 @@ test("an event already cancelled when we first look is not found, with no row, f
   const mine = seed(s, { status: "cancelled" });
   assert.deepEqual(await call(s, "calendar_delete", CALLA_ID, { event: wire("c1", shared) }), { blocked: "I couldn't find **Dentist** on the Family calendar, so nothing changed." });
   assert.deepEqual(await submit(s, pageInput({ op: "delete", id: wire("c0", mine) })), { ok: false, message: "I couldn't find **Dentist** on Donnie's calendar, so nothing changed." });
+  assert.deepEqual(s.log.rows, []);
+  assert.deepEqual(s.gog.writes(), []);
+});
+
+test("a page write with a viewer cannot touch a hidden calendar", async () => {
+  const s = setup();
+  const event = seed(s);
+  const result = await s.page(
+    pageInput({ op: "delete", id: wire("c0", event) }),
+    parentPage(),
+    undefined,
+    { kind: "person", username: "riley" },
+  );
+  assert.deepEqual(result, { ok: false, message: NO_SUCH_EVENT });
   assert.deepEqual(s.log.rows, []);
   assert.deepEqual(s.gog.writes(), []);
 });

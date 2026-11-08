@@ -207,20 +207,17 @@ test("claimed logs unknown and is final", async () => {
   assert.deepEqual((await rows(store))[0], { delivery_key: "daily-summary:2026-10-13", kind: "daily", target: "family", status: "unknown", error_kind: "other" });
 });
 
-test("failed (our own pre-send check) is tried again on the next tick in the window, alerting once", async () => {
+test("a pre-send no-channel failure is final: no retry and no duplicate alert", async () => {
   const store = await freshStore();
-  let missing = true;
   const { deps, calls } = rig(store, (key) =>
-    key.startsWith("daily-summary:") && missing ? { status: "failed", errorKind: "no-channel", detail: "no Discord id for this target in config" } : SENT,
+    key.startsWith("daily-summary:") ? { status: "failed", errorKind: "no-channel", detail: "no Discord id for this target in config" } : SENT,
   );
   await briefTick(deps, at("2026-10-13", 7));
   await briefTick(deps, at("2026-10-13", 7 + 1 / 60));
-  missing = false;
   await briefTick(deps, at("2026-10-13", 7 + 2 / 60));
-  await briefTick(deps, at("2026-10-13", 7 + 3 / 60));
   const daily = (await rows(store)).filter((row) => row.kind === "daily");
-  assert.deepEqual(daily.map((row) => [row.status, row.error_kind]), [["failed", "no-channel"], ["failed", "no-channel"], ["sent", null]]);
-  assert.equal(calls.filter((call) => call.key === "daily-summary:2026-10-13").length, 3);
+  assert.deepEqual(daily.map((row) => [row.status, row.error_kind]), [["failed", "no-channel"]]);
+  assert.equal(calls.filter((call) => call.key === "daily-summary:2026-10-13").length, 1);
   assert.equal(calls.filter((call) => call.key.startsWith("alert:")).length, 2);
 });
 

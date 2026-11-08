@@ -5,6 +5,7 @@ import { groupCopies, mergeGroup } from "./merge.ts";
 import { alertDeliveryFailure } from "./briefs.ts";
 import { dueReminders, reminderAlert, reminderMessage, type QuietHours, type ReminderEvent, type ReminderMode } from "./reminder.ts";
 import { requesterFromFacts, type Requester } from "./requester.ts";
+import { resolveMemberReference } from "./person.ts";
 import { readEvents, type ReadEvent } from "./schedule.ts";
 import type { DeliveryLogRow, FamilyStore } from "./store.ts";
 import type { CalendarStateOf, Config, MemberConfig } from "./types.ts";
@@ -36,7 +37,7 @@ function roster(config: Config): readonly MemberConfig[] {
 }
 
 function modeOf(member: MemberConfig, stored: Readonly<Record<string, ReminderMode>>): ReminderMode {
-  return stored[member.id] ?? member.reminders ?? "dm";
+  return stored[member.id] ?? member.reminders ?? (member.discordId === undefined ? "off" : "dm");
 }
 
 /** Timed events in the window, copies merged, owners in roster order. All-day events are not reminders. */
@@ -71,16 +72,17 @@ async function reminderEvents(deps: ReminderDeps, now: number): Promise<Reminder
   });
 }
 
-function rowOf(key: string, target: string, outcome: DeliveryOutcome): DeliveryLogRow {
+function rowOf(key: string, target: string, outcome: DeliveryOutcome, targetKind: "member" | "channel"): DeliveryLogRow {
+  const base = { deliveryKey: key, kind: "reminder" as const, target, targetKind };
   switch (outcome.status) {
     case "sent":
-      return { deliveryKey: key, kind: "reminder", target, status: "sent", receiptJson: JSON.stringify(outcome.receipt) };
+      return { ...base, status: "sent", receiptJson: JSON.stringify(outcome.receipt) };
     case "partial":
-      return { deliveryKey: key, kind: "reminder", target, status: "partial", errorKind: outcome.errorKind, errorDetail: outcome.detail, receiptJson: JSON.stringify(outcome.receipt) };
+      return { ...base, status: "partial", errorKind: outcome.errorKind, errorDetail: outcome.detail, receiptJson: JSON.stringify(outcome.receipt) };
     case "claimed":
-      return { deliveryKey: key, kind: "reminder", target, status: "unknown", errorKind: "other", errorDetail: "host already holds this delivery key (claimed)" };
+      return { ...base, status: "unknown", errorKind: "other", errorDetail: "host already holds this delivery key (claimed)" };
     default:
-      return { deliveryKey: key, kind: "reminder", target, status: outcome.status, errorKind: outcome.errorKind, errorDetail: outcome.detail };
+      return { ...base, status: outcome.status, errorKind: outcome.errorKind, errorDetail: outcome.detail };
   }
 }
 
@@ -102,6 +104,10 @@ export async function reminderTick(deps: ReminderDeps, now: number): Promise<voi
     const member = members.get(due.profileId);
     const mode = member ? modeOf(member, stored) : "off";
     if (mode === "off") continue;
+    // No Discord id means no DM. Channel mode still works as a plain-text
+    // mention in the summary channel; a repeated no-channel row is only for
+    // an explicit dm request with nowhere to send it.
+    if (member?.discordId === undefined && mode === "dm") continue;
     if (await store.deliveryDone(due.key)) continue;
     const channel = deps.config.summaryChannel;
     let outcome: DeliveryOutcome;
@@ -118,7 +124,7 @@ export async function reminderTick(deps: ReminderDeps, now: number): Promise<voi
       outcome = await deps.deliver({ member: due.profileId }, [reminderMessage(due.event, due.minsUntil, deps.config.timezone, who(due.event))], due.key);
       target = due.profileId;
     }
-    const row = rowOf(due.key, target, outcome);
+    const row = rowOf(due.key, target, outcome, mode === "channel" && channel !== undefined ? "channel" : "member");
     await store.appendDeliveryLog(row);
     if (row.status !== "sent") {
       deps.log(`oc-family-pack: reminder logged ${row.status} (${row.errorKind})`);
@@ -129,6 +135,7 @@ export async function reminderTick(deps: ReminderDeps, now: number): Promise<voi
 
 /** Polls every minute from now; ticks never overlap. Returns the stop function. */
 export function startReminders(deps: ReminderDeps, now: () => number = Date.now): () => void {
+  if (deps.config.demo) return () => {};
   let running = false;
   const tick = async () => {
     if (running) return;
@@ -169,10 +176,16 @@ export type ModeResult = { ok: true; text: string } | { ok: false; text: string 
  * `member` is a roster member id, or "me" for the person asking on Discord.
  */
 export async function setReminderMode(store: Store, members: readonly MemberConfig[], requester: Requester, member: string, mode: ReminderMode): Promise<ModeResult> {
-  const profileId = member === "me" ? (requester.from === "discord" ? requester.member?.id : undefined) : member;
-  if (profileId === undefined) return { ok: false, text: "I can't tell who is asking. Name the person." };
-  const target = members.find((entry) => entry.id === profileId);
-  if (!target) return { ok: false, text: "That person is not in the family." };
+  const self = requester.from === "discord" ? requester.member?.id : undefined;
+  let target: MemberConfig | undefined;
+  if (member.trim().toLowerCase() === "me") {
+    target = self === undefined ? undefined : members.find((entry) => entry.id === self);
+  } else {
+    const resolved = resolveMemberReference(members, member);
+    if ("error" in resolved) return { ok: false, text: resolved.error };
+    target = resolved.member;
+  }
+  if (!target) return { ok: false, text: "I can't tell who is asking. Name the person." };
   if (!maySetReminder(requester, target)) return { ok: false, text: "Only a parent, or the person themselves, can change reminder delivery." };
   await store.appendReminderMode(target.id, mode);
   return { ok: true, text: MODE_LINE[mode](target.displayName) };
@@ -188,7 +201,7 @@ export const SET_REMINDER_MODE_TOOL = "set_reminder_mode";
 
 export const SetReminderModeSchema = Type.Object(
   {
-    member: Type.String({ minLength: 1, maxLength: 200, description: 'A roster member id, or "me" for the person asking on Discord.' }),
+    member: Type.String({ minLength: 1, maxLength: 200, description: 'A roster member id, login, display name, alias, or "me" for the person asking on Discord.' }),
     mode: Type.Union([Type.Literal("dm"), Type.Literal("channel"), Type.Literal("off")], { description: "A direct message, a mention in the brief channel, or off." }),
   },
   { additionalProperties: false },

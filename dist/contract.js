@@ -97,8 +97,12 @@ export const MemberSchema = Type.Object({
     color: Text(100),
     role: MemberRole,
 }, { additionalProperties: false });
+export const RosterMemberSchema = Type.Object({
+    ...MemberSchema.properties,
+    aliases: Type.Optional(Type.Array(Text(LABEL_MAX), { maxItems: 8 })),
+}, { additionalProperties: false });
 export const WeatherStateSchema = sourceState(WeatherCardSchema);
-export const MembersPayloadSchema = Type.Object({ members: Type.Array(MemberSchema, { maxItems: MAX_MEMBERS }) }, { additionalProperties: false });
+export const MembersPayloadSchema = Type.Object({ members: Type.Array(RosterMemberSchema, { maxItems: MAX_MEMBERS }) }, { additionalProperties: false });
 const eventDetails = {
     allDay: Type.Optional(Type.Boolean()),
     location: Type.Optional(Text(LOCATION_MAX)),
@@ -146,7 +150,6 @@ export const CalendarWriteSchema = Type.Union([
 ]);
 /** A page write's answer: whether it happened, and ux's line. No event id, no key. */
 export const CalendarWriteResultSchema = Type.Object({ ok: Type.Boolean(), message: Text(MESSAGE_MAX) }, { additionalProperties: false });
-export const CALENDAR_WRITE_ACTION = "family.calendar.write";
 /** The dashboard widget id. The Control UI registers this id, and the plugin advertises the same one. */
 export const TODAY_WIDGET_ID = "family-today";
 /** Highlights plus today's noteworthy events. `family.today` returns it. */
@@ -207,6 +210,8 @@ export const WeekPayloadSchema = Type.Object({
  * Gateway method that filters by who signed in.
  */
 export const WEEK_METHOD = "family.week";
+export const TODAY_VIEW_METHOD = "family.todayView";
+export const PAGE_WRITE_METHOD = "family.pageWrite";
 export const WeekInputSchema = Type.Object({ start: Type.Optional(IsoDate) }, { additionalProperties: false });
 /** `family_schedule` reads at most a week, or 90 days for a title lookup, and lists 40 items before "+N more". */
 export const SCHEDULE_DAYS_MAX = 7;
@@ -222,7 +227,7 @@ export const ScheduleInputSchema = Type.Object({
     member: Type.Optional(Type.String({
         minLength: 1,
         maxLength: LABEL_MAX,
-        description: 'Only calendars this person owns: a roster member id, or "me" for the person asking on Discord.',
+        description: 'Only calendars this person owns: a roster member id, login, display name, alias, or "me" for the person asking on Discord.',
     })),
     query: Type.Optional(Type.String({
         minLength: 1,
@@ -284,9 +289,10 @@ export const contract = defineFeatureContract({
     operations: {
         "family.members": {
             kind: "query",
-            description: "Read the roster a picker shows: member id, display name, color, and role for each person.",
+            description: "Read the family roster: member id, display name, role, color, and the aliases the family uses. No contact details.",
             input: EmptyInput,
             output: MembersPayloadSchema,
+            tool: { name: "family_members", label: "Family members" },
         },
         "family.weather": {
             kind: "query",
@@ -319,12 +325,6 @@ export const contract = defineFeatureContract({
             input: EmptyInput,
             output: GarbageOutputSchema,
             tool: { name: "garbage_schedule", label: "Garbage day" },
-        },
-        [CALENDAR_WRITE_ACTION]: {
-            kind: "action",
-            description: "Change, move or delete one event from the page (or add one). Each submit carries its own requestId. Answers with the line to show.",
-            input: CalendarWriteSchema,
-            output: CalendarWriteResultSchema,
         },
     },
     events: {

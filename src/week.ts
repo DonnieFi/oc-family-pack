@@ -1,4 +1,4 @@
-import type { FamilyEvent, Member, MemberConfig, WeekDay, WeekRange } from "./types.ts";
+import type { FamilyEvent, Member, MemberConfig, RosterMember, WeekDay, WeekRange } from "./types.ts";
 
 const DAY_MS = 86_400_000;
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -201,5 +201,14 @@ export function resolveMembers(members: MemberConfig[]): Member[] {
     displayName: member.displayName,
     role: member.role,
     color: member.color ?? MEMBER_PALETTE[index % MEMBER_PALETTE.length] ?? MEMBER_PALETTE[0],
+  }));
+}
+
+/** The agent's roster: the same fields plus the aliases the family uses. No contacts. */
+export function resolveRoster(members: MemberConfig[]): RosterMember[] {
+  const roster = resolveMembers(members);
+  return roster.map((entry, index) => ({
+    ...entry,
+    ...(members[index]?.aliases !== undefined ? { aliases: members[index]!.aliases } : {}),
   }));
 }

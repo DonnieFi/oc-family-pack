@@ -8,6 +8,7 @@ const READY: GogSetupPlan = { status: "ready", command: "gog calendar calendars 
 const MISSING: GogSetupPlan = { status: "missing", command: "brew install openclaw/tap/gogcli", message: "" };
 const SOLO = { bind: "loopback", controlUi: { experimental: { customPlugins: true } } };
 const ALEX = {
+  id: "alex",
   profileId: "alex",
   displayName: "Alex P.",
   role: "parent",
@@ -20,6 +21,7 @@ function host(config: Record<string, unknown>, gateway: unknown = SOLO) {
 }
 
 const complete = {
+  accessMode: "lan",
   timezone: "America/Halifax",
   location: { lat: 44.65, lon: -63.57 },
   members: [ALEX],
@@ -60,7 +62,7 @@ test("an empty install lists every part as To do and names the first step", () =
 test("the next step is the first part still to do, in checklist order", () => {
   const cases: [Record<string, unknown>, GogSetupPlan, RegExp][] = [
     [{ ...complete, timezone: undefined }, READY, /^Next: Set `timezone`, like `America\/Halifax`\. Until then the week uses this machine's time zone\.\n`openclaw config set plugins\.entries\.oc-family-pack\.config\.timezone America\/Halifax`$/m],
-    [{ ...complete, location: { lat: 44.65 } }, READY, /^Next: Add location \{ lat, lon \} to the plugin config to show local weather\.\n`openclaw config set plugins\.entries\.oc-family-pack\.config\.location '\{"lat":LAT,"lon":LON\}' --strict-json`$/m],
+    [{ ...complete, location: undefined }, READY, /^Next: Add location \{ lat, lon \} to the plugin config to show local weather\.\n`openclaw config set plugins\.entries\.oc-family-pack\.config\.location '\{"lat":LAT,"lon":LON\}' --strict-json`$/m],
     [{ ...complete, members: [] }, READY, /^Next: Add at least one parent with `--parent NAME`\.$/m],
     [{ ...complete, members: [{ ...ALEX, role: "kid" }] }, READY, /^Next: Add at least one parent with `--parent NAME`\.$/m],
     [{ ...complete, calendars: [] }, READY, /^Next: `openclaw family gog`$/m],
@@ -86,9 +88,8 @@ test("access mode reuses the access checks, including a Gateway reachable from o
 });
 
 test("in LAN mode a member missing from allowUsers can't sign in, and the step names them", () => {
-  const lan = JSON.parse(/^Gateway config:\n(\{[\s\S]*?^\})$/m.exec(planAccess("lan", { parent: ["alex"] }, {}).text)?.[1] ?? "{}").gateway;
-  const gateway = { ...lan, controlUi: { ...lan.controlUi, allowedOrigins: ["https://192.168.1.20"] }, auth: { ...lan.auth, password: "x" } };
-  const riley = { profileId: "riley", displayName: "Riley", role: "kid" };
+  const gateway = lanGateway();
+  const riley = { id: "riley", profileId: "riley", displayName: "Riley", role: "kid" };
   const result = planSetup(host({ ...complete, members: [ALEX, riley] }, gateway), {}, READY, "UTC");
   assert.match(result.text, /^Access mode: Done$/m);
   assert.match(result.text, /^Members: To do$/m);
@@ -135,7 +136,7 @@ test("the access command keeps everyone already in allowUsers, with the role the
   const lan = JSON.parse(/^Gateway config:\n(\{[\s\S]*?^\})$/m.exec(planAccess("lan", { parent: ["alex", "sam"], names: ["pat"] }, {}).text)?.[1] ?? "{}").gateway;
   const identityScopes = { alex: ["operator.read", "operator.write", "operator.sessions.write"], sam: ["operator.sessions.write", "operator.write", "operator.read"] };
   const gateway = { ...lan, controlUi: { ...lan.controlUi, allowedOrigins: ["https://192.168.1.20"] }, auth: { ...lan.auth, password: "x", identityScopes } };
-  const riley = { profileId: "riley", displayName: "Riley", role: "kid" };
+  const riley = { id: "riley", profileId: "riley", displayName: "Riley", role: "kid" };
   const result = planSetup(host({ ...complete, members: [ALEX, riley] }, gateway), {}, READY, "UTC");
   // sam keeps parent from his scopes; pat has none, so stays the guest access made him.
   assert.match(result.text, /^`openclaw family access lan --parent alex --guest pat --kid riley --parent sam`$/m);
@@ -144,8 +145,12 @@ test("the access command keeps everyone already in allowUsers, with the role the
 const SNOWFLAKE = "100000000000000001";
 
 function lanGateway(extra: Record<string, unknown> = {}) {
-  const lan = JSON.parse(/^Gateway config:\n(\{[\s\S]*?^\})$/m.exec(planAccess("lan", { parent: ["alex"] }, {}).text)?.[1] ?? "{}").gateway;
-  return { ...lan, controlUi: { ...lan.controlUi, allowedOrigins: ["https://192.168.1.20"] }, auth: { ...lan.auth, password: "x" }, ...extra };
+  const text = planAccess("lan", { parent: ["alex"] }, {}).text;
+  const blocks = [...text.matchAll(/^\{\n[\s\S]*?^\}$/gm)].map((match) => JSON.parse(match[0]) as { gateway: Record<string, unknown> });
+  const lan = blocks[0]?.gateway ?? {};
+  const roles = blocks[1]?.gateway ?? {};
+  const auth = { ...(lan.auth as object), ...(roles.auth as object), password: "x" };
+  return { ...lan, ...roles, controlUi: { ...(lan.controlUi as object), allowedOrigins: ["https://192.168.1.20"] }, auth, ...extra };
 }
 
 test("a Discord ID changes only that person's discordId and keeps everything else as written", () => {
@@ -154,7 +159,7 @@ test("a Discord ID changes only that person's discordId and keeps everything els
   assert.deepEqual(Object.keys(config), ["members"]);
   const [alex, ...rest] = config.members as Record<string, unknown>[];
   assert.equal(rest.length, 0);
-  assert.equal(JSON.stringify(alex), JSON.stringify({ ...ALEX, discordId: SNOWFLAKE }));
+  assert.equal(JSON.stringify(alex), JSON.stringify({ ...ALEX, id: "alex", discordId: SNOWFLAKE }));
   // Solo has no per-person profiles, so there is nothing to link.
   assert.equal(result.text.includes("users.linkChannelIdentity"), false);
 });
@@ -177,7 +182,7 @@ test("a Discord ID needs a person in the family, which can be someone added in t
 });
 
 test("two people can't share a Discord ID, and an ID that's already set is no change", () => {
-  const withId = { ...complete, members: [{ ...ALEX, discordId: SNOWFLAKE }] };
+  const withId = { ...complete, members: [{ ...ALEX, id: "alex", discordId: SNOWFLAKE }] };
   const shared = planSetup(host(withId), { kid: ["riley"], discord: [`riley=${SNOWFLAKE}`] }, READY, "UTC");
   assert.equal(shared.text, "alex and riley have the same Discord ID. Each person needs their own.");
   const twice = planSetup(host(complete), { discord: [`alex=${SNOWFLAKE}`, `alex=100000000000000002`] }, READY, "UTC");
@@ -206,7 +211,7 @@ test("in LAN mode the patch is followed by the link command, never a call", () =
 });
 
 test("people without a Discord ID get the optional command, which never holds up setup", () => {
-  const riley = { profileId: "riley", displayName: "Riley", role: "kid" };
+  const riley = { id: "riley", profileId: "riley", displayName: "Riley", role: "kid" };
   const result = planSetup(host({ ...complete, members: [{ ...ALEX, discordId: SNOWFLAKE }, riley] }), {}, READY, "UTC");
   assert.equal(result.ok, true);
   assert.match(result.text, /^`openclaw family setup --discord riley=DISCORD_ID_riley`\nOptional\. In Discord, turn on Developer Mode, then right-click the person and pick Copy User ID\.$/m);
@@ -250,4 +255,99 @@ test("setup reads only pure modules: no Gateway, process, file or network import
   const imports = [...source.matchAll(/^import .* from "([^"]+)";$/gm)].map((match) => match[1]);
   assert.deepEqual(imports.sort(), ["./access.ts", "./config.ts", "./directory.ts", "./gog-setup.ts", "./weather-ec.ts"]);
   assert.match(source, /^import type \{ GogSetupPlan \} from "\.\/gog-setup\.ts";$/m);
+});
+
+test("the login alias is the same field as profileId in setup checks", () => {
+  const member = { name: "Riley", login: "riley-home", role: "kid" };
+  const result = planSetup(host({ ...complete, members: [ALEX, member] }, lanGateway()), {}, READY, "UTC");
+  assert.match(result.text, /^Members: To do$/m);
+  assert.match(result.text, /riley-home isn't in `allowUsers`/);
+  const added = planSetup(host(complete, lanGateway()), { discord: [`riley-home=${SNOWFLAKE}`] }, READY, "UTC");
+  assert.equal(added.ok, false);
+  assert.match(added.text, /isn't in the family yet/);
+});
+
+test("setup refuses a config the plugin would reject", () => {
+  const duplicate = planSetup(host({ ...complete, members: [ALEX, { ...ALEX }] }), {}, READY, "UTC");
+  assert.equal(duplicate.ok, false);
+  assert.match(duplicate.text, /needs fixing/);
+  assert.match(duplicate.text, /same Control UI login|share the ID/);
+});
+
+test("setup reports a Gateway scope that does not match the roster role", () => {
+  const gateway = lanGateway();
+  const auth = gateway.auth as Record<string, unknown>;
+  const proxy = auth.trustedProxy as Record<string, unknown>;
+  const scopes = auth.identityScopes as Record<string, unknown>;
+  (proxy.allowUsers as string[]).push("riley-home");
+  scopes["riley-home"] = ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"];
+  const riley = { name: "Riley", login: "riley-home", role: "kid" };
+  const result = planSetup(host({ ...complete, members: [ALEX, riley] }, gateway), {}, READY, "UTC");
+  assert.match(result.text, /^Members: To do$/m);
+  assert.match(result.text, /scopes for Riley \(kid\) don't match/);
+});
+
+test("a complete LAN roster passes the preflight, including roles and allowUsers", () => {
+  const result = planSetup(host(complete, lanGateway()), {}, READY, "UTC");
+  assert.equal(result.ok, true);
+  assert.deepEqual(checklist(result.text), [
+    "Access mode: Done",
+    "Timezone: Done",
+    "Location: Done",
+    "Members: Done",
+    "Calendars: Done",
+  ]);
+  assert.match(result.text, /^Everything is set up\.$/m);
+});
+
+test("LAN setup prints the parent Discord approval targets", () => {
+  const result = planSetup(host(complete, lanGateway()), { discord: [`alex=${SNOWFLAKE}`] }, READY, "UTC");
+  assert.match(result.text, /"approvals": \{/);
+  assert.match(result.text, /"channel": "discord"/);
+  assert.match(result.text, new RegExp(`"to": "user:${SNOWFLAKE}"`));
+});
+
+test("setup warns when a member id is still derived from a name or login", () => {
+  const legacy = { ...complete, members: [{ profileId: "alex", displayName: "Alex P.", role: "parent" }] };
+  const result = planSetup(host(legacy), {}, READY, "UTC");
+  assert.match(result.text, /Alex P\. has no explicit member id/);
+  assert.match(result.text, /--materialize-ids/);
+  assert.match(result.text, /^The checklist is complete\. Run `openclaw family setup --materialize-ids`/m);
+});
+
+test("an email login gets a local-part id and display name, and the hint does not print the address", () => {
+  const result = planSetup(host(complete), { parent: ["sam@example.com"] }, READY, "UTC");
+  const members = patchOf(result.text).plugins.entries["oc-family-pack"].config.members as Record<string, unknown>[];
+  const sam = members.find((member) => member.profileId === "sam@example.com");
+  assert.equal(sam?.id, "sam");
+  assert.equal(sam?.displayName, "Sam");
+  assert.equal(result.text.includes("--discord sam@example.com="), false);
+});
+
+test("setup validates the member-id/channel-key namespace too", () => {
+  const withChannel = { ...complete, channels: { alex: "222222222222222222" } };
+  const result = planSetup(host(withChannel), { kid: ["alex"] }, READY, "UTC");
+  assert.equal(result.ok, false);
+  assert.match(result.text, /also a member id|channel key/);
+});
+
+test("a fresh LAN config prints approval targets for the parent added in the same run", () => {
+  const result = planSetup(host({}, lanGateway()), { parent: ["alex"], discord: [`alex=${SNOWFLAKE}`] }, READY, "UTC");
+  assert.match(result.text, /"approvals": \{/);
+  assert.match(result.text, new RegExp(`"to": "user:${SNOWFLAKE}"`));
+});
+
+test("an extra operator.admin scope still counts as a parent", () => {
+  const gateway = lanGateway();
+  const scopes = (gateway.auth as Record<string, unknown>).identityScopes as Record<string, string[]>;
+  scopes.alex = [...(scopes.alex ?? []), "operator.admin"];
+  const result = planSetup(host(complete, gateway), {}, READY, "UTC");
+  assert.match(result.text, /^Members: Done$/m);
+});
+
+test("setup refuses a malformed location through the plugin parser", () => {
+  const result = planSetup(host({ ...complete, location: { lat: 44.65 } }), {}, READY, "UTC");
+  assert.equal(result.ok, false);
+  assert.match(result.text, /needs fixing/);
+  assert.match(result.text, /location\.lon/);
 });

@@ -2,10 +2,13 @@ import { changeLine, ChangeInputError, NO_SUCH_EVENT, readChange } from "./calen
 import { approverPhrase, bernieWhen, calendarPlace, clean, createdLine, extraFields, failedLine, notApprovedLine } from "./calendar-create.js";
 import { checkKey, getEvent, normalizeCreate, somethingWrongLine, submitChange, submitCreate, END_BEFORE_START } from "./calendar-write.js";
 import { CalendarWriteSchema } from "./contract.js";
+import { visibleCalendarIds } from "./visibility.js";
 /** The page's one write action. The answer is ux's line only: no event id, no key, no gog or store text. */
 export function pageWrite(deps) {
-    return async (input, context) => {
+    return async (input, context, pageRequester, requestViewer) => {
         const op = input.op;
+        if (deps.config.demo)
+            return { ok: false, message: somethingWrongLine(op, undefined) };
         try {
             checkKey(input.requestId);
         }
@@ -17,13 +20,22 @@ export function pageWrite(deps) {
         if (!variant || extraFields(variant, input).length > 0)
             return { ok: false, message: somethingWrongLine(op, undefined) };
         const log = deps.log();
-        const submitDeps = (store) => ({ config: deps.config, runGog: deps.runGog, grant: deps.grant, log: store });
+        const submitDeps = (store) => ({
+            config: deps.config,
+            runGog: deps.runGog,
+            grant: deps.grant,
+            log: store,
+            ...(pageRequester !== undefined ? { requester: pageRequester } : {}),
+        });
+        const visible = visibleCalendarIds(deps.config, requestViewer);
         const approver = approverPhrase(deps.config.members);
         if (input.op === "create") {
             const name = clean(input.title);
             const calendar = deps.config.calendars.find((entry) => entry.key === input.calendarKey);
             if (!calendar)
                 return { ok: false, message: `I couldn't find that calendar, so I didn't add **${name}**.` };
+            if (visible !== undefined && !visible.has(calendar.id))
+                return { ok: false, message: somethingWrongLine("create", name) };
             if (!log)
                 return { ok: false, message: somethingWrongLine("create", name) };
             const fields = {
@@ -61,6 +73,10 @@ export function pageWrite(deps) {
             if (error instanceof ChangeInputError)
                 return { ok: false, message: error.message };
             throw error;
+        }
+        if (visible !== undefined &&
+            (!visible.has(target.calendar.id) || (target.destination !== undefined && !visible.has(target.destination.id)))) {
+            return { ok: false, message: NO_SUCH_EVENT };
         }
         if (!log)
             return { ok: false, message: somethingWrongLine(changeOp, undefined) };

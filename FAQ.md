@@ -9,9 +9,10 @@ says so instead of showing stale or wrong data. Other providers may come later.
 
 ## Why gog for calendars?
 
-[gog](https://github.com/openclaw/gogcli) already handles Google OAuth, token
-refresh, and multiple accounts on the Gateway host. Reusing it means the plugin
-stores no Google credentials of its own. The plugin runs
+[gog](https://github.com/openclaw/gogcli) already handles Google OAuth and token
+refresh on the Gateway host. Reusing it means the plugin stores no Google
+credentials of its own. The plugin uses gog's default account; if `gog auth list`
+holds several, make the family calendars available on that account. It runs
 `gog calendar events <id> --from ... --to ... --json` once per configured
 calendar, with a 20 second timeout and no shell. Adding, changing, moving, and
 deleting an event use that same sign-in.
@@ -88,9 +89,9 @@ does not run. A git install or an npm install keeps both files and works.
 No. The page and chat can add, change, move, and delete events.
 
 A write from the page needs `operator.write`. The kid role does not have it, so
-a kid cannot change events on the page. From chat, a kid can change their own
-personal calendar. A shared calendar, a school calendar, or someone else's
-calendar waits for a parent.
+a kid cannot change events on the page. In Discord, a kid can change their own
+personal calendar. A shared calendar or a school calendar waits for a parent.
+A calendar the kid cannot read is refused before an approval.
 
 Undo is not available. A change that already went through is not undone from
 the page or from chat.
@@ -130,8 +131,9 @@ Reminders fire the lead time before a timed event, 15 minutes if you leave
 that unset. Quiet hours default to 22:00–07:00. A reminder that comes due
 during quiet hours waits, and goes out in the hour after they end. All-day
 events are not reminders. Each person gets a direct message, a mention in the summary
-channel, or nothing. The default is a direct message. `set_reminder_mode`
-changes your own. Changing someone else's needs a parent.
+channel, or nothing. Omitted means a direct message when the person has a
+Discord id, and nothing when they do not. On Discord, `set_reminder_mode`
+changes your own; changing someone else's needs a parent.
 
 ## Do the family commands change config?
 
@@ -146,7 +148,7 @@ prints the steps for one.
 
 A kid can ask what is on, whose class it is, what is due, when the bins go out, and what is urgent today. The answer comes from the calendars that kid can see.
 
-Changing a shared calendar, a school calendar, or someone else's calendar waits for a parent to approve it. A kid can change their own personal calendar. Changing how someone else gets reminders also needs a parent.
+Changing a shared calendar or a school calendar waits for a parent to approve it. A kid can change their own personal calendar. A calendar the kid cannot read is refused before an approval, so a parent has to make that change. Changing how someone else gets reminders also needs a parent.
 
 A change that already went through is not undone from chat.
 
@@ -160,7 +162,7 @@ Authelia.
 
 ## What is a family member?
 
-A member is the household's record of a person, in `plugins.entries.oc-family-pack.config.members`. Only `name` is required. `id` is the household person id: an explicit `id`, otherwise the login, otherwise a lower-case slug of the name. Write the id down with `openclaw family setup --materialize-ids` before renaming someone or changing their login. `role` is `parent`, `kid`, or `guest`, and defaults to guest. Optional fields are `profileId` (or `login`), `gatewayProfileId`, `email`, `phone`, `color`, `discordId`, `reminders` (`dm`, `channel`, or `off`), and `devices`. `displayName` is the older spelling of `name` and still loads.
+A member is the household's record of a person, in `plugins.entries.oc-family-pack.config.members`. Only `name` is required. `id` is the household person id: an explicit `id`, otherwise the login, otherwise a lower-case slug of the name. Write the id down with `openclaw family setup --materialize-ids` before renaming someone or changing their login. `role` is `parent`, `kid`, or `guest`, and defaults to guest. Optional fields are `profileId` (or `login`), `gatewayProfileId`, `aliases`, `email`, `phone`, `color`, `discordId`, `reminders` (`dm`, `channel`, or `off`), and `devices`. `displayName` is the older spelling of `name` and still loads.
 
 `profileId` and `login` are the sign-in username, lower case, matched exactly to the trusted-proxy user. They are not the Gateway's internal profile id, and the login is never made up from the name. `gatewayProfileId` is that internal id, matched only when the host attests it on the connection. Someone with no login is not that person on the Family page unless a host-attested profile id matches; they still count in chat when their `discordId` matches. Setup's Members step stays To do until there is a parent. The chips on the Family page only dim events. They do not add a person, and they are not identity. The fields and the steps are in [SETUP.md](SETUP.md).
 
@@ -172,7 +174,7 @@ Apply it with `openclaw config patch --stdin --dry-run`, then again without `--d
 
 ## Where do email and phone go?
 
-An email can be stored on the member with `openclaw family setup --email alex=alex@example.com`. A phone can be stored as `phone` on the same member. Neither one sends mail or SMS. Sign-in is the `profileId` (or `login`). The week, briefs, and logs do not show the address or the number. The People page shows them to a parent. `family_contact` can read one person's email and phone, and only for the operator. Reminders and briefs in this version go through Discord. A Discord user id goes in `discordId`, set with `openclaw family setup --discord alex=200000000000000001`. `--email person-id=address` finds that person by `id` even when the login is different. If the name matches more than one person, setup stops instead of guessing.
+An email can be stored on the member with `openclaw family setup --email alex=alex@example.com`. A phone can be stored as `phone` on the same member. Neither one sends mail or SMS. Sign-in is the `profileId` (or `login`). The week, briefs, and logs do not show the address or the number. The People page shows them to a parent, or to the shared owner in solo mode. `family_contact` can read one person's email and phone, and only for the operator. Reminders and briefs in this version go through Discord. A Discord user id goes in `discordId`, set with `openclaw family setup --discord alex=200000000000000001`. `--email person-id=address` finds that person by `id` even when the login is different. If the name matches more than one person, setup stops instead of guessing.
 
 ## How do I set a Discord user id?
 
@@ -193,7 +195,7 @@ Five lines, each Done or To do, then one next step.
 - **Access mode.** `openclaw family access`.
 - **Timezone.** Set `plugins.entries.oc-family-pack.config.timezone`, for example `America/Toronto`.
 - **Location.** `lat` and `lon`. Weather is Canada only.
-- **Members.** At least one parent. In LAN mode every member must also be in `allowUsers`.
-- **Calendars.** `openclaw family gog`, then put calendar ids in config.
+- **Members.** At least one parent. In LAN mode every member must also be in `allowUsers` with Gateway scopes that match the roster role; members with no login are named.
+- **Calendars.** `openclaw family gog`, then put calendar ids in config; every personal or school calendar needs an owner who is a parent or kid.
 
-When all five are Done, it prints "Everything is set up." A patch is not saved yet, so that run is not finished.
+When all five are Done, no approval block is pending, and no id or LAN-mode warning remains, it prints "Everything is set up." A patch is not saved yet, so that run is not finished.

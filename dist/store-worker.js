@@ -103,26 +103,28 @@ const handlers = {
     "deliveryLog.append": (input) => {
         const row = isRecord(input) ? input.row : undefined;
         const result = db
-            .prepare("INSERT INTO oc_family_pack_delivery_log (delivery_key, kind, target, status, error_kind, error_detail, receipt_json, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-            .run(field(row, "deliveryKey"), field(row, "kind"), field(row, "target"), field(row, "status"), optional(row, "errorKind"), optional(row, "errorDetail"), optional(row, "receiptJson"), Date.now());
+            .prepare("INSERT INTO oc_family_pack_delivery_log (delivery_key, kind, target, target_kind, status, error_kind, error_detail, receipt_json, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .run(field(row, "deliveryKey"), field(row, "kind"), field(row, "target"), optional(row, "targetKind"), field(row, "status"), optional(row, "errorKind"), optional(row, "errorDetail"), optional(row, "receiptJson"), Date.now());
         return { id: Number(result.lastInsertRowid) };
     },
-    // failed is the one status that is tried again: nothing reached the host.
+    // A failed row means our own pre-send check found no target; there is nothing
+    // for the host to retry. A transient host failure is held or unknown instead.
     "deliveryLog.done": (input) => db
-        .prepare("SELECT 1 AS found FROM oc_family_pack_delivery_log WHERE delivery_key = ? AND status IN ('sent', 'partial', 'held', 'unknown') LIMIT 1")
+        .prepare("SELECT 1 AS found FROM oc_family_pack_delivery_log WHERE delivery_key = ? AND status IN ('sent', 'partial', 'held', 'unknown', 'failed') LIMIT 1")
         .get(field(input, "deliveryKey")) !== undefined,
     "deliveryLog.latest": () => {
-        const row = db.prepare("SELECT kind, status, target FROM oc_family_pack_delivery_log ORDER BY id DESC LIMIT 1").get();
+        const row = db.prepare("SELECT kind, status, target, target_kind FROM oc_family_pack_delivery_log ORDER BY id DESC LIMIT 1").get();
         const kind = row?.kind;
         const status = row?.status;
         const target = row?.target;
+        const targetKind = row?.target_kind === "member" || row?.target_kind === "channel" ? row.target_kind : undefined;
         if ((kind !== "daily" && kind !== "weekly" && kind !== "reminder" && kind !== "household" && kind !== "alert") ||
             (status !== "sent" && status !== "partial" && status !== "failed" && status !== "held" && status !== "unknown") ||
             typeof target !== "string" ||
             target === "") {
             return null;
         }
-        return { kind, status, target };
+        return { kind, status, target, ...(targetKind !== undefined ? { targetKind } : {}) };
     },
     "deliveryLog.streakStart": (input) => {
         const row = db

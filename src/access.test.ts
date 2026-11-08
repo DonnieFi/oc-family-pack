@@ -180,7 +180,7 @@ test("the LAN blocks are config openclaw accepts", () => {
   assert.deepEqual(roles?.gateway, {
     auth: {
       identityScopes: {
-        alex: ["operator.read", "operator.write", "operator.sessions.write"],
+        alex: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"],
         riley: ["operator.read", "operator.sessions.write"],
         sam: ["operator.read"],
       },
@@ -188,7 +188,7 @@ test("the LAN blocks are config openclaw accepts", () => {
     roles: {
       default: "guest",
       definitions: {
-        parent: { sessions: { others: "write" }, agents: "*", scopes: ["operator.read", "operator.write", "operator.sessions.write"] },
+        parent: { sessions: { others: "write" }, agents: "*", scopes: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"] },
         kid: { sessions: { others: "none" }, agents: "*", scopes: ["operator.read", "operator.sessions.write"] },
         guest: { sessions: { others: "none" }, agents: "*", scopes: ["operator.read"] },
       },
@@ -270,7 +270,7 @@ test("Alex Smith is rejected with the username line and exit 1", () => {
   assert.equal(plan.ok, false);
   assert.equal(
     plan.text,
-    "Usernames use lower-case letters, numbers, dots, dashes or underscores. Try `alex`, not `Alex Smith`.\nEach person sees their username as their name in the Control UI, so use what the family calls them.",
+    "Usernames use lower-case letters, numbers, dots, dashes, underscores, or a plain email address. Try `alex` or `alex@example.com`, not `Alex Smith`.\nEach person sees this as their name in the Control UI, so use what the family calls them. It must match the `X-Forwarded-User` value your proxy sends.",
   );
 });
 
@@ -309,4 +309,11 @@ test("the access module can't touch files, processes, or the Gateway", () => {
   const source = readFileSync(new URL("./access.ts", import.meta.url), "utf8");
   const imports = [...source.matchAll(/^import .* from "([^"]+)";$/gm)].map((match) => match[1]);
   assert.deepEqual(imports, []);
+});
+
+test("an email-shaped trusted-proxy username is accepted", () => {
+  const plan = planAccess("lan", { parent: ["alex@example.com"] }, {});
+  assert.equal(plan.ok, true);
+  assert.match(plan.text, /alex@example\.com HASH_alex@example\.com/);
+  assert.match(plan.text, /"allowUsers": \[\n\s+"alex@example\.com"/);
 });

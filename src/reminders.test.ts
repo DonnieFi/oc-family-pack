@@ -129,3 +129,35 @@ test("a person can change their own mode, a parent can change a kid's, and a kid
   assert.equal((await store.reminderModes()).riley, "dm");
   assert.equal((await store.reminderModes()).alex, undefined);
 });
+
+test("a member with no Discord is skipped, not retried every tick", async () => {
+  const store = await freshStore();
+  const jordan = { id: "jordan", profileId: "jordan", displayName: "Jordan", role: "kid" as const, devices: [], reminders: "dm" as const };
+  const config: Config = {
+    ...CONFIG,
+    members: [...CONFIG.members.filter((member) => member.id !== "jordan"), jordan],
+    calendars: [{ ...CONFIG.calendars[0]!, owners: ["jordan"] }],
+  };
+  const rigged = rig(store);
+  rigged.deps.config = config;
+  await reminderTick(rigged.deps, at("2026-10-14", 9.75));
+  await reminderTick(rigged.deps, at("2026-10-14", 9.76));
+  assert.deepEqual(rigged.calls, []);
+  assert.deepEqual(await store.latestDelivery(), undefined);
+});
+
+test("channel mode still works for a member with no Discord id, as a plain name", async () => {
+  const store = await freshStore();
+  const jordan = { id: "jordan", profileId: "jordan", displayName: "Jordan", role: "kid" as const, devices: [], reminders: "channel" as const };
+  const config: Config = {
+    ...CONFIG,
+    members: [...CONFIG.members.filter((member) => member.id !== "jordan"), jordan],
+    calendars: [{ ...CONFIG.calendars[0]!, owners: ["jordan"] }],
+  };
+  const rigged = rig(store);
+  rigged.deps.config = config;
+  await reminderTick(rigged.deps, at("2026-10-14", 9.75));
+  assert.equal(rigged.calls.length, 1);
+  assert.deepEqual(rigged.calls[0]?.target, { channel: "family" });
+  assert.match(rigged.calls[0]?.text ?? "", /Jordan/);
+});

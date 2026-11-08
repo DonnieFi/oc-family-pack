@@ -153,6 +153,18 @@
         "type": "boolean",
         "default": false
       },
+      "accessMode": {
+        "anyOf": [
+          {
+            "type": "string",
+            "const": "solo"
+          },
+          {
+            "type": "string",
+            "const": "lan"
+          }
+        ]
+      },
       "timezone": {
         "type": "string",
         "minLength": 1,
@@ -200,6 +212,11 @@
         },
         "maxProperties": 20,
         "additionalProperties": false
+      },
+      "discordAccount": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
       },
       "summaryChannel": {
         "type": "string",
@@ -316,6 +333,15 @@
               "minLength": 1,
               "maxLength": 200
             },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "maxItems": 8
+            },
             "profileId": {
               "type": "string",
               "minLength": 1,
@@ -382,8 +408,7 @@
                   "type": "string",
                   "const": "off"
                 }
-              ],
-              "default": "dm"
+              ]
             },
             "devices": {
               "type": "array",
@@ -484,6 +509,10 @@
             "kind"
           ],
           "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^c[0-9a-z]{1,7}$"
+            },
             "id": {
               "type": "string",
               "minLength": 1,
@@ -528,14 +557,15 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/63ef6a2e04f57e48f20fc3eaa65e367a5f3370cc3c7c72bbaeece8d8926bdb26/index.js",
+    "entry": "dist/control-ui/0867c3eafac745ace44fd01c2a604ca309bd8f762a9b842748f4e850fa129ef1/index.js",
     "styles": [
-      "dist/control-ui/63ef6a2e04f57e48f20fc3eaa65e367a5f3370cc3c7c72bbaeece8d8926bdb26/index.css"
+      "dist/control-ui/0867c3eafac745ace44fd01c2a604ca309bd8f762a9b842748f4e850fa129ef1/index.css"
     ]
   },
   "contracts": {
     "tools": [
       "garbage_schedule",
+      "family_members",
       "family_schedule",
       "family_today",
       "calendar_create",

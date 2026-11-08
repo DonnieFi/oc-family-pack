@@ -20,6 +20,7 @@ const CHANNEL_KEY = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const MAX_CHANNELS = 20;
 const MAX_DEVICES = 32;
 const MAX_ALIAS_MACS = 32;
+const MAX_ALIASES = 8;
 
 const Name = Type.String({ minLength: 1, maxLength: 200 });
 const MacInput = Type.String({ minLength: 1, maxLength: 64 });
@@ -31,6 +32,7 @@ const MacInput = Type.String({ minLength: 1, maxLength: 64 });
 export const ConfigSchema = Type.Object(
   {
     demo: Type.Optional(Type.Boolean({ default: false })),
+    accessMode: Type.Optional(Type.Union([Type.Literal("solo"), Type.Literal("lan")])),
     timezone: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
     location: Type.Optional(
       Type.Object(
@@ -49,6 +51,7 @@ export const ConfigSchema = Type.Object(
         additionalProperties: false,
       }),
     ),
+    discordAccount: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
     summaryChannel: Type.Optional(Type.String({ pattern: CHANNEL_KEY.source })),
     reminderLeadMinutes: Type.Optional(Type.Array(Type.Integer({ minimum: 0, maximum: MAX_LEAD_MINUTES }), { maxItems: MAX_LEADS, default: [15] })),
     quietHours: Type.Optional(
@@ -75,6 +78,7 @@ export const ConfigSchema = Type.Object(
             id: Type.Optional(Name),
             name: Type.Optional(Name),
             displayName: Type.Optional(Name),
+            aliases: Type.Optional(Type.Array(Name, { maxItems: MAX_ALIASES })),
             profileId: Type.Optional(Name),
             login: Type.Optional(Name),
             gatewayProfileId: Type.Optional(Name),
@@ -83,7 +87,7 @@ export const ConfigSchema = Type.Object(
             role: Type.Optional(Type.Union(ROLES.map((role) => Type.Literal(role)))),
             color: Type.Optional(Type.String({ maxLength: 100, pattern: CSS_COLOR.source })),
             discordId: Type.Optional(Type.String({ minLength: 17, maxLength: 20, pattern: DISCORD_ID.source })),
-            reminders: Type.Optional(Type.Union(REMINDER_MODES.map((mode) => Type.Literal(mode)), { default: "dm" })),
+            reminders: Type.Optional(Type.Union(REMINDER_MODES.map((mode) => Type.Literal(mode)))),
             devices: Type.Optional(
               Type.Array(
                 Type.Object(
@@ -121,6 +125,8 @@ export const ConfigSchema = Type.Object(
       Type.Array(
         Type.Object(
           {
+            /** Optional stable wire key. Without it the key follows the array position. */
+            key: Type.Optional(Type.String({ pattern: "^c[0-9a-z]{1,7}$" })),
             id: Type.String({ minLength: 1, maxLength: 1024 }),
             label: Name,
             kind: Type.Union(KINDS.map((kind) => Type.Literal(kind))),
@@ -323,7 +329,10 @@ export function readMemberIdentity(value: Raw, field: string): { displayName: st
   }
   const login = fromLogin ?? fromProfile;
   const explicitId = value.id !== undefined && !(typeof value.id === "string" && value.id.trim() === "");
-  const id = explicitId ? profileId(value.id, `${field}.id`) : (login ?? slugOf(displayName));
+  // A login may be an email address. The person id is the local part, not the
+  // whole address, so the week and roster never echo an email as an id.
+  const loginId = login?.includes("@") ? login.slice(0, login.indexOf("@")) : login;
+  const id = explicitId ? profileId(value.id, `${field}.id`) : (loginId !== undefined && loginId !== "" ? loginId : slugOf(displayName));
   if (id === "") throw new ConfigError(`${field}.id`, `can't be made from the name ${displayName}. Give ${displayName} an id.`);
   const identity: { displayName: string; id: string; explicitId: boolean; login?: string; gatewayProfileId?: string } = { displayName, id, explicitId };
   if (login !== undefined) identity.login = login;
@@ -359,6 +368,15 @@ function member(value: unknown, index: number): MemberConfig {
   };
   if (identity.login !== undefined) parsed.profileId = identity.login;
   if (identity.gatewayProfileId !== undefined) parsed.gatewayProfileId = identity.gatewayProfileId;
+  const aliases = atMost(list(value.aliases, `${field}.aliases`), `${field}.aliases`, MAX_ALIASES).map((alias, aliasIndex) =>
+    profileId(alias, `${field}.aliases[${aliasIndex}]`),
+  );
+  const seenAliases = new Set<string>();
+  for (const alias of aliases) {
+    if (seenAliases.has(alias)) throw new MemberError(`${displayName} uses the alias "${alias}" more than once. Give each alias one meaning.`);
+    seenAliases.add(alias);
+  }
+  if (aliases.length > 0) parsed.aliases = aliases;
   if (value.email !== undefined) {
     if (typeof value.email !== "string") throw new MemberError(`${displayName}'s email doesn't look right. Check it and try again.`);
     parsed.email = memberEmail(value.email, displayName);
@@ -377,7 +395,12 @@ function member(value: unknown, index: number): MemberConfig {
   if (value.discordId !== undefined) {
     parsed.discordId = discordId(value.discordId, `${field}.discordId`);
   }
-  parsed.reminders = value.reminders === undefined ? "dm" : oneOf(value.reminders, `${field}.reminders`, REMINDER_MODES);
+  parsed.reminders =
+    value.reminders === undefined
+      ? parsed.discordId === undefined
+        ? "off"
+        : "dm"
+      : oneOf(value.reminders, `${field}.reminders`, REMINDER_MODES);
   return parsed;
 }
 
@@ -394,8 +417,12 @@ function calendar(value: unknown, index: number, profileIds: ReadonlySet<string>
     }
     return id;
   });
+  const key = value.key === undefined ? `c${index}` : profileId(value.key, `${field}.key`);
+  if (!/^c[0-9a-z]{1,7}$/.test(key)) {
+    throw new ConfigError(`${field}.key`, "must be a stable wire key such as c0 or cfamily");
+  }
   return {
-    key: `c${index}`,
+    key,
     id: text(value.id, `${field}.id`),
     label: text(value.label, `${field}.label`),
     kind: oneOf(value.kind, `${field}.kind`, KINDS),
@@ -585,6 +612,30 @@ function checkDevices(members: readonly MemberConfig[]): void {
   }
 }
 
+/** Aliases are addressing keys. An alias must not collide with any id, login, or other alias. */
+function checkAliases(members: readonly MemberConfig[]): void {
+  const used = new Map<string, string>();
+  const names = new Map<string, string>();
+  for (const member of members) {
+    used.set(member.id, member.id);
+    names.set(member.id, member.displayName);
+    if (member.profileId !== undefined) used.set(member.profileId, member.id);
+    used.set(member.displayName.trim().toLowerCase(), member.id);
+    const first = member.displayName.trim().split(/\s+/)[0]?.toLowerCase();
+    if (first !== undefined && first !== "") used.set(first, member.id);
+    if (member.discordId !== undefined) used.set(member.discordId, member.id);
+  }
+  for (const member of members) {
+    for (const alias of member.aliases ?? []) {
+      const owner = used.get(alias);
+      if (owner !== undefined && owner !== member.id) {
+        throw new MemberError(`${member.displayName}'s alias "${alias}" is already ${names.get(owner)}'s name, id, login, alias, or Discord id. Use a different alias.`);
+      }
+      used.set(alias, member.id);
+    }
+  }
+}
+
 /** An id and someone else's login must not be the same string, or a reference would name two people. */
 function checkIdentityNames(members: readonly MemberConfig[]): void {
   for (const member of members) {
@@ -615,6 +666,7 @@ export function parseConfig(raw: unknown): Config {
   clash(members, (entry) => entry.id, (a, b, id) => `Two people would share the ID ${id} (${a} and ${b}). Give one of them its own id.`);
   clash(members, (entry) => entry.gatewayProfileId, (a, b) => `${a} and ${b} have the same Gateway profile. Each profile can belong to only one person.`);
   checkIdentityNames(members);
+  checkAliases(members);
   resolveLegacyDeviceIds(members, rawMembers);
   checkDevices(members);
   const profileIds = new Set(members.map((entry) => entry.id));
@@ -623,12 +675,28 @@ export function parseConfig(raw: unknown): Config {
     calendars.map((entry) => entry.id),
     "calendars[].id",
   );
+  unique(
+    calendars.map((entry) => entry.key),
+    "calendars[].key",
+  );
+  unique(
+    calendars.map((entry) => entry.label.trim().toLowerCase()),
+    "calendars[].label",
+  );
+  for (const calendar of calendars) {
+    for (const other of calendars) {
+      if (calendar !== other && calendar.key === other.label.trim().toLowerCase()) {
+        throw new ConfigError("calendars[].key", `"${calendar.key}" is also the label of another calendar. Use a different key.`);
+      }
+    }
+  }
   const config: Config = {
     timezone:
       value.timezone === undefined
         ? Intl.DateTimeFormat().resolvedOptions().timeZone
         : timezone(value.timezone, "timezone"),
     demo,
+    ...(value.accessMode === undefined ? {} : { accessMode: oneOf(value.accessMode, "accessMode", ["solo", "lan"] as const) }),
     gogPath: value.gogPath === undefined ? "gog" : text(value.gogPath, "gogPath"),
     writes: value.writes === undefined ? "confirm" : oneOf(value.writes, "writes", WRITE_MODES),
     members,
@@ -643,7 +711,15 @@ export function parseConfig(raw: unknown): Config {
   }
   const parsedChannels = channels(value.channels);
   if (parsedChannels) {
+    for (const key of Object.keys(parsedChannels)) {
+      if (members.some((member) => member.id === key)) {
+        throw new ConfigError("channels", `"${key}" is also a member id. Use a different channel key so a delivery target names one namespace.`);
+      }
+    }
     config.channels = parsedChannels;
+  }
+  if (value.discordAccount !== undefined) {
+    config.discordAccount = text(value.discordAccount, "discordAccount");
   }
   if (value.summaryChannel !== undefined) {
     const key = text(value.summaryChannel, "summaryChannel");

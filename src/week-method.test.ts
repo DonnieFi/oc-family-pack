@@ -3,10 +3,10 @@ import { test } from "node:test";
 import { parseConfig } from "./config.ts";
 import { familyWeek } from "./handlers.ts";
 import type { WeekPayload } from "./types.ts";
-import { canEditOf, viewerOf, weekMethod } from "./week-method.ts";
+import { canEditFor, canEditOf, viewerOf, weekMethod } from "./week-method.ts";
 import { grantHolder } from "./grant.ts";
 
-type Client = Parameters<typeof viewerOf>[0];
+type Client = NonNullable<Parameters<typeof viewerOf>[0]>;
 const client = (fields: Record<string, unknown>) => fields as unknown as Client;
 // Shapes as the published 2026.9.7 host builds them: authPolicy carries only
 // generation and verifiedIdentity, never an authMethod.
@@ -28,7 +28,10 @@ test("the shared secret with no signed-in user is the owner; an attested user is
   assert.deepEqual(viewerOf(client({ authenticatedUserProfile: { profileId: "profile-alex" } })), {
     kind: "person",
     username: undefined,
-    gatewayProfileId: "profile-alex",
+  });
+  assert.deepEqual(viewerOf(client({ usesSharedGatewayAuth: true, isDeviceTokenAuth: true }), "lan"), {
+    kind: "person",
+    username: undefined,
   });
   // This host attaches gateway-owner to a device token that has no login.
   assert.deepEqual(
@@ -61,7 +64,10 @@ test("the shared secret with no signed-in user is the owner; an attested user is
 });
 
 const config = parseConfig({ demo: true, timezone: "America/Toronto" });
-const method = weekMethod(familyWeek(config, { now: () => Date.parse("2026-09-30T16:00:00Z"), fetchWeather: async () => new Response("", { status: 503 }) }));
+const method = weekMethod(
+  familyWeek(config, { now: () => Date.parse("2026-09-30T16:00:00Z"), fetchWeather: async () => new Response("", { status: 503 }) }),
+  config,
+);
 
 async function call(params: Record<string, unknown>, who: Client) {
   let reply: { ok: boolean; payload: unknown; error: { code?: string } | undefined } | undefined;
@@ -130,4 +136,12 @@ test("edit controls follow the connection's granted scopes only; the read-only n
   assert.deepEqual(await flags(true, "read-only"), [true, true]);
   assert.deepEqual(await flags(false, "read-only"), [false, false]);
   assert.deepEqual(await flags(true, "read-only", true), [false, false]);
+});
+
+test("edit controls require the roster parent role, not only operator.write", () => {
+  const demo = parseConfig({ demo: true, timezone: "UTC" });
+  const alex = client({ authenticatedUserId: "alex", connect: { scopes: ["operator.write"] } });
+  const riley = client({ authenticatedUserId: "riley", connect: { scopes: ["operator.write"] } });
+  assert.equal(canEditFor(demo, alex), true);
+  assert.equal(canEditFor(demo, riley), false);
 });

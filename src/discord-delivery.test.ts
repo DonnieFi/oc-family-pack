@@ -150,3 +150,10 @@ test("a batch the host suppressed is unknown: failed is only our own check befor
   const { send } = fakeSend({ status: "suppressed", results: [], receipt: receipt([]), reason: "no_visible_payload" });
   assert.deepEqual(await deliver(send, CFG, DIRECTORY, { channel: "smithy" }, BRIEF, KEY), { status: "unknown", errorKind: "other", detail: "host suppressed the batch: no_visible_payload" });
 });
+
+test("a configured family Discord account rides the outbound call", async () => {
+  const { send, calls } = fakeSend({ status: "sent", results: [], receipt: receipt(["900000000000000009"]) });
+  const outcome = await deliver(send, CFG, { ...DIRECTORY, account: "family" }, { channel: "smithy" }, [{ text: "hi" }], KEY);
+  assert.equal(outcome.status, "sent");
+  assert.equal((calls[0] as { accountId?: string }).accountId, "family");
+});

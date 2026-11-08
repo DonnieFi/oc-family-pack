@@ -1,19 +1,19 @@
 import { Type } from "typebox";
 import { DEMO_MEMBERS } from "./demo.ts";
+import { resolveMemberReference } from "./person.ts";
 import type { Config, MemberConfig } from "./types.ts";
 
 export const FAMILY_CONTACT_TOOL = "family_contact";
 
 export const FamilyContactSchema = Type.Object(
   {
-    id: Type.String({ minLength: 1, maxLength: 200, description: "The family member's id." }),
+    id: Type.String({ minLength: 1, maxLength: 200, description: "The family member's id, login, display name, or alias." }),
   },
   { additionalProperties: false },
 );
 
 const OPERATOR_ONLY = "Only the operator can look up a contact.";
-const NEED_ID = "Say which person, by their id.";
-const UNKNOWN = "That person is not in the family.";
+const NEED_ID = "Say which person, by their id or name.";
 
 export type ContactFacts = { senderIsOwner?: boolean | undefined };
 
@@ -58,15 +58,15 @@ export function familyContact(config: Config, facts: ContactFacts = {}) {
     name: FAMILY_CONTACT_TOOL,
     label: "Contact",
     description:
-      "Look up one family member by id. Only the operator may use this. Returns that person's id and name, plus email, phone, Discord id, and device labels when they are set. Email and phone are contact details, not delivery routes. Device addresses and MAC addresses are not included. It does not list the family. Discord can name a person in chat by discordId. Other chats are not a person unless the host marks the caller as the operator.",
+      "Look up one family member by id, login, display name, or alias. Only the operator may use this. Returns that person's id and name, plus email, phone, Discord id, and device labels when they are set. Email and phone are contact details, not delivery routes. Device addresses and MAC addresses are not included. It does not list the family. A Discord id also names a person when it is unique. Other chats are not a person unless the host marks the caller as the operator.",
     parameters: FamilyContactSchema,
     execute: async (_toolCallId: string, params: unknown) => {
       if (!operator) return text(OPERATOR_ONLY, false);
-      const raw = typeof (params as { id?: unknown } | null)?.id === "string" ? (params as { id: string }).id.trim().toLowerCase() : "";
+      const raw = typeof (params as { id?: unknown } | null)?.id === "string" ? (params as { id: string }).id.trim() : "";
       if (raw === "") return text(NEED_ID, false);
-      const member = roster(config).find((item) => item.id === raw);
-      if (member === undefined) return text(UNKNOWN, false);
-      return text(JSON.stringify(contactCard(member)), true);
+      const resolved = resolveMemberReference(roster(config), raw);
+      if ("error" in resolved) return text(resolved.error, false);
+      return text(JSON.stringify(contactCard(resolved.member)), true);
     },
   };
 }

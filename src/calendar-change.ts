@@ -52,6 +52,7 @@ import {
 } from "./calendar-write.ts";
 import { writeRequesterFromFacts, type Requester } from "./requester.ts";
 import type { CalendarConfig, Config } from "./types.ts";
+import { visibleCalendarIds, viewerForRequester } from "./visibility.ts";
 import { gateWrite } from "./write-gate.ts";
 
 export const CALENDAR_UPDATE_TOOL = "calendar_update";
@@ -176,7 +177,7 @@ export function resolveWireId(calendars: readonly CalendarConfig[], wire: unknow
 
 function findCalendar(calendars: readonly CalendarConfig[], name: string): CalendarConfig | undefined {
   const wanted = name.trim().toLowerCase();
-  return calendars.find((calendar) => calendar.key.toLowerCase() === wanted || calendar.label.trim().toLowerCase() === wanted);
+  return calendars.find((calendar) => calendar.key.toLowerCase() === wanted) ?? calendars.find((calendar) => calendar.label.trim().toLowerCase() === wanted);
 }
 
 const text = (params: Record<string, unknown>, name: string) => (typeof params[name] === "string" ? (params[name] as string) : undefined);
@@ -262,6 +263,7 @@ export function calendarChangeHook(deps: CalendarWriteDeps, stamper: Stamper) {
   return async (event: HookEvent, ctx: HookContext): Promise<HookResult | undefined> => {
     const op = CHANGE_TOOLS[event.toolName];
     if (!op) return undefined;
+    if (deps.config.demo) return { block: true, blockReason: somethingWrongLine(op, undefined) };
     const params = withoutStamp(event.params);
     let prepared: PreparedChange;
     try {
@@ -269,6 +271,10 @@ export function calendarChangeHook(deps: CalendarWriteDeps, stamper: Stamper) {
     } catch (error) {
       if (error instanceof ChangeInputError) return { block: true, blockReason: error.message };
       throw error;
+    }
+    const visible = visibleCalendarIds(deps.config, viewerForRequester(prepared.requester));
+    if (!visible.has(prepared.calendar.id) || (prepared.destination !== undefined && !visible.has(prepared.destination.id))) {
+      return { block: true, blockReason: somethingWrongLine(op, undefined) };
     }
     const gate = gateWrite({
       writes: deps.config.writes,
@@ -352,6 +358,7 @@ export function calendarChangeTool(op: ChangeOp, deps: CalendarWriteDeps, stampe
     async execute(toolCallId, rawParams) {
       const stamp = typeof rawParams === "object" && rawParams !== null ? (rawParams as Record<string, unknown>)[STAMP_PARAM] : undefined;
       const params = withoutStamp(rawParams);
+      if (deps.config.demo) return reply(somethingWrongLine(op, undefined), "refused");
       let prepared: PreparedChange;
       try {
         prepared = prepareChange(deps.config, factsFromTool(ctx), op, params);

@@ -63,7 +63,7 @@ test("a kid does not load contact details", async () => {
   });
   await flush();
   assert.equal(page.calls.length, 0);
-  assert.match(page.container.textContent ?? "", /cannot see emails, phone numbers, or devices/);
+  assert.match(page.container.textContent ?? "", /cannot see emails, phone numbers, Discord ids, or devices/);
   assert.equal((page.container.textContent ?? "").includes("riley@example.com"), false);
   assert.equal((page.container.textContent ?? "").includes("192.168.1.40"), false);
 });

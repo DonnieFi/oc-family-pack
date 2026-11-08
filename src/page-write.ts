@@ -3,10 +3,12 @@ import { changeLine, ChangeInputError, NO_SUCH_EVENT, readChange } from "./calen
 import { approverPhrase, bernieWhen, calendarPlace, clean, createdLine, extraFields, failedLine, notApprovedLine } from "./calendar-create.ts";
 import { checkKey, getEvent, normalizeCreate, somethingWrongLine, submitChange, submitCreate, END_BEFORE_START, type ChangeOp, type SubmitDeps, type WriteLog, type WriteOp } from "./calendar-write.ts";
 import { CalendarWriteSchema } from "./contract.ts";
+import type { Requester } from "./requester.ts";
 import type { CalendarWrite, Config } from "./types.ts";
+import { visibleCalendarIds, type Viewer } from "./visibility.ts";
 
 export type PageWriteDeps = Omit<SubmitDeps, "log" | "config"> & {
-  config: Pick<Config, "gogPath" | "timezone" | "writes" | "members" | "calendars">;
+  config: Pick<Config, "gogPath" | "timezone" | "writes" | "members" | "calendars" | "demo">;
   log: () => WriteLog | undefined;
   /** Tells open pages which calendars changed. */
   changed: (calendarKeys: string[]) => void;
@@ -16,8 +18,9 @@ export type PageWriteResult = { ok: boolean; message: string };
 
 /** The page's one write action. The answer is ux's line only: no event id, no key, no gog or store text. */
 export function pageWrite(deps: PageWriteDeps) {
-  return async (input: CalendarWrite, context: FeatureInvocationContext): Promise<PageWriteResult> => {
+  return async (input: CalendarWrite, context: FeatureInvocationContext, pageRequester: Requester | undefined, requestViewer: Viewer): Promise<PageWriteResult> => {
     const op: WriteOp = input.op;
+    if (deps.config.demo) return { ok: false, message: somethingWrongLine(op, undefined) };
     try {
       checkKey(input.requestId);
     } catch {
@@ -27,13 +30,21 @@ export function pageWrite(deps: PageWriteDeps) {
     const variant = CalendarWriteSchema.anyOf.find((entry) => entry.properties.op.const === op);
     if (!variant || extraFields(variant, input).length > 0) return { ok: false, message: somethingWrongLine(op, undefined) };
     const log = deps.log();
-    const submitDeps = (store: WriteLog): SubmitDeps => ({ config: deps.config, runGog: deps.runGog, grant: deps.grant, log: store });
+    const submitDeps = (store: WriteLog): SubmitDeps => ({
+      config: deps.config,
+      runGog: deps.runGog,
+      grant: deps.grant,
+      log: store,
+      ...(pageRequester !== undefined ? { requester: pageRequester } : {}),
+    });
+    const visible = visibleCalendarIds(deps.config, requestViewer);
     const approver = approverPhrase(deps.config.members);
 
     if (input.op === "create") {
       const name = clean(input.title);
       const calendar = deps.config.calendars.find((entry) => entry.key === input.calendarKey);
       if (!calendar) return { ok: false, message: `I couldn't find that calendar, so I didn't add **${name}**.` };
+      if (visible !== undefined && !visible.has(calendar.id)) return { ok: false, message: somethingWrongLine("create", name) };
       if (!log) return { ok: false, message: somethingWrongLine("create", name) };
       const fields = {
         title: input.title,
@@ -65,6 +76,12 @@ export function pageWrite(deps: PageWriteDeps) {
     } catch (error) {
       if (error instanceof ChangeInputError) return { ok: false, message: error.message };
       throw error;
+    }
+    if (
+      visible !== undefined &&
+      (!visible.has(target.calendar.id) || (target.destination !== undefined && !visible.has(target.destination.id)))
+    ) {
+      return { ok: false, message: NO_SUCH_EVENT };
     }
     if (!log) return { ok: false, message: somethingWrongLine(changeOp, undefined) };
     const result = await submitChange(submitDeps(log), {

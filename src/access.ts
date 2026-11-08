@@ -11,13 +11,15 @@ export const ROLES = ["parent", "kid", "guest"] as const;
 export type Role = (typeof ROLES)[number];
 
 export const SCOPES: Record<Role, string[]> = {
-  parent: ["operator.read", "operator.write", "operator.sessions.write"],
+  // operator.approvals lets a parent resolve the calendar approval the plugin
+  // asks for; it is not granted to kids or guests.
+  parent: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"],
   kid: ["operator.read", "operator.sessions.write"],
   guest: ["operator.read"],
 };
 const SESSIONS: Record<Role, "write" | "none"> = { parent: "write", kid: "none", guest: "none" };
 
-const USERNAME = /^[a-z0-9._-]{1,32}$/;
+const USERNAME = /^(?:[a-z0-9._-]{1,32}|[a-z0-9.+_-]+@[a-z0-9.-]+\.[a-z]{2,})$/;
 const LAN_HEADER = "x-forwarded-user";
 const DEFAULT_PORT = 18789;
 
@@ -34,7 +36,7 @@ const HTTPS_INTERNAL =
 const PROXY_RULES =
   "Any proxy works if it's the only way to reach the Gateway, signs each person in, sends their username in `X-Forwarded-User`, and replaces any `X-Forwarded-User` or `X-Forwarded-For` the browser sends.";
 const NO_SIGN_OUT =
-  "There's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.";
+  "There's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. A paired device token is the shared owner on this host, so don't leave one on a kid's device. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.";
 const LOOPBACK_WARNING = "Anything else running on this machine can sign in as any family member. Run only the proxy and the Gateway here.";
 const LAN_ADDRESS_STEP = "Replace `LAN_ADDRESS` with this machine's address on your home network, like `192.168.1.20`. Use the same address in the Caddyfile and in `allowedOrigins`. If you add a port to the Caddyfile, add it to the origin too.";
 const OUTSIDE =
@@ -45,7 +47,7 @@ const TOKEN_NOTE = "The shared Gateway token stops working in LAN mode. Keep the
 const SET_ROLE_INTRO = "After each person signs in once, set their role:";
 export const PROFILE_STEP = "Replace each PROFILE_ placeholder with that person's profile id from `users.list`.";
 const BAD_USERNAME =
-  "Usernames use lower-case letters, numbers, dots, dashes or underscores. Try `alex`, not `Alex Smith`.\nEach person sees their username as their name in the Control UI, so use what the family calls them.";
+  "Usernames use lower-case letters, numbers, dots, dashes, underscores, or a plain email address. Try `alex` or `alex@example.com`, not `Alex Smith`.\nEach person sees this as their name in the Control UI, so use what the family calls them. It must match the `X-Forwarded-User` value your proxy sends.";
 
 function record(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {};

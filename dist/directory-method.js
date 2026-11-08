@@ -4,6 +4,9 @@ import { ErrorCodes, errorShape } from "openclaw/plugin-sdk/gateway-runtime";
 import { DELIVERY_NOTE, DIRECTORY_PERSISTENCE, RESERVATION_NOTE } from "./directory-contract.js";
 import { directoryMembers, planDirectoryEdit, planMaterialize, MATERIALIZE_INTRO } from "./directory.js";
 import { DEMO_MEMBERS } from "./demo.js";
+import { isRosterParent } from "./visibility.js";
+import { viewerOf } from "./week-method.js";
+const PARENT_ONLY = "People is for a parent. This sign-in can read the week, and it cannot see emails, phone numbers, Discord ids, or devices.";
 function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -14,7 +17,7 @@ function rawRoster(raw) {
         calendars: Array.isArray(config.calendars) ? config.calendars : [],
     };
 }
-const EDIT_KEYS = ["id", "displayName", "login", "gatewayProfileId", "email", "phone", "discordId", "devices"];
+const EDIT_KEYS = ["id", "displayName", "login", "email", "phone", "discordId", "aliases", "role", "color", "reminders", "devices"];
 function parseEdits(value) {
     if (!Array.isArray(value))
         return undefined;
@@ -32,13 +35,18 @@ function parseEdits(value) {
                 return undefined;
             edit.displayName = entry.displayName;
         }
-        for (const key of ["login", "gatewayProfileId", "email", "phone", "discordId"]) {
+        for (const key of ["login", "email", "phone", "discordId", "role", "color", "reminders"]) {
             if (!(key in entry))
                 continue;
             const field = entry[key];
             if (field !== null && typeof field !== "string")
                 return undefined;
             edit[key] = field;
+        }
+        if ("aliases" in entry) {
+            if (!Array.isArray(entry.aliases) || entry.aliases.some((alias) => typeof alias !== "string"))
+                return undefined;
+            edit.aliases = entry.aliases;
         }
         if ("devices" in entry) {
             if (!Array.isArray(entry.devices))
@@ -51,8 +59,12 @@ function parseEdits(value) {
 }
 /** The roster a parent may view. Demo mode shows the sample family and no private network data beyond that sample. */
 export function directoryMethod(config, _raw) {
-    return async ({ respond }) => {
+    return async ({ client, respond }) => {
         const current = config();
+        if (!isRosterParent(current, viewerOf(client, current.accessMode))) {
+            respond(true, { error: PARENT_ONLY });
+            return;
+        }
         respond(true, {
             demo: current.demo,
             persistence: DIRECTORY_PERSISTENCE,
@@ -64,8 +76,12 @@ export function directoryMethod(config, _raw) {
 }
 /** Validate an edit or an id migration and return a config patch. This does not write. */
 export function directoryPreviewMethod(config, raw) {
-    return async ({ params, respond }) => {
+    return async ({ params, client, respond }) => {
         const current = config();
+        if (!isRosterParent(current, viewerOf(client, current.accessMode))) {
+            respond(true, { ok: false, error: PARENT_ONLY });
+            return;
+        }
         if (current.demo) {
             respond(true, { ok: false, error: "Demo mode shows the sample family. Turn demo off before previewing a roster patch." });
             return;

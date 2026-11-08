@@ -265,13 +265,15 @@ function readLatestDelivery(value) {
     const kind = value.kind;
     const status = value.status;
     const target = value.target;
+    const targetKind = value.targetKind;
     if ((kind !== "daily" && kind !== "weekly" && kind !== "reminder" && kind !== "household" && kind !== "alert") ||
         (status !== "sent" && status !== "partial" && status !== "failed" && status !== "held" && status !== "unknown") ||
         typeof target !== "string" ||
-        target === "") {
+        target === "" ||
+        (targetKind !== undefined && targetKind !== "member" && targetKind !== "channel")) {
         return undefined;
     }
-    return { kind, status, target };
+    return { kind, status, target, ...(targetKind !== undefined ? { targetKind } : {}) };
 }
 function readReady(record) {
     if (!Array.isArray(record.appliedNow) || !Array.isArray(record.applied) || !Array.isArray(record.unknown))

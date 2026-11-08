@@ -3,6 +3,7 @@ import { STAMP_PARAM } from "./approval-stamp.js";
 import { APPROVAL_TIMEOUT_MS, APPROVAL_TITLE_MAX, approvalDescription, approvalTitle, approverPhrase, asker, bernieWhen, calendarPlace, clean, extraFields, factsFromHook, factsFromTool, failedLine, fit, logOutcome, notApprovedLine, reply, timedOutLine, moveApprovalDescription, withoutStamp, } from "./calendar-create.js";
 import { applyChange, changeBaseKey, checkKey, END_BEFORE_START, END_BEFORE_START_CHANGE, getEvent, normalizeChange, NOTHING_TO_CHANGE, requesterTag, requestKey, somethingWrongLine, submitChange, unreachableLine, } from "./calendar-write.js";
 import { writeRequesterFromFacts } from "./requester.js";
+import { visibleCalendarIds, viewerForRequester } from "./visibility.js";
 import { gateWrite } from "./write-gate.js";
 export const CALENDAR_UPDATE_TOOL = "calendar_update";
 export const CALENDAR_MOVE_TOOL = "calendar_move";
@@ -104,7 +105,7 @@ export function resolveWireId(calendars, wire) {
 }
 function findCalendar(calendars, name) {
     const wanted = name.trim().toLowerCase();
-    return calendars.find((calendar) => calendar.key.toLowerCase() === wanted || calendar.label.trim().toLowerCase() === wanted);
+    return calendars.find((calendar) => calendar.key.toLowerCase() === wanted) ?? calendars.find((calendar) => calendar.label.trim().toLowerCase() === wanted);
 }
 const text = (params, name) => (typeof params[name] === "string" ? params[name] : undefined);
 /** What a change call asks for, before who asked: shared by the tools and the page. */
@@ -194,6 +195,8 @@ export function calendarChangeHook(deps, stamper) {
         const op = CHANGE_TOOLS[event.toolName];
         if (!op)
             return undefined;
+        if (deps.config.demo)
+            return { block: true, blockReason: somethingWrongLine(op, undefined) };
         const params = withoutStamp(event.params);
         let prepared;
         try {
@@ -203,6 +206,10 @@ export function calendarChangeHook(deps, stamper) {
             if (error instanceof ChangeInputError)
                 return { block: true, blockReason: error.message };
             throw error;
+        }
+        const visible = visibleCalendarIds(deps.config, viewerForRequester(prepared.requester));
+        if (!visible.has(prepared.calendar.id) || (prepared.destination !== undefined && !visible.has(prepared.destination.id))) {
+            return { block: true, blockReason: somethingWrongLine(op, undefined) };
         }
         const gate = gateWrite({
             writes: deps.config.writes,
@@ -287,6 +294,8 @@ export function calendarChangeTool(op, deps, stamper, ctx) {
         async execute(toolCallId, rawParams) {
             const stamp = typeof rawParams === "object" && rawParams !== null ? rawParams[STAMP_PARAM] : undefined;
             const params = withoutStamp(rawParams);
+            if (deps.config.demo)
+                return reply(somethingWrongLine(op, undefined), "refused");
             let prepared;
             try {
                 prepared = prepareChange(deps.config, factsFromTool(ctx), op, params);

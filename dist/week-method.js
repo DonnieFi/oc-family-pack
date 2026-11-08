@@ -3,6 +3,7 @@ import { Value } from "typebox/value";
 import { ConfigError } from "./config.js";
 import { WeekInputSchema } from "./contract.js";
 import { pageRole } from "./write-permissions.js";
+import { isRosterParent } from "./visibility.js";
 /**
  * The host-attested Gateway profile id on the published client.
  * `preparedSessionProfile` is a lifecycle recipient, not an authorization
@@ -29,7 +30,7 @@ function gatewayProfileIdOf(client) {
  * `usesSharedGatewayAuth` is optional on the plugin Gateway client. If a host
  * drops it, the owner falls to guest, and the smoke's device-token check fails.
  */
-export function viewerOf(client) {
+export function viewerOf(client, accessMode) {
     const gatewayProfileId = gatewayProfileIdOf(client);
     // A proxy username is set even when it is blank. Blank is a person with no
     // login, not the shared owner: the host refuses a proxy connection that has
@@ -41,25 +42,32 @@ export function viewerOf(client) {
     // A token, password, or device token has no proxy username. This host still
     // attaches its gateway-owner profile to that session. The profile is not a
     // household person, and it does not replace the shared owner.
-    if (client?.usesSharedGatewayAuth === true)
+    if (client?.usesSharedGatewayAuth === true) {
+        // In LAN mode a paired device token is not a person and must not become the
+        // shared owner. The operator can still use the password/token CLI.
+        if (accessMode === "lan" && client.isDeviceTokenAuth === true)
+            return { kind: "person", username: undefined };
         return { kind: "owner" };
-    if (gatewayProfileId !== undefined)
-        return { kind: "person", username: undefined, gatewayProfileId };
+    }
     return { kind: "person", username: undefined };
 }
 /** Whether the page shows edit controls: the same scope rule as the write gate, from the connection's granted scopes. */
 export function canEditOf(client) {
     return pageRole({ scopes: client?.connect?.scopes ?? [] }) === "parent";
 }
+/** Page edit controls require both the scope and a roster parent (or owner). */
+export function canEditFor(config, client) {
+    return canEditOf(client) && isRosterParent(config, viewerOf(client, config.accessMode));
+}
 /** The `family.week` Gateway method: the week, filtered for whoever is asking. */
-export function weekMethod(week) {
+export function weekMethod(week, config) {
     return async ({ params, client, respond }) => {
         if (!Value.Check(WeekInputSchema, params)) {
             respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "family.week takes only an optional start date"));
             return;
         }
         try {
-            respond(true, await week(params, viewerOf(client), canEditOf(client)));
+            respond(true, await week(params, viewerOf(client, config.accessMode), canEditFor(config, client)));
         }
         catch (error) {
             const message = error instanceof Error ? error.message : String(error);

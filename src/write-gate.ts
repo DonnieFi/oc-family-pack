@@ -1,7 +1,7 @@
 import type { Grant } from "./grant.ts";
 import type { Requester } from "./requester.ts";
 import type { CalendarConfig, MemberConfig, WriteMode } from "./types.ts";
-import { approvers, pageRole, writeRight } from "./write-permissions.ts";
+import { approvers, pageIsParent, writeRight } from "./write-permissions.ts";
 
 /** A page session without operator.write or operator.admin. */
 export const VIEW_ONLY = "This page is view-only for you, so I didn't change anything.";
@@ -36,7 +36,7 @@ export function gateWrite(input: {
   destination?: Pick<CalendarConfig, "kind" | "owners">;
   table?: TableDecision;
 }): GateDecision {
-  if (input.requester.from === "page" && pageRole(input.requester.client) !== "parent") return { decision: "refused", message: VIEW_ONLY };
+  if (input.requester.from === "page" && !pageIsParent(input.requester)) return { decision: "refused", message: VIEW_ONLY };
   if (input.writes === "off") return { decision: "refused", message: WRITES_OFF };
   if (input.grant === "read-only") return { decision: "refused", message: READ_ONLY };
   if (input.table !== undefined) return { decision: "write" };

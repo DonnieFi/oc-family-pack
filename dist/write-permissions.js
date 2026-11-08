@@ -19,6 +19,10 @@ export function pageRole(client) {
     const scopes = Array.isArray(client?.scopes) ? client.scopes : [];
     return scopes.includes("operator.write") || scopes.includes("operator.admin") ? "parent" : "guest";
 }
+/** A page write is a parent only when the Gateway scope and the resolved roster role agree. */
+export function pageIsParent(requester) {
+    return pageRole(requester.client) === "parent" && (requester.role === undefined || requester.role === "parent");
+}
 /**
  * The writer's role and roster id. Discord trusts only a roster match. Off Discord the
  * owner flag doesn't name a person, so a tool caller writes as a kid with no calendar of
@@ -31,7 +35,7 @@ function writer(requester) {
         case "tool":
             return { role: "kid" };
         case "page":
-            return { role: pageRole(requester.client) };
+            return { role: pageIsParent(requester) ? "parent" : "guest", ...(requester.memberId !== undefined ? { profileId: requester.memberId } : {}) };
         case "other":
             return { role: "guest" };
     }

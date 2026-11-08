@@ -20,6 +20,9 @@ export function memberReferenceTokens(member) {
     addToken(tokens, member.login);
     addToken(tokens, member.name);
     addToken(tokens, member.displayName);
+    if (Array.isArray(member.aliases))
+        for (const alias of member.aliases)
+            addToken(tokens, alias);
     try {
         const identity = readMemberIdentity(member, "members");
         tokens.add(identity.id);
@@ -132,8 +135,19 @@ export function planDirectoryEdit(rawMembers, edits, calendars = []) {
                     next.login = edit.login;
             }
         }
-        if (edit.gatewayProfileId !== undefined)
-            applyOptional(next, "gatewayProfileId", edit.gatewayProfileId);
+        if (edit.aliases !== undefined) {
+            const aliases = edit.aliases.map((alias) => alias.trim().toLowerCase()).filter((alias) => alias !== "");
+            if (aliases.length === 0)
+                delete next.aliases;
+            else
+                next.aliases = aliases;
+        }
+        if (edit.role !== undefined)
+            next.role = edit.role;
+        if (edit.color !== undefined)
+            applyOptional(next, "color", edit.color);
+        if (edit.reminders !== undefined)
+            next.reminders = edit.reminders;
         if (edit.email !== undefined)
             applyOptional(next, "email", edit.email);
         if (edit.phone !== undefined)
@@ -160,12 +174,14 @@ export function directoryMembers(members) {
         id: member.id,
         displayName: member.displayName,
         role: member.role,
+        ...(member.color !== undefined ? { color: member.color } : {}),
+        ...(member.aliases !== undefined ? { aliases: member.aliases } : {}),
         ...(member.profileId !== undefined ? { login: member.profileId } : {}),
         ...(member.gatewayProfileId !== undefined ? { gatewayProfileId: member.gatewayProfileId } : {}),
         ...(member.email !== undefined ? { email: member.email } : {}),
         ...(member.phone !== undefined ? { phone: member.phone } : {}),
         ...(member.discordId !== undefined ? { discordId: member.discordId } : {}),
-        reminders: member.reminders ?? "dm",
+        reminders: member.reminders ?? (member.discordId === undefined ? "off" : "dm"),
         devices: member.devices.map((device) => ({
             id: device.id,
             label: device.label,

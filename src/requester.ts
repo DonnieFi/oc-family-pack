@@ -12,7 +12,7 @@ import type { MemberConfig } from "./types.ts";
 export type Requester =
   | { from: "discord"; member?: MemberConfig }
   | { from: "tool"; senderIsOwner: boolean }
-  | { from: "page"; client?: { scopes: readonly string[] } }
+  | { from: "page"; client?: { scopes: readonly string[] }; role?: "parent" | "guest"; memberId?: string }
   | { from: "other" };
 
 /**

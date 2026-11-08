@@ -121,7 +121,7 @@ test("gate (a): family.week matches the signed-in username to profileId only; a 
   const method = weekMethod(async (_input, viewer) => {
     seen.push(viewer.kind === "person" ? { kind: "person", username: viewer.username } : { kind: viewer.kind });
     return { calendars: [] } as never;
-  });
+  }, config);
   type Client = Parameters<typeof viewerOf>[0];
   const anonymous = {} as unknown as Client;
   for (const params of [{ id: "riley" }, { profileId: "alex" }, { member: "alex" }]) {

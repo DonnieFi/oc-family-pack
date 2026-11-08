@@ -184,3 +184,11 @@ export function resolveMembers(members) {
         color: member.color ?? MEMBER_PALETTE[index % MEMBER_PALETTE.length] ?? MEMBER_PALETTE[0],
     }));
 }
+/** The agent's roster: the same fields plus the aliases the family uses. No contacts. */
+export function resolveRoster(members) {
+    const roster = resolveMembers(members);
+    return roster.map((entry, index) => ({
+        ...entry,
+        ...(members[index]?.aliases !== undefined ? { aliases: members[index].aliases } : {}),
+    }));
+}

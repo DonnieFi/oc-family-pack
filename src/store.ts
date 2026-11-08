@@ -50,6 +50,8 @@ export type DeliveryLogRow = {
   kind: DeliveryKind;
   /** A member id or a channels key, never a Discord id. */
   target: string;
+  /** Which namespace target belongs to; older rows omit it. */
+  targetKind?: "member" | "channel";
   status: DeliveryStatus;
   errorKind?: "no-permission" | "no-channel" | "other";
   /** Why it was not sent, at most 200 characters. Never shown to the family. */
@@ -74,7 +76,7 @@ export type FamilyStore = {
   /** The first row that was not sent since the last sent row for (kind, target), if any. */
   deliveryStreakStart: (kind: DeliveryKind, target: string) => Promise<{ id: number; status: DeliveryStatus } | undefined>;
   /** The newest delivery row. The page matches `target` to a roster profile id and does not show it. */
-  latestDelivery: () => Promise<{ kind: DeliveryKind; status: DeliveryStatus; target: string } | undefined>;
+  latestDelivery: () => Promise<{ kind: DeliveryKind; status: DeliveryStatus; target: string; targetKind?: "member" | "channel" } | undefined>;
   /** Records a chat change of one person's reminder mode. The latest row wins. */
   appendReminderMode: (profileId: string, mode: ReminderMode) => Promise<{ id: number }>;
   /** The latest saved mode for each person who has changed it. */
@@ -367,20 +369,24 @@ async function openSession(options: {
   return api;
 }
 
-function readLatestDelivery(value: unknown): { kind: DeliveryKind; status: DeliveryStatus; target: string } | undefined {
+function readLatestDelivery(
+  value: unknown,
+): { kind: DeliveryKind; status: DeliveryStatus; target: string; targetKind?: "member" | "channel" } | undefined {
   if (!value || typeof value !== "object") return undefined;
   const kind = (value as { kind?: unknown }).kind;
   const status = (value as { status?: unknown }).status;
   const target = (value as { target?: unknown }).target;
+  const targetKind = (value as { targetKind?: unknown }).targetKind;
   if (
     (kind !== "daily" && kind !== "weekly" && kind !== "reminder" && kind !== "household" && kind !== "alert") ||
     (status !== "sent" && status !== "partial" && status !== "failed" && status !== "held" && status !== "unknown") ||
     typeof target !== "string" ||
-    target === ""
+    target === "" ||
+    (targetKind !== undefined && targetKind !== "member" && targetKind !== "channel")
   ) {
     return undefined;
   }
-  return { kind, status, target };
+  return { kind, status, target, ...(targetKind !== undefined ? { targetKind } : {}) };
 }
 
 function readReady(record: Record<string, unknown>): StoreReady | undefined {

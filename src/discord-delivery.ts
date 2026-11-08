@@ -11,6 +11,8 @@ export type DeliveryTarget = { member: string } | { channel: string };
 export type DeliveryDirectory = {
   members: readonly Pick<MemberConfig, "id" | "discordId">[];
   channels: Readonly<Record<string, string>>;
+  /** Optional channels.discord.accounts entry; the host default when omitted. */
+  account?: string;
 };
 
 /** Bernie's embed (ui/embeds.py): title, description, color, fields, footer. */
@@ -31,10 +33,11 @@ export type ErrorKind = "no-permission" | "no-channel" | "other";
 export type DeliveryReceipt = { messageIds: string[]; sentAt: number };
 
 /**
- * failed: our own check found no Discord id for the target, so nothing reached the host and the
- * caller may try again. held: the host says nothing went out before it failed to connect, and keeps
- * the batch to deliver later itself. unknown: something may have reached Discord. claimed: the host
- * already holds this key (sent before, in flight, or lost to a crash mid-send). Only failed is retried.
+ * failed: our own check found no Discord id for the target, so nothing reached the host. It is a
+ * permanent config error and is not retried. held: the host says nothing went out before it failed
+ * to connect, and keeps the batch to deliver later itself. unknown: something may have reached
+ * Discord. claimed: the host already holds this key (sent before, in flight, or lost to a crash
+ * mid-send).
  */
 export type DeliveryOutcome =
   | { status: "sent"; receipt: DeliveryReceipt }
@@ -170,5 +173,15 @@ function outcomeOf(result: DurableMessageBatchSendResult): DeliveryOutcome {
 export async function deliver(send: Send, cfg: HostConfig, directory: DeliveryDirectory, target: DeliveryTarget, messages: readonly DiscordMessage[], key: string): Promise<DeliveryOutcome> {
   const to = discordTo(directory, target);
   if (!to) return { status: "failed", errorKind: "no-channel", detail: "no Discord id for this target in config" };
-  return outcomeOf(await send({ cfg, channel: "discord", to, payloads: messages.map(payloadOf), deliveryIntentId: KEY_PREFIX + key, completionRetention: KEY_RETENTION }));
+  return outcomeOf(
+    await send({
+      cfg,
+      channel: "discord",
+      to,
+      ...(directory.account !== undefined ? { accountId: directory.account } : {}),
+      payloads: messages.map(payloadOf),
+      deliveryIntentId: KEY_PREFIX + key,
+      completionRetention: KEY_RETENTION,
+    }),
+  );
 }

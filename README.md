@@ -58,7 +58,7 @@ The pictures below are the demo week (Alex, Sam, Riley, and Jordan). Demo mode d
 | Feature | What you get | Status |
 | --- | --- | --- |
 | Family page | Monday–Sunday week, a color per person, chips that dim events, Environment Canada weather, and a chat strip | Available |
-| Today widget | Up to three highlight lines on the Control UI dashboard. A fresh Home gets the card once. If you remove it, the Family page offers to pin it again | Available |
+| Today widget | Up to three highlight lines on the Control UI dashboard for the shared owner and roster parents. A fresh Home gets the card once. If you remove it, the Family page offers to pin it again | Available |
 | Calendar changes | One write path from the page and from chat. A parent approves anything a kid cannot change alone. No undo | Available |
 | Daily and weekly briefs | 07:00 daily and Sunday 20:00 weekly, posted to the Discord summary channel you configure | Available |
 | Reminders | A lead time, quiet hours, and a per-person mode: direct message, summary channel, or off | Available |
@@ -73,7 +73,7 @@ The pictures below are the demo week (Alex, Sam, Riley, and Jordan). Demo mode d
 | --- | --- |
 | OpenClaw `2026.11.1` or newer, before `2026.12` | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Tested on `2026.11.1`. npm `latest` at release time is `2026.11.2`, which the peer range admits. See [Development](#development) for the post-update smoke. |
 | Node.js `>=24.16.0 <25` or `>=26.1.0` | Matches the OpenClaw runtime |
-| [`gog`](https://github.com/openclaw/gogcli) with Calendar access | Reads and writes Google Calendar using your existing sign-in. `gog` runs on the Gateway host |
+| [`gog`](https://github.com/openclaw/gogcli) with Calendar access | Reads and writes Google Calendar using your default gog sign-in. `gog` runs on the Gateway host. The plugin does not switch between multiple Google accounts; use the default account for the family calendars |
 | **Custom plugin UI** lab enabled | Required for native pages from non-bundled plugins |
 | HTTPS or `127.0.0.1` | Native plugin pages need a secure origin |
 
@@ -85,11 +85,11 @@ Weather uses Environment Canada's public API, so it needs no key and covers Cana
 openclaw plugins install git:https://github.com/DonnieFi/oc-family-pack.git --accept-capabilities
 ```
 
-The repository ships its built `dist/`, so a git install does not build. A different host build than the one this repo was tested against must rebuild `dist/` with that host. `--accept-capabilities` confirms the plugin's native Control UI page, which runs with the signed-in operator's Gateway permissions.
+The repository ships its built `dist/`, so a git install does not build. A different host build than the one this repo was tested against must rebuild `dist/` with that host. `--accept-capabilities` confirms the plugin's native Control UI page, which runs with the signed-in operator's Gateway permissions. After a new commit on the installed branch, run `openclaw plugins update oc-family-pack`; the development smoke is for a checkout with `npm` and is not an installed-household step.
 
 Calendar sign-in is `gog`, including on a headless Gateway. Run `openclaw family gog` and follow what it prints. A headless host takes two `gog auth add` commands: the first prints a URL, and the second exchanges the browser redirect (`openclaw family gog --auth-url '…'`). Repeat until it tells you to list calendars, then put those ids in the config below. The commands never pass `--readonly`. On a machine with a browser, `openclaw family gog --desktop` prints that sign-in instead of the two remote steps. If the Gateway service cannot see `gog` on `PATH`, set `gogPath` to the full path of the binary.
 
-`openclaw family setup` shows what is left: access mode, time zone, location, members, and calendars, each marked Done or To do, then the next step. Add people with `--parent`, `--kid`, or `--guest`. It never writes config. It prints a members patch. Check it with `openclaw config patch --stdin --dry-run`, then run the same command without `--dry-run` to apply it. People already in the config are kept as they are. `--discord alex=ID` adds someone's Discord user id the same way. In LAN mode, setup also prints the `users.linkChannelIdentity` command that ties that id to the person's Gateway profile. The member record, the patch, and each checklist step are in [SETUP.md](SETUP.md).
+`openclaw family setup` shows what is left: access mode, time zone, location, members, and calendars, each marked Done or To do, then the next step. Add people with `--parent`, `--kid`, or `--guest`. It never writes config. It prints a members patch. Check it with `openclaw config patch --stdin --dry-run`, then run the same command without `--dry-run` to apply it. People already in the config keep their fields; when a Discord id or email is added to a legacy member with no explicit id, setup writes that id too. `--discord alex=ID` adds someone's Discord user id the same way. In LAN mode, setup also prints the `users.linkChannelIdentity` command that ties that id to the person's Gateway profile. The member record, the patch, and each checklist step are in [SETUP.md](SETUP.md).
 
 To try the page before you connect a calendar, set `demo: true` (see below). Add your configuration, then enable the plugin:
 
@@ -113,7 +113,7 @@ Then open **Family** from the Control UI sidebar. The page is `/plugin?plugin=oc
 
 ## Configuration
 
-Family Pack reads `plugins.entries["oc-family-pack"].config`. Each person needs a `name`; `email`, `phone`, `discordId`, and `profileId` are optional. Someone with no Discord account still loads, and setup warns that this version can't send them reminders or briefs. Email and phone are stored on the contact card and are not notification routes. `id` is the household person id. When it is omitted it still loads as the login, else a slug of the name, so an existing roster keeps its calendar owners. `openclaw family setup --materialize-ids` prints a patch that writes those ids down. After that, changing a name or a login does not change the id. The week page and `family.members` call it `memberId`. `email` and `phone` are stored on the card. The week, briefs, and logs do not show them. Setup prints an email back to the parent running it, inside the config patch. `family_contact` can read one person's email and phone, and only for the operator. A `profileId`, when set, is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. `login` is another name for that same field. Family Pack matches it exactly, so it must be the same name the Gateway signs that person in as. It is not the Gateway's internal profile id. `gatewayProfileId`, when set, is that internal profile id, and the page matches it only when the host attests the profile. A member id sent by the browser is not identity. A calendar's owners are member ids. A school calendar belongs to the student. The People page shows the same roster and previews a config patch. It does not write the Gateway config.
+Family Pack reads `plugins.entries["oc-family-pack"].config`. Each person needs a `name`; `email`, `phone`, `discordId`, `aliases`, and `profileId` are optional. Someone with no Discord account still loads, and setup warns that this version can't send them reminders or briefs. Email and phone are stored on the contact card and are not notification routes. `id` is the household person id. When it is omitted it still loads as the login, else a slug of the name, so an existing roster keeps its calendar owners. `openclaw family setup --materialize-ids` prints a patch that writes those ids down. After that, changing a name or a login does not change the id. The week page and `family.members` call it `memberId`. `email` and `phone` are stored on the card. The week, briefs, and logs do not show them. Setup prints an email back to the parent running it, inside the config patch. `family_contact` can read one person's email and phone, and only for the operator. `aliases` are the names the family uses in chat, such as `Mom`, `Dad`, or `Aunt Jo`; they are addressing only and never grant a page or Discord identity. `family_members` lists the roster (id, name, role, aliases) without contacts. A `profileId`, when set, is that person's trusted-proxy username (the value your proxy sends in `X-Forwarded-User`), stored in lower case. `login` is another name for that same field. Family Pack matches it exactly, so it must be the same name the Gateway signs that person in as. It is not the Gateway's internal profile id. `gatewayProfileId`, when set, is that internal profile id, and the page matches it only when the host attests the profile; if it disagrees with the signed-in username, the viewer is a guest. A member id sent by the browser is not identity. A calendar's owners are member ids. A school calendar belongs to the student. The People page shows the same roster and previews a config patch. It does not write the Gateway config. In solo mode the shared owner is a parent, so anyone who opens the Control UI can see contact cards; use LAN mode for a shared family tablet.
 
 ```json5
 {
@@ -124,16 +124,17 @@ Family Pack reads `plugins.entries["oc-family-pack"].config`. Each person needs 
         config: {
           timezone: "America/Toronto",
           location: { lat: 45.42, lon: -75.7, label: "Home" },
+          discordAccount: "family",
           members: [
-            { name: "Alex", profileId: "alex", role: "parent", discordId: "100000000000000001" },
-            { name: "Sam", profileId: "sam", role: "parent", email: "sam@example.com" },
-            { name: "Riley", profileId: "riley", role: "kid" },
-            { name: "Jordan", role: "kid", email: "jordan@example.com" },
+            { id: "alex", name: "Alex", aliases: ["Dad"], profileId: "alex", role: "parent", discordId: "100000000000000001" },
+            { id: "sam", name: "Sam", aliases: ["Mom"], profileId: "sam", role: "parent", email: "sam@example.com" },
+            { id: "riley", name: "Riley", profileId: "riley", role: "kid" },
+            { id: "jordan", name: "Jordan", role: "kid", email: "jordan@example.com" },
           ],
           calendars: [
-            { id: "family@group.calendar.google.com", label: "Family", kind: "shared", owners: [] },
-            { id: "alex@example.com", label: "Alex", kind: "personal", owners: ["alex"] },
-            { id: "school-feed@group.calendar.google.com", label: "School", kind: "school", owners: ["riley"] },
+            { key: "cfamily", id: "family@group.calendar.google.com", label: "Family", kind: "shared", owners: [] },
+            { key: "calex", id: "alex@example.com", label: "Alex", kind: "personal", owners: ["alex"] },
+            { key: "cschool", id: "school-feed@group.calendar.google.com", label: "School", kind: "school", owners: ["riley"] },
           ],
         },
       },
@@ -146,11 +147,17 @@ Set `demo: true` to show a synthetic week before you connect a calendar. Demo do
 
 Set `garbageIcsUrl` to your city's waste collection calendar, an `.ics` link such as a ReCollect feed (for a `webcal://` link, use `https://` instead). This is optional. The `garbage_schedule` tool then lists curbside pickups for today through the next 14 days. The feed is read at most once a week. If it is down, the last copy is used until the Gateway restarts.
 
-Briefs and reminders use a channel you name. Each key in `channels` is a short name you choose. The value is that Discord channel's id. `summaryChannel` must be one of those keys. Daily and weekly briefs post only when it is set.
+Briefs and reminders use a channel you name. Each key in `channels` is a short name you choose. The value is that Discord channel's id. `summaryChannel` must be one of those keys. Daily and weekly briefs post only when it is set. A channel key cannot equal a member id, so delivery rows always name one namespace.
+
+A calendar `key` is optional. Set one (`c` plus up to seven letters or digits) before you reorder the calendar list; the key is the wire id tools and pages use, so a pinned key survives reordering. Labels must be unique. `discordAccount` names the `channels.discord.accounts` entry the family uses; omit it for the host default.
+
+`accessMode` is `solo` (the default) or `lan`. In LAN mode, set `accessMode: "lan"` so a paired device token is a guest rather than the shared owner. `openclaw family setup` warns when the Gateway looks like LAN but this is unset.
+
+`reminders` omitted means a direct message when the person has a `discordId`, and `off` when they do not. Set `reminders: "off"` to stop event reminders for one person.
 
 `reminderLeadMinutes` defaults to `[15]`. `quietHours` defaults to 22:00–07:00 (`startHour` 22, `endHour` 7) in the household time zone.
 
-`morningTime`, `afterSchoolTime`, and `weekendPreviewTime` are optional clock times, `HH:MM` in 24-hour form. Leave a time unset to skip that household brief. `weekendPreviewWeekday` defaults to Friday (`5`). `0` is Sunday and `6` is Saturday.
+`morningTime`, `afterSchoolTime`, and `weekendPreviewTime` are optional clock times, `HH:MM` in 24-hour form. Leave a time unset to skip that household brief. `weekendPreviewWeekday` defaults to Friday (`5`). `0` is Sunday and `6` is Saturday. A parent whose reminder mode is `off` does not get the morning direct message; the channel posts still run.
 
 `writes` defaults to `confirm`, which holds changes the agent proposes until a parent approves. `on` lets the agent make them, though a kid's change to a shared calendar still waits for a parent. `off` refuses all agent changes. Changes you make yourself on the Family page skip `confirm`, but `off` blocks them too.
 
@@ -162,7 +169,7 @@ The weather card shows current conditions, today's high and low, and the next fo
 
 The chat strip is labeled "Chat with". It opens any agent that signed-in person can already open. It does not grant a new agent.
 
-The week grid has its own **Today** jump. That is not the dashboard widget. The widget id is `family-today`. It sits on the Control UI dashboard and shows up to three highlight lines. When the day is quiet it says "Looks like a quiet day — nothing urgent." When the read fails it says "Couldn't load today." Without read access it says "You need read access to see today." The week page, without read access, says "You need read access to see the family week."
+The week grid has its own **Today** jump. That is not the dashboard widget. The widget id is `family-today`. It sits on the Control UI dashboard and shows up to three highlight lines. When the day is quiet it says "Looks like a quiet day — nothing urgent." When the read fails it says "Couldn't load today." Without read access it says "You need read access to see today." The week page, without read access, says "You need read access to see the family week." The widget's Home seed and pin prompt are parent-only; a kid still sees the week page.
 
 The page also shows the latest delivery as one sentence, for example "Daily brief sent to Alex." or "No brief has been sent yet." It does not show a channel id or a clock time.
 
@@ -170,11 +177,11 @@ The page also shows the latest delivery as one sentence, for example "Daily brie
 
 The page and chat share one write path. From the page, a change needs `operator.write`. In solo mode the shared owner has it. In LAN mode the parent role has it and the kid role does not. Without it the page says "This page is view-only for you, so I didn't change anything."
 
-In Discord, a kid can change their own personal calendar. A change to a shared calendar, a school calendar, or someone else's calendar waits for a parent. Chat that is not Discord does not know which person is asking, so a change from there waits for a parent too. You can still ask what is on from Control UI chat.
+In Discord, a kid can change their own personal calendar. A change to a shared calendar or a school calendar waits for a parent. A calendar the kid cannot read is refused before an approval, so ask a parent to make that change. Chat that is not Discord does not know which person is asking, so a change from there is refused unless the shared owner is asking. Use Discord or the Family page. You can still ask what is on from Control UI chat.
 
 Undo is not available. A change that already went through is not undone from the page or from chat.
 
-`calendar_create`, `calendar_update`, `calendar_move`, `calendar_delete`, `set_reminder_mode`, and `family_contact` are optional tools. On a `full` tool profile, the agent can already see the calendar tools. What protects your calendar is the `writes` setting and the parent rule, not tool visibility. `family_contact` looks up one member by id and answers only for the operator. It does not list the family, and it does not send mail.
+`calendar_create`, `calendar_update`, `calendar_move`, `calendar_delete`, `set_reminder_mode`, and `family_contact` are optional tools. On a `full` tool profile, the agent can already see the calendar tools. What protects your calendar is the `writes` setting and the parent rule, not tool visibility. `family_contact` looks up one member by id, login, display name, or alias and answers only for the operator. It does not list the family, and it does not send mail.
 
 With no tool profile set, or a narrower one such as `coding`, add them with `tools.alsoAllow`:
 
@@ -192,7 +199,7 @@ The daily brief posts at 07:00 in the household time zone. The send window runs 
 
 Reminders use the lead times you set, 15 minutes if you set none. Quiet hours default to 22:00–07:00. A reminder that comes due during quiet hours waits, and is sent in the hour after quiet hours end. All-day events are not reminders.
 
-Each person has a mode: `dm`, `channel`, or `off`. The default is `dm`. Ask in chat with `set_reminder_mode`. `dm` is a Discord direct message. `channel` mentions them in the summary channel, so that channel has to be set. `off` sends nothing. You can change your own mode. Changing someone else's needs a parent. The shared-token owner can change anyone's mode.
+Each person has a mode: `dm`, `channel`, or `off`. Omitted means a direct message when they have a `discordId`, and `off` when they do not. Ask on Discord with `set_reminder_mode`; the shared owner can change anyone's mode. `dm` is a Discord direct message. `channel` mentions them in the summary channel, so that channel has to be set. `off` sends nothing. A person can change their own mode; changing someone else's needs a parent.
 
 Household briefs are separate, and each one runs only when its clock time is set:
 
@@ -204,7 +211,7 @@ Garbage day is not required. With `garbageIcsUrl` set, `garbage_schedule` answer
 
 ## Asking an agent
 
-Point agents at the `family` skill, [skills/family/SKILL.md](skills/family/SKILL.md). It teaches `family_today`, `family_schedule`, and `garbage_schedule`. Follow that file. This README does not repeat its rules.
+Point agents at the `family` skill, [skills/family/SKILL.md](skills/family/SKILL.md). It teaches `family_members`, `family_today`, `family_schedule`, `garbage_schedule`, and `set_reminder_mode`. Follow that file. This README does not repeat its rules.
 
 On Discord, "me" is the roster person with that Discord account. Off Discord, the owner flag is the shared owner and does not name a person.
 
@@ -230,7 +237,9 @@ Family Pack is local only. `openclaw family access` says which mode the Gateway 
 - **Solo.** Everyone who opens the Control UI is the owner. Family members use Discord, where the bot knows who's talking. Nothing extra to install.
 - **LAN.** Needs a proxy on the Gateway machine that serves HTTPS and signs each person in. Caddy is the worked example, and any proxy that follows the printed rules works. Each person signs in with their own username and password. `openclaw family access lan --parent alex --kid riley` prints the Caddyfile, the Gateway config, the roles and the `users.setRole` steps. Passwords are never asked for or stored. [HOUSEHOLD-LAN.md](HOUSEHOLD-LAN.md) walks through the switch in order, including how to undo it.
 
-In LAN mode there's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.
+In LAN mode there's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. Set `accessMode: "lan"` in the plugin config: a paired device token is then a guest, not the shared owner. In solo mode, leave it `"solo"` or unset. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.
+
+Calendar approvals go to a parent through OpenClaw's plugin approvals. The LAN role block now gives parents `operator.approvals`; in LAN mode, `openclaw family setup` also prints the `approvals.plugin` Discord targets for the roster parents. Apply both, enable writes for the proof window, prove a kid's shared-calendar change reaches a parent, then enable reminders and briefs.
 
 ## Privacy
 
@@ -238,7 +247,9 @@ Everything runs on your own OpenClaw Gateway. `gog` runs locally. This plugin st
 
 A weather request sends a search box around the coordinates in your config to Environment Canada. It does not send a street address. If you set `garbageIcsUrl`, the plugin fetches that collection calendar. Those are the outside reads. Briefs and reminders go out through the Discord bot OpenClaw already runs.
 
-The Gateway decides who sees which calendar before the week is sent to the page. Parents see every calendar. So does the shared-token owner. Everyone sees shared calendars. A school or personal calendar also goes to its owners when that person is a member, not a guest. Guests, and anyone signed in who is not on the roster, see shared calendars only. The chips only dim events.
+The Gateway decides who sees which calendar before the week is sent to the page. Parents see every calendar. So does the shared-token owner, except in LAN mode with `accessMode: "lan"`, where a paired device token is a guest. Everyone sees shared calendars. A school or personal calendar also goes to its owners when that person is a member, not a guest. Guests, and anyone signed in who is not on the roster, see shared calendars only. The chips only dim events.
+
+Calendar write tool descriptions list the configured calendar labels so the agent knows where it can write. That metadata can name a calendar the person cannot read, though no event or contact detail from it is returned. If the labels themselves are sensitive, give each person their own agent instead of sharing one.
 
 The plugin keeps a SQLite file on the Gateway host:
 
@@ -283,6 +294,19 @@ When a new host is published:
 4. Pilot with briefs/reminders disabled (omit delivery schedules/summary channel and set member reminders to `off`) and `writes: "off"`. Check the rendered Family and People pages, parent/kid access, and the intended calendar reads before enabling writes or delivery.
 
 People currently previews patches for existing records; it does not save config or import an existing dashboard. Add people with setup and devices through plugin config. The plugin roster is the one directory: do not maintain a second competing contact store. Device reservations are IPv4-only stored metadata; they never configure the router. Existing IPv6 reservations must be removed or replaced with IPv4 before upgrading.
+
+### Pilot preflight
+
+Before the first family day, run this on a test state directory or an isolated Gateway, with `writes: "off"` and briefs/reminders off:
+
+1. Apply the `family setup` members patch, then `family setup --materialize-ids`; every person must have an explicit `id`.
+2. Add every `discordId` and choose solo or LAN with `family access`.
+3. In LAN mode, apply both printed blocks: the proxy/`allowUsers` config and the roles/`identityScopes` config. Run the printed `users.setRole` commands, and link each Discord id with `users.linkChannelIdentity` after first sign-in.
+4. In LAN mode, apply the printed `approvals.plugin` block for parents if writes will be enabled.
+5. Sign in as each person and check the Family page and `family.week`. As a parent, also check the People page and Today widget. Send one Discord DM and one channel message from each member who has a Discord id. Send one message from an account that is not in the roster; it must stay a guest.
+6. Check that no email, phone, Discord id, or device address appears in the week payload, page, or logs. `family setup` repeats the config-level checks and prints the first step still missing.
+
+Only then run the writes/delivery pass: enable writes, prove a kid's shared write is approved by a parent and not by the kid, then enable reminders and briefs for one controlled channel.
 
 OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Tested on OpenClaw `2026.11.1`.** After you run `openclaw update`, run the smoke to check this plugin against your new host:
 

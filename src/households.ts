@@ -110,17 +110,18 @@ function itemsOf(output: ScheduleOutput, details: readonly Detail[]): HouseholdI
   return items;
 }
 
-function rowOf(key: string, target: string, outcome: DeliveryOutcome): DeliveryLogRow {
+function rowOf(key: string, target: string, outcome: DeliveryOutcome, targetKind: "member" | "channel"): DeliveryLogRow {
   const kind: DeliveryKind = "household";
+  const base = { deliveryKey: key, kind, target, targetKind };
   switch (outcome.status) {
     case "sent":
-      return { deliveryKey: key, kind, target, status: "sent", receiptJson: JSON.stringify(outcome.receipt) };
+      return { ...base, status: "sent", receiptJson: JSON.stringify(outcome.receipt) };
     case "partial":
-      return { deliveryKey: key, kind, target, status: "partial", errorKind: outcome.errorKind, errorDetail: outcome.detail, receiptJson: JSON.stringify(outcome.receipt) };
+      return { ...base, status: "partial", errorKind: outcome.errorKind, errorDetail: outcome.detail, receiptJson: JSON.stringify(outcome.receipt) };
     case "claimed":
-      return { deliveryKey: key, kind, target, status: "unknown", errorKind: "other", errorDetail: "host already holds this delivery key (claimed)" };
+      return { ...base, status: "unknown", errorKind: "other", errorDetail: "host already holds this delivery key (claimed)" };
     default:
-      return { deliveryKey: key, kind, target, status: outcome.status, errorKind: outcome.errorKind, errorDetail: outcome.detail };
+      return { ...base, status: outcome.status, errorKind: outcome.errorKind, errorDetail: outcome.detail };
   }
 }
 
@@ -173,7 +174,7 @@ async function sendOne(
   const key = job.kind === "morning" ? `${job.key}:${targetId}` : job.key;
   if (await store.deliveryDone(key)) return;
   const result = outcome ?? (await deps.deliver(target, [message], key));
-  const row = rowOf(key, targetId, result);
+  const row = rowOf(key, targetId, result, "member" in target ? "member" : "channel");
   await store.appendDeliveryLog(row);
   if (row.status !== "sent") {
     deps.log(`oc-family-pack: household brief ${key} logged ${row.status} (${row.errorKind})`);
@@ -215,7 +216,9 @@ async function runJob(deps: HouseholdDeps, store: Store, job: DueHousehold, now:
   const message = householdMessage(TITLE[job.kind], lines);
   if (job.kind === "morning") {
     const members = deps.config.demo ? DEMO_MEMBERS : deps.config.members;
-    for (const parent of members.filter((member) => member.role === "parent")) {
+    for (const parent of members.filter(
+      (member) => member.role === "parent" && member.discordId !== undefined && (member.reminders ?? "dm") !== "off",
+    )) {
       await sendOne(deps, store, job, { member: parent.id }, parent.id, message, undefined);
     }
     return;
@@ -243,6 +246,7 @@ export async function householdTick(deps: HouseholdDeps, now: number): Promise<v
 
 /** Polls every minute from now; ticks never overlap. Returns the stop function. */
 export function startHouseholds(deps: HouseholdDeps, now: () => number = Date.now): () => void {
+  if (deps.config.demo) return () => {};
   let running = false;
   const tick = async () => {
     if (running) return;

@@ -758,12 +758,8 @@ test("the today widget is a second surface and renders only the highlight lines"
 
   const page = mountPage({
     request: (method, params) => {
-      const action = params as { actionId?: string } | undefined;
-      if (method === "plugins.sessionAction" && action?.actionId === "family.today") {
-        return Promise.resolve({
-          ok: true,
-          result: { date: "2026-09-30", highlights: ["⏰ Dentist in 90 min"], exceptions: [{ title: "Secret trip" }] },
-        });
+      if (method === "family.todayView") {
+        return Promise.resolve({ date: "2026-09-30", highlights: ["⏰ Dentist in 90 min"], exceptions: [{ title: "Secret trip" }] });
       }
       return Promise.resolve(week());
     },
@@ -785,10 +781,9 @@ test("the today widget is a second surface and renders only the highlight lines"
 
   const quiet = mountWidget(
     mountPage({
-      request: (method, params) => {
-        const action = params as { actionId?: string } | undefined;
-        if (method === "plugins.sessionAction" && action?.actionId === "family.today") {
-          return Promise.resolve({ ok: true, result: { date: "2026-09-30", highlights: ["Looks like a quiet day — nothing urgent."], exceptions: [] } });
+      request: (method) => {
+        if (method === "family.todayView") {
+          return Promise.resolve({ date: "2026-09-30", highlights: ["Looks like a quiet day — nothing urgent."], exceptions: [] });
         }
         return Promise.resolve(week());
       },
@@ -801,9 +796,8 @@ test("the today widget is a second surface and renders only the highlight lines"
 
   const broken = mountWidget(
     mountPage({
-      request: (method, params) => {
-        const action = params as { actionId?: string } | undefined;
-        if (method === "plugins.sessionAction" && action?.actionId === "family.today") return Promise.reject(new Error("disk"));
+      request: (method) => {
+        if (method === "family.todayView") return Promise.reject(new Error("disk"));
         return Promise.resolve(week());
       },
     }),
@@ -956,9 +950,9 @@ describe("editing from the event dialog", { concurrency: 1 }, () => {
     const page = mountPage({
       result: { ...week(), ...flags },
       request: (method, params) => {
-        if (method !== "plugins.sessionAction") return Promise.resolve({ ...week(), ...flags });
+        if (method !== "family.pageWrite") return Promise.resolve({ ...week(), ...flags });
         return new Promise((resolve, reject) => {
-          writes.push({ payload: (params as { payload: Record<string, unknown> }).payload, answer: (result) => resolve({ ok: true, result }), fail: reject });
+          writes.push({ payload: params as Record<string, unknown>, answer: (result) => resolve(result), fail: reject });
         });
       },
     });

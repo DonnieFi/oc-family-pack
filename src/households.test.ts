@@ -144,7 +144,7 @@ test("a quiet weekend posts one line to the channel", async () => {
   assert.equal(calls[0]?.description, "Quiet weekend: nothing major on the calendar.");
 });
 
-test("a failed after-school post is recorded and each parent is told once", async () => {
+test("a failed after-school post is final: one post and one alert per parent", async () => {
   const store = await freshStore();
   const game = {
     sections: [{ name: "not the usual" as const, items: [{ id: "c0/game", title: "Soccer game", time: "4:00 PM", owners: ["Riley"] }] }],
@@ -161,7 +161,7 @@ test("a failed after-school post is recorded and each parent is told once", asyn
   );
   assert.match(alerts[0]?.description ?? "", /after-school brief/);
   const posts = calls.filter((call) => call.key === `household:after-school:${WED}`);
-  assert.equal(posts.length, 2);
+  assert.equal(posts.length, 1);
 });
 
 test("a calendar read that fails logs nothing", async () => {

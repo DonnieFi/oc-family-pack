@@ -3,6 +3,7 @@ import { classifyEvent, clockTime, usualLine } from "./classify.js";
 import { CLASSES_LINE_MAX, LOOKUP_DAYS_MAX, SCHEDULE_DAYS_MAX, SCHEDULE_ITEMS_MAX, SCHEDULE_SECTIONS, USUAL_MAX } from "./contract.js";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.js";
 import { groupCopies, mergeGroup, normalTitle } from "./merge.js";
+import { resolveMemberReference } from "./person.js";
 import { fitsHostLimits } from "./payload.js";
 import { resolveRequester } from "./requester.js";
 import { visibleCalendarIds } from "./visibility.js";
@@ -76,14 +77,17 @@ export async function buildSchedule(config, input, caller, now, runGog) {
     }
     const members = config.demo ? DEMO_MEMBERS : config.members;
     const calendars = config.demo ? DEMO_CALENDARS : config.calendars;
-    let member = input.member;
-    if (member === "me") {
+    let member = input.member?.trim();
+    if (member?.toLowerCase() === "me") {
         if (caller.me === undefined)
             return { error: ME_UNKNOWN };
         member = caller.me;
     }
-    else if (member !== undefined && !members.some((entry) => entry.id === member)) {
-        return { error: "member must be an id from the family roster, or \"me\"." };
+    else if (member !== undefined) {
+        const resolved = resolveMemberReference(members, member);
+        if ("error" in resolved)
+            return { error: resolved.error };
+        member = resolved.member.id;
     }
     let start;
     let end;

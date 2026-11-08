@@ -9,17 +9,18 @@ Each person is a member in `plugins.entries.oc-family-pack.config.members`.
 - **name** (required). What the family calls this person. `displayName` is still accepted. When setup adds someone, it sets this to the username with the first letter capitalized. `riley` becomes Riley.
 - **id** (optional). The internal key. Calendar owners, briefs, reminders and Today use it. Omitted means the `profileId`, or else a lower-case slug of the name (`Riley S` becomes `riley-s`). Two people with the same id fail the config, and the error names both.
 - **profileId** (optional). Only for someone who signs in to the Control UI. Lower case. This is the trusted-proxy sign-in username, the `X-Forwarded-User` value. It is separate from the Gateway's internal profile id. The page matches it exactly. Someone without one can't open the Family page as themselves. It is never made up from the name. A member id from the browser is not identity.
+- **aliases** (optional). The names the family actually uses in chat, such as `Mom`, `Dad`, or `Aunt Jo`. They are for addressing only. They never grant a page or Discord identity. An alias cannot collide with another person's id, login, or alias.
 - **role** (optional). `parent`, `kid`, or `guest`. Omitted means `guest`. At least one parent is required before the Members step is done.
 - **color** (optional). A CSS color, such as `#3b82f6`. The page uses it. The setup command does not set it.
 - **discordId** (optional). 17 to 20 digits. It stays in config. The week payload never includes it.
-- **reminders** (optional). `dm`, `channel`, or `off`. Omitted means `dm`. Change it later in chat with `set_reminder_mode`. The setup command does not set it.
+- **reminders** (optional). `dm`, `channel`, or `off`. Omitted means `dm` when the person has a `discordId`, and `off` when they do not. Change it later in chat with `set_reminder_mode`. The setup command does not set it.
 - **devices** (optional). `id`, `label`, `hostname`, `primaryMac`, `aliasMacs`, `source`, `sharedWith`, and `reservation`. A MAC is a device signal. It is normalized when config is parsed, and it stays off the week payload. An omitted device `id` keeps the label slug when unique. Repeated labels are disambiguated with the owner id and, when needed, a numeric suffix. Explicit ids never change. Run `--materialize-ids` and apply its patch before changing labels, MACs, logins, or roster membership; derived ids are only a legacy fallback. `sharedWith` lists other member ids on that one record. A second record with the same MAC is refused. `reservation` is an IPv4 address the operator wrote down (`address`, `source`, and an optional `network`). An observed address is not stored, and a reservation does not change the router. The setup command does not set devices.
 
 - **email** (optional). Trimmed and stored in lower case. It is only stored on the person's card. Nothing in this plugin sends email, and no output shows it. Two people may share one.
 
 Someone with no Discord account still loads, and setup says: Riley has no Discord account, so this version can't send them reminders or briefs. Email and phone stay on the contact card and are not notification routes. A kid's card doesn't need a parent's Discord. Sign-in is `profileId` or `login`. `phone` is optional and is only stored.
 
-Usernames use lower-case letters, numbers, dots, dashes, or underscores, up to 32 characters. The command says: Usernames use lower-case letters, numbers, dots, dashes or underscores. Try `alex`, not `Alex Smith`. Each person sees their username as their name in the Control UI, so use what the family calls them.
+Usernames use lower-case letters, numbers, dots, dashes, underscores, or a plain email address. Try `alex` or `alex@example.com`, not `Alex Smith`. Each person sees this as their name in the Control UI, so use what the family calls them. It must be the same value the proxy sends in `X-Forwarded-User`.
 
 ## Add someone
 
@@ -37,7 +38,7 @@ Pass Discord in the same command, or later:
 openclaw family setup --parent alex --discord alex=200000000000000001
 ```
 
-Someone already in the config is left as they are. Setup says: "alex is already set up, so that entry was left as it is."
+Someone already in the config keeps their fields. If a legacy member has no explicit id, adding a Discord id or email also writes the id, so a later rename cannot move calendar owners. Setup says: "alex is already set up, so that entry was left as it is."
 
 ## Apply the patch
 
@@ -71,11 +72,11 @@ Discord is how this version knows who "me" is in chat. The Family page works wit
 openclaw family setup --kid riley --email riley=riley@example.com
 ```
 
-Setup checks the shape and does not repeat a bad address. The checklist and the lines above the patch do not print addresses. The patch JSON does, because `openclaw config patch` replaces the whole members list, and leaving an address out would delete it. An email stays on the card. The week, the Family page, and briefs do not show it. The People page shows it to a parent. `family_contact` can read one person's email, and only when the host marks the caller as the operator.
+Setup checks the shape and does not repeat a bad address. The checklist and the lines above the patch do not print addresses. The patch JSON does, because `openclaw config patch` replaces the whole members list, and leaving an address out would delete it. An email stays on the card. The week, the Family page, and briefs do not show it. The People page shows it to a parent, or to the shared owner in solo mode. `family_contact` can read one person's email, and only when the host marks the caller as the operator.
 
 ## The checklist
 
-`openclaw family setup` with no names prints a checklist. Each line is `Name: Done` or `Name: To do`, then one Next step.
+`openclaw family setup` with no names prints a checklist. Each line is `Name: Done` or `Name: To do`. When it has a config patch, link command, or approval block to offer, those print above the checklist; otherwise one Next step follows it.
 
 1. **Access mode.** Next is `openclaw family access`. It changes nothing. It reports solo or LAN, or prints the steps for one.
 
@@ -99,7 +100,7 @@ Setup checks the shape and does not repeat a bad address. The checklist and the 
 
    The same place in the README example is `{ lat: 45.42, lon: -75.7, label: "Home" }`.
 
-4. **Members.** Done when there is at least one parent. In LAN mode every member must also be in `allowUsers`. If someone is missing, setup tells you to re-run `openclaw family access lan` with the whole family. That command names every member and everyone already allowed.
+4. **Members.** Done when there is at least one parent. In LAN mode every member must also have a `login`, be in `allowUsers`, and have Gateway scopes that match their roster role. If someone is missing, setup names them and prints the access command. That command names every member and everyone already allowed. A member without an explicit `id` gets a warning: run `openclaw family setup --materialize-ids` before a rename.
 
 5. **Calendars.** Next is `openclaw family gog`. The steps are below.
 
@@ -111,7 +112,7 @@ openclaw family setup --discord alex=DISCORD_ID_alex
 
 How to copy the id is in Discord above.
 
-When every step is Done, setup prints "Everything is set up." The exit code is 0 only then. A run that printed a patch is not finished.
+When every step is Done, no approval block is pending, and no id or LAN-mode warning remains, setup prints "Everything is set up." The exit code is 0 only then. A run that printed a patch is not finished.
 
 ## Calendars
 
@@ -131,15 +132,17 @@ The commands never pass `--readonly`. On a machine with a browser:
 openclaw family gog --desktop
 ```
 
-If the Gateway service cannot see `gog` on `PATH`, set `gogPath` to the full path of the binary.
+If the Gateway service cannot see `gog` on `PATH`, set `gogPath` to the full path of the binary. Family Pack uses gog's default account; if `gog auth list` holds several, make the family calendars available on the default one. The plugin does not choose a Google account per request.
 
-When `gog` can list calendars, put them in config. Each one has an `id`, a `label`, and a `kind` of `personal`, `shared`, or `school`. Owners are member `id` values. A school calendar's owners are the students. A shared calendar's owners may be an empty list. A full example is in the Configuration section of [README.md](README.md). The Calendars step is Done when sign-in is ready and at least one calendar is in config.
+When `gog` can list calendars, put them in config. Each one has an `id`, a `label`, and a `kind` of `personal`, `shared`, or `school`. Owners are member `id` values. A school calendar's owners are the students. A shared calendar's owners may be an empty list. Set an optional `key` (`c` plus up to seven letters or digits) before reordering the list; the key is the wire id tools and pages use. Labels must be unique. A full example is in the Configuration section of [README.md](README.md). The Calendars step is Done when sign-in is ready, at least one calendar is in config, and every personal or school calendar has an owner.
 
 ## Sign-in
 
-You sign in as your `profileId`.
+You sign in as your `profileId`. Gateway roles and plugin roster roles are two separate settings: `openclaw family access lan` sets `identityScopes`, and `users.setRole` sets the host role. The plugin checks `members[].role` for page writes, People, and approvals; setup reports when the two disagree. Change both when someone changes role.
 
-`openclaw family access` reports solo or LAN and changes nothing. In solo mode, everyone who opens the Control UI is the shared owner, and family members use Discord. In LAN mode, each person has their own sign-in, and every member is in `allowUsers`. The cutover is [HOUSEHOLD-LAN.md](HOUSEHOLD-LAN.md).
+`openclaw family access` reports solo or LAN and changes nothing. In solo mode, everyone who opens the Control UI is the shared owner, and family members use Discord. In LAN mode, each person has their own sign-in, and every member is in `allowUsers`. A paired device token is the shared owner when `accessMode` is `"solo"` or unset. In LAN mode set `accessMode: "lan"`; a device token is then a guest and cannot see the household. The cutover is [HOUSEHOLD-LAN.md](HOUSEHOLD-LAN.md).
+
+Calendar approvals use OpenClaw plugin approvals. The parent LAN role includes `operator.approvals`. In LAN mode, `openclaw family setup` prints an `approvals.plugin` block with the roster parents' Discord targets. Apply it, enable writes for the proof window, prove a kid's shared-calendar write reaches a parent, then enable reminders and briefs.
 
 ## After setup
 

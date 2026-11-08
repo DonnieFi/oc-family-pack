@@ -936,6 +936,8 @@ test("every off-Discord tool caller is `tool` in the key's requester tag, owner 
   assert.equal(requesterTag({ from: "tool", senderIsOwner: false }), "tool");
   assert.equal(requesterTag({ from: "discord", member: household.members[1]! }), "discord:calla");
   assert.equal(requesterTag({ from: "discord" }), "discord:unmatched");
+  assert.equal(requesterTag({ from: "page", client: { scopes: ["operator.write"] }, role: "parent", memberId: "alex" }), "page:alex");
+  assert.equal(requesterTag({ from: "page", client: { scopes: ["operator.write"] }, role: "parent" }), "page");
 });
 
 // ---- update, move, delete ----

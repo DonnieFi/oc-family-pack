@@ -82,4 +82,9 @@ BEGIN SELECT RAISE(ABORT, 'oc_family_pack_reminder_mode is append-only'); END;`,
   at INTEGER NOT NULL
 ) STRICT;`,
     },
+    {
+        id: "0006-delivery-target-kind",
+        // Older rows have no kind; member ids and channel keys shared one namespace.
+        sql: `ALTER TABLE oc_family_pack_delivery_log ADD COLUMN target_kind TEXT`,
+    },
 ];

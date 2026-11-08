@@ -2,6 +2,7 @@ import { Type } from "typebox";
 import { STAMP_PARAM } from "./approval-stamp.js";
 import { baseKey, changedWhileWaitingLine, checkKey, END_BEFORE_START, loggedFields, normalizeCreate, OP_VERB, requesterTag, requestKey, somethingWrongLine, submitCreate, unreachableLine, } from "./calendar-write.js";
 import { toolWriteFacts, writeRequesterFromFacts } from "./requester.js";
+import { visibleCalendarIds, viewerForRequester } from "./visibility.js";
 import { gateWrite, READ_ONLY } from "./write-gate.js";
 import { approvers } from "./write-permissions.js";
 export const CALENDAR_CREATE_TOOL = "calendar_create";
@@ -68,7 +69,7 @@ function text(params, name) {
 }
 function findCalendar(calendars, name) {
     const wanted = name.trim().toLowerCase();
-    return calendars.find((calendar) => calendar.key.toLowerCase() === wanted || calendar.label.trim().toLowerCase() === wanted);
+    return calendars.find((calendar) => calendar.key.toLowerCase() === wanted) ?? calendars.find((calendar) => calendar.label.trim().toLowerCase() === wanted);
 }
 /**
  * The one way the hook and the tool turn a call into a write: requester, op, calendar,
@@ -267,6 +268,8 @@ export function calendarCreateHook(deps, stamper) {
     return async (event, ctx) => {
         if (event.toolName !== CALENDAR_CREATE_TOOL)
             return undefined;
+        if (deps.config.demo)
+            return { block: true, blockReason: somethingWrongLine("create", undefined) };
         const params = withoutStamp(event.params);
         let prepared;
         try {
@@ -276,6 +279,9 @@ export function calendarCreateHook(deps, stamper) {
             if (error instanceof CreateInputError)
                 return { block: true, blockReason: error.message };
             throw error;
+        }
+        if (!visibleCalendarIds(deps.config, viewerForRequester(prepared.requester)).has(prepared.calendar.id)) {
+            return { block: true, blockReason: somethingWrongLine("create", undefined) };
         }
         const gate = gateWrite({
             writes: deps.config.writes,
@@ -327,6 +333,8 @@ export function calendarCreateTool(deps, stamper, ctx) {
         async execute(toolCallId, rawParams) {
             const stamp = typeof rawParams === "object" && rawParams !== null ? rawParams[STAMP_PARAM] : undefined;
             const params = withoutStamp(rawParams);
+            if (deps.config.demo)
+                return reply(somethingWrongLine("create", undefined), "refused");
             let prepared;
             try {
                 prepared = prepareCreate(deps.config, factsFromTool(ctx), params);

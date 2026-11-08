@@ -6,6 +6,7 @@ import type {
   FamilyEventSchema,
   GarbageOutputSchema,
   MembersPayloadSchema,
+  RosterMemberSchema,
   ScheduleInputSchema,
   ScheduleOutputSchema,
   TodayPayloadSchema,
@@ -67,6 +68,12 @@ export type MemberConfig = {
    */
   gatewayProfileId?: string;
   displayName: string;
+  /**
+   * Names the family actually uses for this person: "Mom", "Dad", a first name,
+   * or a nickname. Addressing only; aliases never authorize a Discord sender or
+   * a page viewer.
+   */
+  aliases?: string[];
   /** Stored on the card only. Nothing in the plugin sends email or shows it on the week. */
   email?: string;
   /** Stored on the card only. Nothing in the plugin sends SMS. */
@@ -82,7 +89,7 @@ export type MemberConfig = {
 };
 
 export type CalendarConfig = {
-  /** The calendar's wire key, assigned from its position in the config. */
+  /** The calendar's stable wire key; omitted config falls back to its array position. */
   key: string;
   id: string;
   label: string;
@@ -100,6 +107,10 @@ export type Config = {
   garbageIcsUrl?: string;
   /** Discord channel ids by key. Delivery targets and rows name the key, never the id. */
   channels?: Record<string, string>;
+  /** Optional Discord account id from channels.discord.accounts; the host default when omitted. */
+  discordAccount?: string;
+  /** `lan` treats a paired device token as a guest; `solo` keeps the shared-owner model. */
+  accessMode?: "solo" | "lan";
   /** The channels key the daily and weekly briefs post to; briefs are off without it. Channel reminders use it too. */
   summaryChannel?: string;
   /** Minutes before an event to remind its owners. Empty sends nothing. Omitted means 15. */
@@ -136,6 +147,7 @@ export type WeatherRecommendation = Static<typeof WeatherRecommendationSchema>;
 export type WeatherState = Static<typeof WeatherStateSchema>;
 export type WeekPayload = Static<typeof WeekPayloadSchema>;
 export type MembersPayload = Static<typeof MembersPayloadSchema>;
+export type RosterMember = Static<typeof RosterMemberSchema>;
 export type CalendarWrite = Static<typeof CalendarWriteSchema>;
 export type TodayPayload = Static<typeof TodayPayloadSchema>;
 export type CalendarChanged = Static<typeof CalendarChangedSchema>;

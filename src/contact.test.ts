@@ -44,8 +44,8 @@ test("a kid, a parent who is not the operator, and a guest are refused, and the 
 test("an unknown id, a blank id, and an email used as an id are refused without repeating the value", async () => {
   const tool = familyContact(config(), { senderIsOwner: true });
   assert.equal((await tool.execute("call", { id: "nope" })).content[0]?.text, "That person is not in the family.");
-  assert.equal((await tool.execute("call", { id: "" })).content[0]?.text, "Say which person, by their id.");
-  assert.equal((await tool.execute("call", {})).content[0]?.text, "Say which person, by their id.");
+  assert.equal((await tool.execute("call", { id: "" })).content[0]?.text, "Say which person, by their id or name.");
+  assert.equal((await tool.execute("call", {})).content[0]?.text, "Say which person, by their id or name.");
   const asEmail = await tool.execute("call", { id: EMAIL });
   assert.equal(asEmail.content[0]?.text, "That person is not in the family.");
   assert.equal(asEmail.content[0]?.text.includes(EMAIL), false);

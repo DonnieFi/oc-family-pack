@@ -1,12 +1,12 @@
 import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { ConfigSchema, parseConfig } from "./config.ts";
-import { CALENDAR_WRITE_ACTION, contract, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.ts";
+import { contract, PAGE_WRITE_METHOD, TODAY_VIEW_METHOD, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.ts";
 import { DELIVERY_STATUS_METHOD, deliveryStatusMethod } from "./delivery-status.ts";
 import { execGog } from "./calendar-gog.ts";
 import { watchCalendars } from "./calendar-watch.ts";
 import { registerFamilyCli } from "./gog-setup.ts";
-import { familyHandlers, familyWeek } from "./handlers.ts";
+import { familyHandlers, familyTodayView, familyWeek } from "./handlers.ts";
 import { openFamilyStore, type FamilyStore } from "./store.ts";
 import { weekMethod } from "./week-method.ts";
 import { familyGrant } from "./grant.ts";
@@ -14,6 +14,8 @@ import { CALENDAR_DELETE_TOOL, CALENDAR_MOVE_TOOL, CALENDAR_UPDATE_TOOL, Calenda
 import { CALENDAR_CREATE_TOOL, CalendarCreateInputSchema } from "./calendar-create.ts";
 import { registerCalendarWrite, type CalendarWriteApi } from "./calendar-tools.ts";
 import { pageWrite } from "./page-write.ts";
+import { pageWriteMethod } from "./page-write-method.ts";
+import { todayViewMethod } from "./today-view-method.ts";
 import { briefDirectory, startBriefs } from "./briefs.ts";
 import { deliver } from "./discord-delivery.ts";
 import { SET_REMINDER_MODE_TOOL, SetReminderModeSchema, reminderTool, startReminders } from "./reminders.ts";
@@ -201,7 +203,12 @@ const plugin = defineFeaturePlugin({
       label: "Today",
       requiredScopes: ["operator.read"],
     });
-    api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant })), { scope: "operator.read" });
+    api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant }), config), { scope: "operator.read" });
+    api.registerGatewayMethod(
+      TODAY_VIEW_METHOD,
+      todayViewMethod(familyTodayView(config, { grant: familyGrant, log: (line) => api.logger.warn(line) }), config.accessMode),
+      { scope: "operator.read" },
+    );
     // operator.write: a kid can read the week and cannot read contact details.
     const directoryConfig = () => config;
     const directoryRaw = () => api.pluginConfig;
@@ -216,23 +223,24 @@ const plugin = defineFeaturePlugin({
       { scope: "operator.read" },
     );
     // operator.write so a kid cannot consume the one-time Home seed.
-    api.registerGatewayMethod(TODAY_HOME_METHOD, todayHomeMethod(() => store), { scope: "operator.write" });
+    api.registerGatewayMethod(TODAY_HOME_METHOD, todayHomeMethod(() => store, () => config), { scope: "operator.write" });
+    const writePage = pageWrite({
+      config,
+      runGog: execGog(),
+      grant: familyGrant,
+      log: () => store,
+      changed: () => {
+        try {
+          // Guests receive this event, so it carries no calendar keys. The page refetches the week.
+          events.emit("calendar-changed", { reason: "write", calendarKeys: [], at: new Date().toISOString() });
+        } catch {
+          // The write stands; open pages catch up on the next poll.
+        }
+      },
+    });
+    api.registerGatewayMethod(PAGE_WRITE_METHOD, pageWriteMethod(() => config, writePage), { scope: "operator.write" });
     return {
       ...familyHandlers(config, { log: (line) => api.logger.warn(line) }),
-      [CALENDAR_WRITE_ACTION]: pageWrite({
-        config,
-        runGog: execGog(),
-        grant: familyGrant,
-        log: () => store,
-        changed: () => {
-          try {
-            // Guests receive this event, so it carries no calendar keys. The page refetches the week.
-            events.emit("calendar-changed", { reason: "write", calendarKeys: [], at: new Date().toISOString() });
-          } catch {
-            // The write stands; open pages catch up on the next poll.
-          }
-        },
-      }),
     };
   },
 });

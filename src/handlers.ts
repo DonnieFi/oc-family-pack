@@ -9,7 +9,7 @@ import { buildToday } from "./today.ts";
 import type { Config, GarbageOutput, MembersPayload, ScheduleInput, ScheduleOutput, TodayPayload, WeatherState, WeekPayload } from "./types.ts";
 import type { Viewer } from "./visibility.ts";
 import { readEcWeather } from "./weather-ec.ts";
-import { resolveMembers } from "./week.ts";
+import { resolveRoster } from "./week.ts";
 
 export type FamilyHandlerDeps = {
   /** Clock for the week. Defaults to the time of the call. */
@@ -42,6 +42,14 @@ export function familyWeek(config: Config, deps: FamilyHandlerDeps = {}) {
     });
 }
 
+/** Today for a page viewer resolved by the Gateway, using the same builder as the agent tool. */
+export function familyTodayView(config: Config, deps: FamilyHandlerDeps = {}) {
+  const now = deps.now ?? Date.now;
+  const garbage = createGarbageFeed(deps.fetchGarbage, deps.log ? { log: deps.log } : {});
+  return (viewer: Viewer): Promise<TodayPayload> =>
+    buildToday(config, { viewer }, now(), { ...(deps.runGog === undefined ? {} : { runGog: deps.runGog }), garbage });
+}
+
 /** Handlers for the registered queries. `family.schedule`, `family.today`, and `family.garbage` are also the agent's tools. */
 export function familyHandlers(config: Config, deps: FamilyHandlerDeps = {}) {
   const now = deps.now ?? Date.now;
@@ -50,7 +58,7 @@ export function familyHandlers(config: Config, deps: FamilyHandlerDeps = {}) {
   const caller = (context: FeatureInvocationContext) => scheduleCaller(config.demo ? DEMO_MEMBERS : config.members, context);
   return {
     "family.members": (): MembersPayload => ({
-      members: resolveMembers(config.demo ? DEMO_MEMBERS : config.members),
+      members: resolveRoster(config.demo ? DEMO_MEMBERS : config.members),
     }),
     "family.weather": (): Promise<WeatherState> => readWeather(),
     "family.schedule": (input: ScheduleInput, context: FeatureInvocationContext): Promise<ScheduleOutput> =>

@@ -6,8 +6,11 @@ import { DELIVERY_NOTE, DIRECTORY_PERSISTENCE, RESERVATION_NOTE } from "./direct
 import { directoryMembers, planDirectoryEdit, planMaterialize, MATERIALIZE_INTRO, type DirectoryEdit } from "./directory.ts";
 import { DEMO_MEMBERS } from "./demo.ts";
 import type { Config } from "./types.ts";
+import { isRosterParent } from "./visibility.ts";
+import { viewerOf } from "./week-method.ts";
 
-type Respond = Pick<GatewayRequestHandlerOptions, "params" | "respond">;
+type Respond = Pick<GatewayRequestHandlerOptions, "params" | "respond"> & Partial<Pick<GatewayRequestHandlerOptions, "client">>;
+const PARENT_ONLY = "People is for a parent. This sign-in can read the week, and it cannot see emails, phone numbers, Discord ids, or devices.";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -21,7 +24,7 @@ function rawRoster(raw: unknown): { members: unknown[]; calendars: unknown[] } {
   };
 }
 
-const EDIT_KEYS = ["id", "displayName", "login", "gatewayProfileId", "email", "phone", "discordId", "devices"] as const;
+const EDIT_KEYS = ["id", "displayName", "login", "email", "phone", "discordId", "aliases", "role", "color", "reminders", "devices"] as const;
 
 function parseEdits(value: unknown): DirectoryEdit[] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -36,11 +39,15 @@ function parseEdits(value: unknown): DirectoryEdit[] | undefined {
       if (typeof entry.displayName !== "string" || entry.displayName.trim() === "") return undefined;
       edit.displayName = entry.displayName;
     }
-    for (const key of ["login", "gatewayProfileId", "email", "phone", "discordId"] as const) {
+    for (const key of ["login", "email", "phone", "discordId", "role", "color", "reminders"] as const) {
       if (!(key in entry)) continue;
       const field = entry[key];
       if (field !== null && typeof field !== "string") return undefined;
-      edit[key] = field;
+      (edit as unknown as Record<string, unknown>)[key] = field;
+    }
+    if ("aliases" in entry) {
+      if (!Array.isArray(entry.aliases) || entry.aliases.some((alias) => typeof alias !== "string")) return undefined;
+      edit.aliases = entry.aliases;
     }
     if ("devices" in entry) {
       if (!Array.isArray(entry.devices)) return undefined;
@@ -53,8 +60,12 @@ function parseEdits(value: unknown): DirectoryEdit[] | undefined {
 
 /** The roster a parent may view. Demo mode shows the sample family and no private network data beyond that sample. */
 export function directoryMethod(config: () => Config, _raw: () => unknown) {
-  return async ({ respond }: Pick<Respond, "respond">): Promise<void> => {
+  return async ({ client, respond }: Pick<Respond, "respond"> & Partial<Pick<Respond, "client">>): Promise<void> => {
     const current = config();
+    if (!isRosterParent(current, viewerOf(client, current.accessMode))) {
+      respond(true, { error: PARENT_ONLY });
+      return;
+    }
     respond(true, {
       demo: current.demo,
       persistence: DIRECTORY_PERSISTENCE,
@@ -67,8 +78,12 @@ export function directoryMethod(config: () => Config, _raw: () => unknown) {
 
 /** Validate an edit or an id migration and return a config patch. This does not write. */
 export function directoryPreviewMethod(config: () => Config, raw: () => unknown) {
-  return async ({ params, respond }: Respond): Promise<void> => {
+  return async ({ params, client, respond }: Respond): Promise<void> => {
     const current = config();
+    if (!isRosterParent(current, viewerOf(client, current.accessMode))) {
+      respond(true, { ok: false, error: PARENT_ONLY });
+      return;
+    }
     if (current.demo) {
       respond(true, { ok: false, error: "Demo mode shows the sample family. Turn demo off before previewing a roster patch." });
       return;

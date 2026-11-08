@@ -86,7 +86,7 @@ export function requesterTag(requester: Requester): string {
       // Off Discord the owner flag names no person, and the hook can't see it on tools.invoke.
       return "tool";
     case "page":
-      return "page";
+      return requester.memberId === undefined ? "page" : `page:${requester.memberId}`;
     case "other":
       return "other";
   }
@@ -732,7 +732,7 @@ export type ChangeSubmission = {
 
 /** The pipeline entry for update, move and delete: the gate (source and destination), then changeEvent. */
 export async function submitChange(deps: SubmitDeps, submission: ChangeSubmission): Promise<SubmitChangeResult> {
-  const requester = resolveWriteRequester(deps.config.members, submission.context);
+  const requester = deps.requester ?? resolveWriteRequester(deps.config.members, submission.context);
   const gate = gateWrite({
     writes: deps.config.writes,
     grant: deps.grant.get(),
@@ -761,7 +761,11 @@ export async function submitChange(deps: SubmitDeps, submission: ChangeSubmissio
 
 export type SubmitChangeResult = { status: "refused"; message: string } | { status: "needs-approval"; approvers: string[] } | ChangeResult;
 
-export type SubmitDeps = Omit<WriteDeps, "config"> & { config: Pick<Config, "gogPath" | "timezone" | "writes" | "members"> };
+export type SubmitDeps = Omit<WriteDeps, "config"> & {
+  config: Pick<Config, "gogPath" | "timezone" | "writes" | "members">;
+  /** A page write passes the roster-resolved requester; tool/hook calls derive it from context. */
+  requester?: Requester;
+};
 
 export type CreateSubmission = {
   /** The host's context. The requester comes only from here; the payload only supplies the page's requestId. */
@@ -785,7 +789,7 @@ export type SubmitResult = { status: "refused"; message: string } | { status: "n
  * before_tool_call hook (calendar-create.ts) and come back with `table`.
  */
 export async function submitCreate(deps: SubmitDeps, submission: CreateSubmission): Promise<SubmitResult> {
-  const requester = resolveWriteRequester(deps.config.members, submission.context);
+  const requester = deps.requester ?? resolveWriteRequester(deps.config.members, submission.context);
   const gate = gateWrite({
     writes: deps.config.writes,
     grant: deps.grant.get(),

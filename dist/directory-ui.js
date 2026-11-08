@@ -17,6 +17,19 @@ function field(label, value, onInput) {
     input.addEventListener("input", () => onInput(input.value));
     return h("label", { class: "ocfp-field" }, h("span", {}, label), input);
 }
+function selectField(label, value, options, onInput) {
+    const select = document.createElement("select");
+    select.setAttribute("aria-label", label);
+    for (const option of options) {
+        const node = document.createElement("option");
+        node.value = option;
+        node.textContent = option;
+        node.selected = option === value;
+        select.append(node);
+    }
+    select.addEventListener("change", () => onInput(select.value));
+    return h("label", { class: "ocfp-field" }, h("span", {}, label), select);
+}
 function deviceDraft(device) {
     return {
         id: device.id,
@@ -38,7 +51,10 @@ export function editFrom(member) {
         id: member.id,
         displayName: member.displayName,
         login: member.login ?? null,
-        gatewayProfileId: member.gatewayProfileId ?? null,
+        aliases: member.aliases ?? [],
+        role: member.role,
+        color: member.color ?? null,
+        reminders: member.reminders,
         email: member.email ?? null,
         phone: member.phone ?? null,
         discordId: member.discordId ?? null,
@@ -54,7 +70,7 @@ export function editFrom(member) {
         })),
     };
 }
-const RESTRICTED = "Contact cards are for a parent. This sign-in can read the week, and it cannot see emails, phone numbers, or devices.";
+const RESTRICTED = "Contact cards are for a parent. This sign-in can read the week, and it cannot see emails, phone numbers, Discord ids, or devices.";
 /**
  * People. A parent loads the roster, edits one card, and previews the config
  * patch. A kid sees the restriction and the page does not request the roster.
@@ -85,6 +101,10 @@ export function mountPeoplePage(container, initial) {
         void host.request(DIRECTORY_METHOD, {}).then((body) => {
             if (disposed)
                 return;
+            if (typeof body?.error === "string") {
+                show(h("p", { class: "ocfp-people-note" }, body.error));
+                return;
+            }
             const members = Array.isArray(body?.members) ? body.members.map(memberDraft) : [];
             render(members, body?.persistence ?? DIRECTORY_PERSISTENCE, body?.delivery ?? DELIVERY_NOTE, body?.reservation ?? RESERVATION_NOTE, body?.demo === true);
         }, () => {
@@ -94,6 +114,7 @@ export function mountPeoplePage(container, initial) {
     };
     const render = (members, persistence, delivery, reservation, demo) => {
         let selected = 0;
+        const edited = new Set();
         const list = h("div", { class: "ocfp-people-list", role: "list" });
         const form = h("div", { class: "ocfp-people-form" });
         const result = h("pre", { class: "ocfp-patch", "aria-label": "Config patch" });
@@ -104,45 +125,69 @@ export function mountPeoplePage(container, initial) {
                 form.append(h("p", { class: "ocfp-people-note" }, "No one is in the family yet. Add someone with `openclaw family setup`."));
                 return;
             }
-            form.append(h("p", { class: "ocfp-person-id" }, `Id ${member.id}`), field("Name", member.displayName, (value) => {
+            form.append(h("p", { class: "ocfp-person-id" }, `Id ${member.id}`), h("p", { class: "ocfp-people-note" }, "Login must match the name your proxy sends in X-Forwarded-User. A changed Discord id needs `users.linkChannelIdentity`. Role here is the plugin roster role; the Gateway role is set with `openclaw family access lan` and `users.setRole`."), field("Name", member.displayName, (value) => {
                 member.displayName = value;
+                edited.add(selected);
+            }), field("Aliases", (member.aliases ?? []).join(", "), (value) => {
+                const aliases = value.split(",").map((part) => part.trim().toLowerCase()).filter((part) => part !== "");
+                if (aliases.length === 0)
+                    delete member.aliases;
+                else
+                    member.aliases = aliases;
+                edited.add(selected);
+            }), selectField("Role", member.role, ["parent", "kid", "guest"], (value) => {
+                member.role = value;
+                edited.add(selected);
+            }), field("Color", member.color ?? "", (value) => {
+                if (value === "")
+                    delete member.color;
+                else
+                    member.color = value;
+                edited.add(selected);
+            }), selectField("Reminders", member.reminders, ["dm", "channel", "off"], (value) => {
+                member.reminders = value;
+                edited.add(selected);
             }), field("Login", member.login ?? "", (value) => {
                 if (value === "")
                     delete member.login;
                 else
                     member.login = value;
-            }), field("Gateway profile id", member.gatewayProfileId ?? "", (value) => {
-                if (value === "")
-                    delete member.gatewayProfileId;
-                else
-                    member.gatewayProfileId = value;
+                edited.add(selected);
             }), field("Email", member.email ?? "", (value) => {
                 if (value === "")
                     delete member.email;
                 else
                     member.email = value;
+                edited.add(selected);
             }), field("Phone", member.phone ?? "", (value) => {
                 if (value === "")
                     delete member.phone;
                 else
                     member.phone = value;
+                edited.add(selected);
             }), field("Discord id", member.discordId ?? "", (value) => {
                 if (value === "")
                     delete member.discordId;
                 else
                     member.discordId = value;
+                edited.add(selected);
             }));
             for (const device of member.devices) {
+                const touch = () => edited.add(selected);
                 form.append(h("fieldset", { class: "ocfp-device" }, h("legend", {}, device.label || "Device"), field("Device label", device.label, (value) => {
                     device.label = value;
+                    touch();
                 }), field("Hostname", device.hostname ?? "", (value) => {
                     if (value === "")
                         delete device.hostname;
                     else
                         device.hostname = value;
+                    touch();
                 }), field("MAC", device.primaryMac, (value) => {
                     device.primaryMac = value;
+                    touch();
                 }), field("Reserved IP", device.reservation?.address ?? "", (value) => {
+                    touch();
                     if (value === "") {
                         delete device.reservation;
                         return;
@@ -150,6 +195,7 @@ export function mountPeoplePage(container, initial) {
                     device.reservation = { address: value, source: device.reservation?.source ?? "operator", ...(device.reservation?.network !== undefined ? { network: device.reservation.network } : {}) };
                 }), field("Shared with", device.sharedWith.join(", "), (value) => {
                     device.sharedWith = value.split(",").map((part) => part.trim().toLowerCase()).filter((part) => part !== "");
+                    touch();
                 })));
             }
         };
@@ -166,11 +212,15 @@ export function mountPeoplePage(container, initial) {
         };
         const preview = h("button", { type: "button" }, "Preview patch");
         preview.addEventListener("click", () => {
-            const member = members[selected];
-            if (member === undefined)
+            const targets = edited.size > 0 ? [...edited] : [selected];
+            const edits = targets.flatMap((index) => {
+                const member = members[index];
+                return member === undefined ? [] : [editFrom(member)];
+            });
+            if (edits.length === 0)
                 return;
-            result.textContent = "Checking the patch…";
-            void host.request(DIRECTORY_PREVIEW_METHOD, { op: "edit", edits: [editFrom(member)] }).then((body) => {
+            result.textContent = `Checking ${edits.length} ${edits.length === 1 ? "card" : "cards"}…`;
+            void host.request(DIRECTORY_PREVIEW_METHOD, { op: "edit", edits }).then((body) => {
                 if (disposed)
                     return;
                 if (body?.ok === false) {

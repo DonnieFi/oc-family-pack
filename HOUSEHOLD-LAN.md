@@ -2,6 +2,8 @@
 
 This moves a Gateway from the shared token to one sign-in per family member, through a proxy on the same machine. It stays local: nothing here makes the Gateway reachable from the internet.
 
+A paired device token is still the shared owner unless the plugin config sets `accessMode: "lan"`. Set that before the cutover, and revoke device tokens from shared and kid devices. A device token left on a kid's browser sees every calendar.
+
 Start by printing your setup. Every step below uses its output.
 
 ```sh
@@ -14,6 +16,8 @@ The shared token stops working in LAN mode. Write down everything that connects 
 
 ```sh
 openclaw devices list
+# For each shared/kid device token, then repeat for its role:
+openclaw devices revoke --device <id> --role <role> --password '<gateway password>'
 ```
 
 ## 2. Back up the config
@@ -85,3 +89,11 @@ openclaw gateway call users.setRole --params '{"profileId":"PROFILE_alex","role"
 ```
 
 The person gets the new role the next time they load the page.
+
+A roster role and a Gateway role are separate. `openclaw family access lan` writes `identityScopes`, and `users.setRole` writes the host role. `members[].role` in the plugin config decides page writes, People, and approvals. Change all three when someone changes role; `openclaw family setup` reports a mismatch.
+
+## 10. Calendar approvals
+
+If a kid will change a shared calendar, apply the `approvals.plugin` block that `openclaw family setup` prints in LAN mode. It routes the approval to the roster parents' Discord DMs. Only a parent has `operator.approvals`. The block is Gateway-wide: it also covers other plugin approvals.
+
+Enable writes for the proof window, then have a kid change a shared event and confirm a parent gets the approval and the kid cannot approve it. Turn writes back off until the household is ready.

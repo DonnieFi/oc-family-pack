@@ -25,6 +25,7 @@ import type { GrantHolder } from "./grant.ts";
 import { toolWriteFacts, writeRequesterFromFacts, type CallFacts, type Requester } from "./requester.ts";
 import type { WriteLogRow, WriteStatus } from "./store.ts";
 import type { CalendarConfig, Config, MemberConfig } from "./types.ts";
+import { visibleCalendarIds, viewerForRequester } from "./visibility.ts";
 import { gateWrite, READ_ONLY } from "./write-gate.ts";
 import { approvers } from "./write-permissions.ts";
 
@@ -60,7 +61,7 @@ export const CalendarCreateInputSchema = Type.Object(
 );
 
 export type CalendarWriteDeps = {
-  config: Pick<Config, "gogPath" | "timezone" | "writes" | "members" | "calendars">;
+  config: Pick<Config, "gogPath" | "timezone" | "writes" | "members" | "calendars" | "demo">;
   runGog: RunGog;
   grant: GrantHolder;
   /** The family store once its service has started. */
@@ -152,7 +153,7 @@ function text(params: Record<string, unknown>, name: string): string | undefined
 
 function findCalendar(calendars: readonly CalendarConfig[], name: string): CalendarConfig | undefined {
   const wanted = name.trim().toLowerCase();
-  return calendars.find((calendar) => calendar.key.toLowerCase() === wanted || calendar.label.trim().toLowerCase() === wanted);
+  return calendars.find((calendar) => calendar.key.toLowerCase() === wanted) ?? calendars.find((calendar) => calendar.label.trim().toLowerCase() === wanted);
 }
 
 /**
@@ -362,6 +363,7 @@ const OUTCOME: Partial<Record<ApprovalResolution, "denied" | "timed-out" | "fail
 export function calendarCreateHook(deps: CalendarWriteDeps, stamper: Stamper) {
   return async (event: HookEvent, ctx: HookContext): Promise<HookResult | undefined> => {
     if (event.toolName !== CALENDAR_CREATE_TOOL) return undefined;
+    if (deps.config.demo) return { block: true, blockReason: somethingWrongLine("create", undefined) };
     const params = withoutStamp(event.params);
     let prepared: PreparedCreate;
     try {
@@ -369,6 +371,9 @@ export function calendarCreateHook(deps: CalendarWriteDeps, stamper: Stamper) {
     } catch (error) {
       if (error instanceof CreateInputError) return { block: true, blockReason: error.message };
       throw error;
+    }
+    if (!visibleCalendarIds(deps.config, viewerForRequester(prepared.requester)).has(prepared.calendar.id)) {
+      return { block: true, blockReason: somethingWrongLine("create", undefined) };
     }
     const gate = gateWrite({
       writes: deps.config.writes,
@@ -419,6 +424,7 @@ export function calendarCreateTool(deps: CalendarWriteDeps, stamper: Stamper, ct
     async execute(toolCallId, rawParams) {
       const stamp = typeof rawParams === "object" && rawParams !== null ? (rawParams as Record<string, unknown>)[STAMP_PARAM] : undefined;
       const params = withoutStamp(rawParams);
+      if (deps.config.demo) return reply(somethingWrongLine("create", undefined), "refused");
       let prepared: PreparedCreate;
       try {
         prepared = prepareCreate(deps.config, factsFromTool(ctx), params);

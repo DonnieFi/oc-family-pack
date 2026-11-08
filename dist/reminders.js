@@ -5,6 +5,7 @@ import { groupCopies, mergeGroup } from "./merge.js";
 import { alertDeliveryFailure } from "./briefs.js";
 import { dueReminders, reminderAlert, reminderMessage } from "./reminder.js";
 import { requesterFromFacts } from "./requester.js";
+import { resolveMemberReference } from "./person.js";
 import { readEvents } from "./schedule.js";
 import { addDays, localDate } from "./week.js";
 const TICK_MS = 60_000;
@@ -18,7 +19,7 @@ function roster(config) {
     return config.demo ? DEMO_MEMBERS : config.members;
 }
 function modeOf(member, stored) {
-    return stored[member.id] ?? member.reminders ?? "dm";
+    return stored[member.id] ?? member.reminders ?? (member.discordId === undefined ? "off" : "dm");
 }
 /** Timed events in the window, copies merged, owners in roster order. All-day events are not reminders. */
 async function reminderEvents(deps, now) {
@@ -52,16 +53,17 @@ async function reminderEvents(deps, now) {
         };
     });
 }
-function rowOf(key, target, outcome) {
+function rowOf(key, target, outcome, targetKind) {
+    const base = { deliveryKey: key, kind: "reminder", target, targetKind };
     switch (outcome.status) {
         case "sent":
-            return { deliveryKey: key, kind: "reminder", target, status: "sent", receiptJson: JSON.stringify(outcome.receipt) };
+            return { ...base, status: "sent", receiptJson: JSON.stringify(outcome.receipt) };
         case "partial":
-            return { deliveryKey: key, kind: "reminder", target, status: "partial", errorKind: outcome.errorKind, errorDetail: outcome.detail, receiptJson: JSON.stringify(outcome.receipt) };
+            return { ...base, status: "partial", errorKind: outcome.errorKind, errorDetail: outcome.detail, receiptJson: JSON.stringify(outcome.receipt) };
         case "claimed":
-            return { deliveryKey: key, kind: "reminder", target, status: "unknown", errorKind: "other", errorDetail: "host already holds this delivery key (claimed)" };
+            return { ...base, status: "unknown", errorKind: "other", errorDetail: "host already holds this delivery key (claimed)" };
         default:
-            return { deliveryKey: key, kind: "reminder", target, status: outcome.status, errorKind: outcome.errorKind, errorDetail: outcome.detail };
+            return { ...base, status: outcome.status, errorKind: outcome.errorKind, errorDetail: outcome.detail };
     }
 }
 /** One poll: each due reminder is sent once to each owner, by that person's mode. */
@@ -85,6 +87,11 @@ export async function reminderTick(deps, now) {
         const mode = member ? modeOf(member, stored) : "off";
         if (mode === "off")
             continue;
+        // No Discord id means no DM. Channel mode still works as a plain-text
+        // mention in the summary channel; a repeated no-channel row is only for
+        // an explicit dm request with nowhere to send it.
+        if (member?.discordId === undefined && mode === "dm")
+            continue;
         if (await store.deliveryDone(due.key))
             continue;
         const channel = deps.config.summaryChannel;
@@ -104,7 +111,7 @@ export async function reminderTick(deps, now) {
             outcome = await deps.deliver({ member: due.profileId }, [reminderMessage(due.event, due.minsUntil, deps.config.timezone, who(due.event))], due.key);
             target = due.profileId;
         }
-        const row = rowOf(due.key, target, outcome);
+        const row = rowOf(due.key, target, outcome, mode === "channel" && channel !== undefined ? "channel" : "member");
         await store.appendDeliveryLog(row);
         if (row.status !== "sent") {
             deps.log(`oc-family-pack: reminder logged ${row.status} (${row.errorKind})`);
@@ -114,6 +121,8 @@ export async function reminderTick(deps, now) {
 }
 /** Polls every minute from now; ticks never overlap. Returns the stop function. */
 export function startReminders(deps, now = Date.now) {
+    if (deps.config.demo)
+        return () => { };
     let running = false;
     const tick = async () => {
         if (running)
@@ -153,12 +162,19 @@ export function maySetReminder(requester, target) {
  * `member` is a roster member id, or "me" for the person asking on Discord.
  */
 export async function setReminderMode(store, members, requester, member, mode) {
-    const profileId = member === "me" ? (requester.from === "discord" ? requester.member?.id : undefined) : member;
-    if (profileId === undefined)
-        return { ok: false, text: "I can't tell who is asking. Name the person." };
-    const target = members.find((entry) => entry.id === profileId);
+    const self = requester.from === "discord" ? requester.member?.id : undefined;
+    let target;
+    if (member.trim().toLowerCase() === "me") {
+        target = self === undefined ? undefined : members.find((entry) => entry.id === self);
+    }
+    else {
+        const resolved = resolveMemberReference(members, member);
+        if ("error" in resolved)
+            return { ok: false, text: resolved.error };
+        target = resolved.member;
+    }
     if (!target)
-        return { ok: false, text: "That person is not in the family." };
+        return { ok: false, text: "I can't tell who is asking. Name the person." };
     if (!maySetReminder(requester, target))
         return { ok: false, text: "Only a parent, or the person themselves, can change reminder delivery." };
     await store.appendReminderMode(target.id, mode);
@@ -172,7 +188,7 @@ export function reminderRequester(members, facts) {
 }
 export const SET_REMINDER_MODE_TOOL = "set_reminder_mode";
 export const SetReminderModeSchema = Type.Object({
-    member: Type.String({ minLength: 1, maxLength: 200, description: 'A roster member id, or "me" for the person asking on Discord.' }),
+    member: Type.String({ minLength: 1, maxLength: 200, description: 'A roster member id, login, display name, alias, or "me" for the person asking on Discord.' }),
     mode: Type.Union([Type.Literal("dm"), Type.Literal("channel"), Type.Literal("off")], { description: "A direct message, a mention in the brief channel, or off." }),
 }, { additionalProperties: false });
 /** The agent's set_reminder_mode tool. The host checks the schema; this checks who is asking. */

@@ -1,4 +1,6 @@
 import { ErrorCodes, errorShape } from "openclaw/plugin-sdk/gateway-runtime";
+import { isRosterParent } from "./visibility.js";
+import { viewerOf } from "./week-method.js";
 function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -8,8 +10,12 @@ function isRecord(value) {
  * A store that is not open reports unseeded and does not record a claim.
  * This file stays off the Control UI bundle: the gateway runtime is not browser-safe.
  */
-export function todayHomeMethod(store) {
-    return async ({ params, respond }) => {
+export function todayHomeMethod(store, config) {
+    return async ({ params, client, respond }) => {
+        if (!isRosterParent(config(), viewerOf(client, config().accessMode))) {
+            respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "The Today card is for a parent."));
+            return;
+        }
         const record = params == null ? {} : isRecord(params) ? params : null;
         if (record === null || ("claim" in record && typeof record.claim !== "boolean")) {
             respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "family.todayHome takes an optional claim flag"));

@@ -26,7 +26,7 @@ type _CalendarWriteOps = Assert<
     : false
 >;
 
-test("the contract registers the read queries and the page's one write action, and the week is not one", () => {
+test("the contract registers the read queries and the roster query, and the week is not one", () => {
   assert.deepEqual(
     Object.entries(contract.operations).map(([name, operation]) => [name, operation.kind]),
     [
@@ -35,12 +35,12 @@ test("the contract registers the read queries and the page's one write action, a
       ["family.schedule", "query"],
       ["family.today", "query"],
       ["family.garbage", "query"],
-      ["family.calendar.write", "action"],
     ],
   );
   assert.deepEqual(
     Object.entries(contract.operations).flatMap(([name, operation]) => ("tool" in operation ? [[name, operation.tool]] : [])),
     [
+      ["family.members", { name: "family_members", label: "Family members" }],
       ["family.schedule", { name: "family_schedule", label: "Family schedule" }],
       ["family.today", { name: "family_today", label: "Today" }],
       ["family.garbage", { name: "garbage_schedule", label: "Garbage day" }],
@@ -106,7 +106,6 @@ test("queries are operator.read session actions, the page write is operator.writ
     },
   } as unknown as Parameters<typeof plugin.register>[0]);
   assert.deepEqual(actions, [
-    { id: "family.calendar.write", requiredScopes: ["operator.write"] },
     { id: "family.garbage", requiredScopes: ["operator.read"] },
     { id: "family.members", requiredScopes: ["operator.read"] },
     { id: "family.schedule", requiredScopes: ["operator.read"] },
@@ -119,16 +118,19 @@ test("queries are operator.read session actions, the page write is operator.writ
     { name: "set_reminder_mode", optional: true },
     { name: "family_contact", optional: true },
     { name: "garbage_schedule" },
+    { name: "family_members" },
     { name: "family_schedule" },
     { name: "family_today" },
   ]);
   assert.deepEqual(hooks, [{ name: "before_tool_call", priority: CALENDAR_HOOK_PRIORITY, matcher: writes }]);
   assert.deepEqual(methods, [
     { method: "family.week", scope: "operator.read" },
+    { method: "family.todayView", scope: "operator.read" },
     { method: "family.directory", scope: "operator.write" },
     { method: "family.directory.preview", scope: "operator.write" },
     { method: "family.deliveryStatus", scope: "operator.read" },
     { method: "family.todayHome", scope: "operator.write" },
+    { method: "family.pageWrite", scope: "operator.write" },
   ]);
   assert.deepEqual(widgets, [{ surface: "widget", id: "family-today", label: "Today", requiredScopes: ["operator.read"] }]);
   assert.equal(commands, 0);

@@ -105,5 +105,13 @@ export async function deliver(send, cfg, directory, target, messages, key) {
     const to = discordTo(directory, target);
     if (!to)
         return { status: "failed", errorKind: "no-channel", detail: "no Discord id for this target in config" };
-    return outcomeOf(await send({ cfg, channel: "discord", to, payloads: messages.map(payloadOf), deliveryIntentId: KEY_PREFIX + key, completionRetention: KEY_RETENTION }));
+    return outcomeOf(await send({
+        cfg,
+        channel: "discord",
+        to,
+        ...(directory.account !== undefined ? { accountId: directory.account } : {}),
+        payloads: messages.map(payloadOf),
+        deliveryIntentId: KEY_PREFIX + key,
+        completionRetention: KEY_RETENTION,
+    }));
 }

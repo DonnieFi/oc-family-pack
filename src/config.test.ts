@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { parseConfig } from "./config.ts";
+import { Value } from "typebox/value";
+import { ConfigSchema, parseConfig } from "./config.ts";
 
 const member = { profileId: "p1", displayName: "Parent One", role: "parent" };
 
@@ -24,7 +25,7 @@ test("a minimal live config fills defaults and keys calendars by position", () =
       quietHours: { startHour: 22, endHour: 7 },
       schoolHints: [],
       closedDayPhrases: [],
-      members: [{ ...member, id: "p1", devices: [], reminders: "dm" }],
+      members: [{ ...member, id: "p1", devices: [], reminders: "off" }],
       calendars: [
         { key: "c0", id: "family@group.calendar.google.com", label: "Family", kind: "shared", owners: [] },
         { key: "c1", id: "p1@example.com", label: "Parent", kind: "personal", owners: ["p1"] },
@@ -300,4 +301,46 @@ test("channels map short keys to numeric Discord channel ids", () => {
   assert.throws(() => parseConfig({ channels: { "Family Briefs": "222222222222222222" } }), { message: "oc-family-pack config: channels.Family Briefs must be a key of lowercase letters, digits and hyphens, such as family-briefs" });
   assert.throws(() => parseConfig({ channels: { briefs: "#family" } }), { message: "oc-family-pack config: channels.briefs must be a numeric Discord channel id" });
   assert.throws(() => parseConfig({ channels: ["222222222222222222"] }), { message: "oc-family-pack config: channels must be an object of channel key to Discord channel id" });
+});
+
+test("calendar wire keys can be pinned and labels must be unique", () => {
+  const calendars = [
+    { key: "cfamily", id: "family@example.com", label: "Family", kind: "shared" },
+    { key: "cme", id: "me@example.com", label: "Mine", kind: "personal", owners: ["p1"] },
+  ];
+  const config = parseConfig({ members: [member], calendars });
+  assert.deepEqual(config.calendars.map((calendar) => calendar.key), ["cfamily", "cme"]);
+  assert.deepEqual(parseConfig({ members: [member], calendars: calendars.toReversed() }).calendars.map((calendar) => calendar.key), ["cme", "cfamily"]);
+  assert.throws(() => parseConfig({ members: [member], calendars: [calendars[0], { ...calendars[1], key: "cfamily" }] }), /key/);
+  assert.throws(() => parseConfig({ members: [member], calendars: [calendars[0], { ...calendars[1], label: "family" }] }), /label/);
+});
+
+test("aliases and the Discord account parse and stay lowercased", () => {
+  const config = parseConfig({
+    members: [{ name: "Alex", role: "parent", aliases: ["Dad", "  Al  "] }],
+    discordAccount: "family",
+  });
+  assert.deepEqual(config.members[0]?.aliases, ["dad", "al"]);
+  assert.equal(config.discordAccount, "family");
+});
+
+test("a calendar key cannot be another calendar's label", () => {
+  assert.throws(
+    () =>
+      parseConfig({
+        members: [member],
+        calendars: [
+          { key: "cschool", id: "a@example.com", label: "Family", kind: "shared" },
+          { id: "b@example.com", label: "cschool", kind: "shared" },
+        ],
+      }),
+    /also the label/,
+  );
+});
+
+test("the host schema does not prefill reminders, so a no-Discord member stays off", () => {
+  const raw = { members: [{ name: "Riley", role: "kid" }] };
+  const hydrated = Value.Default(ConfigSchema, raw) as { members: { reminders?: string }[] };
+  assert.equal(hydrated.members[0]?.reminders, undefined);
+  assert.equal(parseConfig(hydrated).members[0]?.reminders, "off");
 });
