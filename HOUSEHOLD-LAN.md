@@ -2,7 +2,7 @@
 
 This moves a Gateway from the shared token to one sign-in per family member, through a proxy on the same machine. It stays local: nothing here makes the Gateway reachable from the internet.
 
-A paired device token is still the shared owner unless the plugin config sets `accessMode: "lan"`. Set that before the cutover, and revoke device tokens from shared and kid devices. A device token left on a kid's browser sees every calendar.
+When the Gateway uses trusted-proxy auth, Family Pack treats the household as LAN even if `accessMode` is unset; setting `accessMode: "lan"` makes it explicit. A paired device token is then a guest. Revoke device tokens from shared and kid devices anyway: a token left behind still reaches the Gateway.
 
 Start by printing your setup. Every step below uses its output.
 

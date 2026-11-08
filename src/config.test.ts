@@ -344,3 +344,12 @@ test("the host schema does not prefill reminders, so a no-Discord member stays o
   assert.equal(hydrated.members[0]?.reminders, undefined);
   assert.equal(parseConfig(hydrated).members[0]?.reminders, "off");
 });
+
+test("an email login without an explicit id keeps the legacy id and its calendar owners", () => {
+  const config = parseConfig({
+    members: [{ name: "Alex", login: "alex@example.com", role: "parent", discordId: "100000000000000001" }],
+    calendars: [{ id: "alex@example.com", label: "Alex", kind: "personal", owners: ["alex@example.com"] }],
+  });
+  assert.equal(config.members[0]?.id, "alex@example.com");
+  assert.deepEqual(config.calendars[0]?.owners, ["alex@example.com"]);
+});

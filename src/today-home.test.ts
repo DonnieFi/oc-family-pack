@@ -79,3 +79,28 @@ test("the seed method claims once and does not claim when the store is closed", 
   assert.equal(refused, true);
   assert.equal(claims, 2);
 });
+
+test("a roster kid cannot claim or read the Home seed", async () => {
+  const config = parseConfig({ demo: true, timezone: "UTC" });
+  let claims = 0;
+  const method = todayHomeMethod(
+    () => ({
+      homeSeeded: async () => false,
+      claimHomeSeed: async () => {
+        claims += 1;
+        return { inserted: true };
+      },
+    }),
+    () => config,
+  );
+  let answer: unknown;
+  await method({
+    params: { claim: true },
+    client: { authenticatedUserId: "riley" } as unknown as NonNullable<Parameters<typeof viewerOf>[0]>,
+    respond: (_ok, payload) => {
+      answer = payload;
+    },
+  });
+  assert.equal(answer, undefined);
+  assert.equal(claims, 0);
+});

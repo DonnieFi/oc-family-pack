@@ -169,7 +169,7 @@ function steps(host, gog, hostZone) {
     const location = record(config.location);
     const members = Array.isArray(config.members) ? config.members : [];
     const calendars = Array.isArray(config.calendars) ? config.calendars : [];
-    const seeing = new Set(members.filter((member) => rosterRole(member) !== "guest").map(profileId));
+    const seeing = new Set(members.filter((member) => rosterRole(member) !== "guest").map(referenceOf));
     return [
         accessStep(host),
         {
@@ -367,16 +367,13 @@ function discordAccount(host) {
 export function discordLink(profile, accountId, senderId) {
     return { profileId: profile, identity: { channelId: "discord", accountId, senderId } };
 }
-/**
- * Parent Discord targets for plugin approvals. A parent needs
- * operator.approvals (the LAN role block grants it) and a delivery target.
- */
-function approvalLines(host, ids, extra = []) {
-    if (detectAccess(record(host).gateway).mode !== "lan")
-        return [];
+/** The parent Discord DMs a LAN household needs for plugin approvals. */
+function expectedApprovalTargets(host, ids, extra = []) {
     const members = familyConfig(host).members;
     const account = discordAccount(host);
-    const target = (id) => id === undefined ? [] : [{ channel: "discord", to: `user:${id}`, ...(account !== "ACCOUNT" && account !== "default" ? { accountId: account } : {}) }];
+    const target = (id) => id === undefined
+        ? []
+        : [{ channel: "discord", to: `user:${id}`, ...(account !== "ACCOUNT" && account !== "default" ? { accountId: account } : {}) }];
     const targets = [
         ...(Array.isArray(members) ? members : []).flatMap((member) => {
             const entry = record(member);
@@ -384,12 +381,40 @@ function approvalLines(host, ids, extra = []) {
                 return [];
             const id = typeof entry.discordId === "string"
                 ? entry.discordId
-                : ids.get(profileId(member)) ?? (typeof entry.id === "string" ? ids.get(entry.id.toLowerCase()) : undefined);
+                : ids.get(profileId(member)) ?? ids.get(referenceOf(member));
             return target(id);
         }),
         ...extra.flatMap((person) => (person.role === "parent" ? target(ids.get(person.name)) : [])),
     ];
-    if (targets.length === 0)
+    const unique = new Map();
+    for (const target of targets)
+        unique.set(`${target.to}\u0000${target.accountId ?? ""}`, target);
+    return [...unique.values()];
+}
+function approvalTargetMatches(expected, actual) {
+    if (typeof actual.channel !== "string" || actual.channel.toLowerCase() !== expected.channel)
+        return false;
+    if (actual.to !== expected.to)
+        return false;
+    const account = typeof actual.accountId === "string" && actual.accountId !== "" ? actual.accountId : undefined;
+    return expected.accountId === undefined ? account === undefined || account === "default" : account === expected.accountId;
+}
+function approvalsApplied(host, expected) {
+    const plugin = record(record(record(host).approvals).plugin);
+    if (plugin.enabled !== true || (plugin.mode !== "targets" && plugin.mode !== "both"))
+        return false;
+    const actual = Array.isArray(plugin.targets) ? plugin.targets : [];
+    return expected.every((target) => actual.some((entry) => approvalTargetMatches(target, record(entry))));
+}
+/**
+ * Parent Discord targets for plugin approvals. A parent needs
+ * operator.approvals (the LAN role block grants it) and a delivery target.
+ */
+function approvalLines(host, ids, extra = []) {
+    if (detectAccess(record(host).gateway).mode !== "lan")
+        return [];
+    const targets = expectedApprovalTargets(host, ids, extra);
+    if (targets.length === 0 || approvalsApplied(host, targets))
         return [];
     return [
         "",
@@ -475,16 +500,12 @@ export function planSetup(host, input, gog, hostZone) {
     const next = list.find((step) => !step.done);
     const derived = derivedIds(host);
     const warnings = [...derived, ...unreachable(host)];
-    const lanWithoutAccessMode = detectAccess(record(host).gateway).mode === "lan" && familyConfig(host).accessMode !== "lan";
-    if (lanWithoutAccessMode) {
-        warnings.push("Set `accessMode: \"lan\"` in the plugin config so a paired device token cannot act as the shared owner.");
-    }
     const warned = warnings.length > 0 ? ["", ...warnings] : [];
     const approvals = approvalLines(host, new Map());
     if (!next) {
         const pendingApproval = approvals.length > 0;
         return {
-            ok: !pendingApproval && derived.length === 0 && !lanWithoutAccessMode,
+            ok: !pendingApproval && derived.length === 0,
             text: [
                 ...checklist,
                 ...warned,
@@ -495,9 +516,7 @@ export function planSetup(host, input, gog, hostZone) {
                     ? "The config is complete. Apply the approval block, then run the pilot preflight."
                     : derived.length > 0
                         ? "The checklist is complete. Run `openclaw family setup --materialize-ids`, apply its patch, then run the pilot preflight."
-                        : lanWithoutAccessMode
-                            ? "The checklist is complete. Set `accessMode: \"lan\"`, then run the pilot preflight."
-                            : "Everything is set up.",
+                        : "Everything is set up.",
             ].join("\n"),
         };
     }

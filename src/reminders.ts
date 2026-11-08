@@ -175,7 +175,14 @@ export type ModeResult = { ok: true; text: string } | { ok: false; text: string 
  * The chat tool behind "remind me in the channel" / "turn my reminders off".
  * `member` is a roster member id, or "me" for the person asking on Discord.
  */
-export async function setReminderMode(store: Store, members: readonly MemberConfig[], requester: Requester, member: string, mode: ReminderMode): Promise<ModeResult> {
+export async function setReminderMode(
+  store: Store,
+  members: readonly MemberConfig[],
+  requester: Requester,
+  member: string,
+  mode: ReminderMode,
+  delivery: { summaryChannel: boolean } = { summaryChannel: true },
+): Promise<ModeResult> {
   const self = requester.from === "discord" ? requester.member?.id : undefined;
   let target: MemberConfig | undefined;
   if (member.trim().toLowerCase() === "me") {
@@ -187,6 +194,15 @@ export async function setReminderMode(store: Store, members: readonly MemberConf
   }
   if (!target) return { ok: false, text: "I can't tell who is asking. Name the person." };
   if (!maySetReminder(requester, target)) return { ok: false, text: "Only a parent, or the person themselves, can change reminder delivery." };
+  if (mode === "dm" && target.discordId === undefined) {
+    return {
+      ok: false,
+      text: `${target.displayName} has no Discord id, so a direct message can't reach them. Add a Discord id, choose the brief channel, or turn reminders off.`,
+    };
+  }
+  if (mode === "channel" && !delivery.summaryChannel) {
+    return { ok: false, text: "No brief channel is set, so a channel mention can't go out. Set `summaryChannel` or choose a direct message or off." };
+  }
   await store.appendReminderMode(target.id, mode);
   return { ok: true, text: MODE_LINE[mode](target.displayName) };
 }
@@ -227,7 +243,9 @@ export function reminderTool(config: Config, store: () => Store | undefined, fac
           ? { ok: false as const, text: "Say who, and whether reminders are a direct message, a channel mention, or off." }
           : saved === undefined
             ? { ok: false as const, text: "Family isn't ready to save that yet." }
-            : await setReminderMode(saved, members, reminderRequester(members, facts), member, mode);
+            : await setReminderMode(saved, members, reminderRequester(members, facts), member, mode, {
+                summaryChannel: config.summaryChannel !== undefined,
+              });
       return { content: [{ type: "text" as const, text: result.text }], details: { status: result.ok ? "ok" : "refused" } };
     },
   };

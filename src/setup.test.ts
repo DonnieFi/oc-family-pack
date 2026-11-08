@@ -351,3 +351,47 @@ test("setup refuses a malformed location through the plugin parser", () => {
   assert.match(result.text, /needs fixing/);
   assert.match(result.text, /location\.lon/);
 });
+
+test("calendar owners are checked against member ids, not logins", () => {
+  const member = { id: "alex", login: "alex@example.com", name: "Alex", role: "parent" };
+  const hostConfig = {
+    ...complete,
+    members: [member],
+    calendars: [{ id: "alex@example.com", label: "Alex", kind: "personal", owners: ["alex"] }],
+  };
+  const result = planSetup(host(hostConfig, lanGateway()), {}, READY, "UTC");
+  assert.match(result.text, /^Calendars: Done$/m);
+});
+
+test("setup recognizes an approvals block that is already applied", () => {
+  const member = { ...ALEX, discordId: SNOWFLAKE };
+  const configured = { ...complete, members: [member] };
+  const hostWithApprovals = {
+    ...host(configured, lanGateway()),
+    approvals: { plugin: { enabled: true, mode: "targets", targets: [{ channel: "discord", to: `user:${SNOWFLAKE}` }] } },
+  };
+  const result = planSetup(hostWithApprovals, {}, READY, "UTC");
+  assert.equal(result.ok, true);
+  assert.equal(result.text.includes("Gateway plugin approvals:"), false);
+  assert.match(result.text, /^Everything is set up\.$/m);
+});
+
+test("setup still prints the approvals block when a target or account is missing", () => {
+  const member = { ...ALEX, discordId: SNOWFLAKE };
+  const missingTarget = { ...complete, members: [member] };
+  const noTargets = { ...host(missingTarget, lanGateway()), approvals: { plugin: { enabled: true, mode: "targets", targets: [] } } };
+  assert.match(planSetup(noTargets, {}, READY, "UTC").text, /Gateway plugin approvals:/);
+  const wrongAccount = { ...complete, discordAccount: "family", members: [member] };
+  const wrongAccountHost = {
+    ...host(wrongAccount, lanGateway()),
+    approvals: { plugin: { enabled: true, mode: "targets", targets: [{ channel: "discord", to: `user:${SNOWFLAKE}` }] } },
+  };
+  assert.match(planSetup(wrongAccountHost, {}, READY, "UTC").text, /Gateway plugin approvals:/);
+});
+
+test("a trusted-proxy Gateway that omits accessMode is treated as LAN", () => {
+  const { accessMode: _ignored, ...withoutMode } = complete;
+  const result = planSetup(host(withoutMode, lanGateway()), {}, READY, "UTC");
+  assert.equal(result.ok, true);
+  assert.equal(result.text.includes("accessMode"), false);
+});

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { DeliveryOutcome, DeliveryTarget, DiscordMessage } from "./discord-delivery.ts";
+import { parseConfig } from "./config.ts";
 import { reminderTick, setReminderMode } from "./reminders.ts";
 import type { ReadEvent } from "./schedule.ts";
 import type { FamilyStore } from "./store.ts";
@@ -160,4 +161,33 @@ test("channel mode still works for a member with no Discord id, as a plain name"
   assert.equal(rigged.calls.length, 1);
   assert.deepEqual(rigged.calls[0]?.target, { channel: "family" });
   assert.match(rigged.calls[0]?.text ?? "", /Jordan/);
+});
+
+test("a reminder mode that cannot deliver is refused instead of confirmed", async () => {
+  const store = await freshStore();
+  const parent = { from: "tool" as const, senderIsOwner: true };
+  const dm = await setReminderMode(store, CONFIG.members, parent, "jordan", "dm");
+  assert.equal(dm.ok, false);
+  assert.match(dm.text, /no Discord id/);
+  const channel = await setReminderMode(store, CONFIG.members, parent, "jordan", "channel", { summaryChannel: false });
+  assert.equal(channel.ok, false);
+  assert.match(channel.text, /No brief channel/);
+  assert.deepEqual(await store.reminderModes(), {});
+  assert.equal((await setReminderMode(store, CONFIG.members, parent, "jordan", "channel")).ok, true);
+  assert.equal((await setReminderMode(store, CONFIG.members, parent, "jordan", "off")).ok, true);
+});
+
+test("a legacy email-login member keeps the reminder rows saved under that id", async () => {
+  const store = await freshStore();
+  const config = parseConfig({
+    timezone: "America/Halifax",
+    members: [{ name: "Alex", login: "alex@example.com", role: "parent", discordId: "333333333333333333" }],
+    calendars: [{ id: "alex@example.com", label: "Alex", kind: "personal", owners: ["alex@example.com"] }],
+  });
+  assert.equal(config.members[0]?.id, "alex@example.com");
+  await store.appendReminderMode("alex@example.com", "off");
+  const rigged = rig(store);
+  rigged.deps.config = config;
+  await reminderTick(rigged.deps, at("2026-10-14", 9.75));
+  assert.deepEqual(rigged.calls, []);
 });

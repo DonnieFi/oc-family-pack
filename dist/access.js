@@ -21,7 +21,7 @@ const MODE_NAME = { solo: "solo", lan: "LAN" };
 const PROXY_LINE = "LAN mode needs a proxy on this machine that serves HTTPS and signs each person in. The example below uses Caddy (https://caddyserver.com/docs/install).";
 const HTTPS_INTERNAL = "This uses Caddy's own certificate. Install Caddy's root certificate once on every family phone and laptop, or the Family page won't load. It's `pki/authorities/local/root.crt` in Caddy's data folder. Nothing on this machine has to be reachable from the internet.";
 const PROXY_RULES = "Any proxy works if it's the only way to reach the Gateway, signs each person in, sends their username in `X-Forwarded-User`, and replaces any `X-Forwarded-User` or `X-Forwarded-For` the browser sends.";
-const NO_SIGN_OUT = "There's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. A paired device token is the shared owner on this host, so don't leave one on a kid's device. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.";
+const NO_SIGN_OUT = "There's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. A paired device token is the shared owner in solo mode; in LAN mode it is a guest, so don't leave one on a kid's device. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.";
 const LOOPBACK_WARNING = "Anything else running on this machine can sign in as any family member. Run only the proxy and the Gateway here.";
 const LAN_ADDRESS_STEP = "Replace `LAN_ADDRESS` with this machine's address on your home network, like `192.168.1.20`. Use the same address in the Caddyfile and in `allowedOrigins`. If you add a port to the Caddyfile, add it to the origin too.";
 const OUTSIDE = "This Gateway lets people sign in from outside your home network. Family Pack is local only, so it doesn't set that up. Use `openclaw family access lan` instead.";
@@ -52,6 +52,16 @@ export function outsideSignIn(gateway) {
         auth.allowTailscale === true ||
         present(proxy.cloudflareAccessOidc) ||
         proxy.userHeader === "cf-access-authenticated-user-email");
+}
+/**
+ * The plugin's effective page-identity policy. An explicit setting wins.
+ * Otherwise a Gateway using trusted-proxy auth is LAN even before the plugin
+ * config names it, so a paired device token cannot become the shared owner.
+ */
+export function accessModeFor(gateway, configured) {
+    if (configured !== undefined)
+        return configured;
+    return detectAccess(gateway).mode === "lan" ? "lan" : undefined;
 }
 /** Which local mode the Gateway is in, and each step still missing for it. */
 /** `https://host` or `https://host:port`: no wildcard, no path, no query, no credentials. */

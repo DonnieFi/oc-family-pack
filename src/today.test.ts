@@ -82,7 +82,7 @@ test("a live read scores the school class separately and stays inside the calend
     gogPath: "/fake/gog",
     members: [
       { id: "alex", profileId: "alex", displayName: "Alex", role: "parent" },
-      { id: "riley", profileId: "riley", displayName: "Riley", role: "kid" },
+      { id: "riley", profileId: "riley", displayName: "Riley", role: "kid", discordId: "200000000000000002" },
     ],
     calendars: [
       { id: "alex", label: "Alex", kind: "personal", owners: ["alex"] },
@@ -106,6 +106,8 @@ test("a live read scores the school class separately and stays inside the calend
   ]);
   const guest = await handlers["family.today"]({}, tool({ messageChannel: "discord", requesterSenderId: "200000000000000099" }));
   assert.deepEqual(guest, { date: "2026-10-09", highlights: [QUIET_DAY], exceptions: [] });
+  const kid = await handlers["family.today"]({}, tool({ messageChannel: "discord", requesterSenderId: "200000000000000002" }));
+  assert.deepEqual(kid, { date: "2026-10-09", highlights: ["🏫 Math · 8:30 AM"], exceptions: [] });
   const text = JSON.stringify(owner);
   assert.equal(text.includes("school-riley"), false);
   assert.equal(text.includes("@"), false);

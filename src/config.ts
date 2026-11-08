@@ -329,10 +329,10 @@ export function readMemberIdentity(value: Raw, field: string): { displayName: st
   }
   const login = fromLogin ?? fromProfile;
   const explicitId = value.id !== undefined && !(typeof value.id === "string" && value.id.trim() === "");
-  // A login may be an email address. The person id is the local part, not the
-  // whole address, so the week and roster never echo an email as an id.
-  const loginId = login?.includes("@") ? login.slice(0, login.indexOf("@")) : login;
-  const id = explicitId ? profileId(value.id, `${field}.id`) : (loginId !== undefined && loginId !== "" ? loginId : slugOf(displayName));
+  // Keep the full login as the implicit id. A legacy email login may already own
+  // calendars and hold reminder rows; changing the derived id here would break
+  // both. Setup writes an explicit local-part id for new members instead.
+  const id = explicitId ? profileId(value.id, `${field}.id`) : (login !== undefined && login !== "" ? login : slugOf(displayName));
   if (id === "") throw new ConfigError(`${field}.id`, `can't be made from the name ${displayName}. Give ${displayName} an id.`);
   const identity: { displayName: string; id: string; explicitId: boolean; login?: string; gatewayProfileId?: string } = { displayName, id, explicitId };
   if (login !== undefined) identity.login = login;

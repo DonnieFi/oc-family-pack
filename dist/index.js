@@ -1,5 +1,6 @@
 import { defineFeaturePlugin } from "openclaw/plugin-sdk/feature-plugin";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
+import { accessModeFor } from "./access.js";
 import { ConfigSchema, parseConfig } from "./config.js";
 import { contract, PAGE_WRITE_METHOD, TODAY_VIEW_METHOD, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.js";
 import { DELIVERY_STATUS_METHOD, deliveryStatusMethod } from "./delivery-status.js";
@@ -77,7 +78,9 @@ const plugin = defineFeaturePlugin({
                 },
             });
         }
-        const config = parseConfig(api.pluginConfig);
+        const parsedConfig = parseConfig(api.pluginConfig);
+        const accessMode = accessModeFor(api.config?.gateway, parsedConfig.accessMode);
+        const config = accessMode === undefined ? parsedConfig : { ...parsedConfig, accessMode };
         if (api.registrationMode === "full") {
             // Polls Google for edits made outside the page; like the store, it runs only in a live Gateway.
             let stopWatch;

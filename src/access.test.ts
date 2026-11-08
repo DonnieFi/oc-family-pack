@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { detectAccess, formatDetection, planAccess, runAccess } from "./access.ts";
+import { accessModeFor, detectAccess, formatDetection, planAccess, runAccess } from "./access.ts";
 
 const lanReady = {
   bind: "loopback",
@@ -316,4 +316,11 @@ test("an email-shaped trusted-proxy username is accepted", () => {
   assert.equal(plan.ok, true);
   assert.match(plan.text, /alex@example\.com HASH_alex@example\.com/);
   assert.match(plan.text, /"allowUsers": \[\n\s+"alex@example\.com"/);
+});
+
+test("a trusted-proxy Gateway is LAN even before the plugin setting is added", () => {
+  const gateway = { bind: "loopback", auth: { mode: "trusted-proxy", trustedProxy: { userHeader: "x-forwarded-user", allowUsers: ["alex"], allowLoopback: true }, password: "x" } };
+  assert.equal(accessModeFor(gateway, undefined), "lan");
+  assert.equal(accessModeFor(gateway, "solo"), "solo");
+  assert.equal(accessModeFor({ auth: { mode: "token" } }, undefined), undefined);
 });
