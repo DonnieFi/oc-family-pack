@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/readme/family-banner.png" alt="OpenClaw Family Pack banner: a parent and four little lobsters around a kitchen table with a family-week tablet, smart-home panel, and the words hey family, OpenClaw's got the week." width="1000">
+
 # OpenClaw Family Pack
 
 **The household week in the [OpenClaw](https://github.com/openclaw/openclaw) Control UI: calendars, the day's weather, and a chat with any of your agents.**
