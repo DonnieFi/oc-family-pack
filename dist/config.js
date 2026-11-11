@@ -361,9 +361,7 @@ function member(value, index) {
     }
     parsed.reminders =
         value.reminders === undefined
-            ? parsed.discordId === undefined
-                ? "off"
-                : "dm"
+            ? "off"
             : oneOf(value.reminders, `${field}.reminders`, REMINDER_MODES);
     return parsed;
 }

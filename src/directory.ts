@@ -217,7 +217,7 @@ export function directoryMembers(members: readonly MemberConfig[]): DirectoryMem
     ...(member.email !== undefined ? { email: member.email } : {}),
     ...(member.phone !== undefined ? { phone: member.phone } : {}),
     ...(member.discordId !== undefined ? { discordId: member.discordId } : {}),
-    reminders: member.reminders ?? (member.discordId === undefined ? "off" : "dm"),
+    reminders: member.reminders ?? "off",
     devices: member.devices.map((device) => ({
       id: device.id,
       label: device.label,

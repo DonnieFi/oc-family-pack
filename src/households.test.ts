@@ -49,8 +49,8 @@ const CONFIG: Config = {
   schoolHints: ["field trip"],
   closedDayPhrases: ["no school"],
   members: [
-    { id: "alex", profileId: "alex", displayName: "Alex", role: "parent", discordId: "333333333333333333", devices: [] },
-    { id: "sam", profileId: "sam", displayName: "Sam", role: "parent", discordId: "444444444444444444", devices: [] },
+    { id: "alex", profileId: "alex", displayName: "Alex", role: "parent", discordId: "333333333333333333", reminders: "dm", devices: [] },
+    { id: "sam", profileId: "sam", displayName: "Sam", role: "parent", discordId: "444444444444444444", reminders: "dm", devices: [] },
     { id: "riley", profileId: "riley", displayName: "Riley", role: "kid", discordId: "555555555555555555", devices: [] },
   ],
 };

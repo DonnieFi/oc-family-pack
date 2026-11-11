@@ -85,7 +85,7 @@ export type MemberConfig = {
   role: MemberRole;
   /** Discord sender id. Stays in config; never copied onto the week payload. This version delivers through it. */
   discordId?: string;
-  /** How this person gets event reminders. Omitted means a direct message. A chat change overrides it. */
+  /** How this person gets event reminders. Omitted means off. A chat change overrides it. */
   reminders?: ReminderMode;
   /** Normalized at parse. Stays in config; never copied onto the week payload. */
   devices: MemberDevice[];

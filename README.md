@@ -11,7 +11,7 @@ Version 0.2.0.
 [![Version](https://img.shields.io/github/package-json/v/DonnieFi/oc-family-pack?label=version&color=e08a3a)](package.json)
 [![Status](https://img.shields.io/badge/status-0.2.0-orange)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/github/license/DonnieFi/oc-family-pack?color=4ea674)](LICENSE)
-[![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%89%A5%202026.11.1-ff5c5c)](https://docs.openclaw.ai/plugins/feature-plugins)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%89%A5%202026.11.2-ff5c5c)](https://docs.openclaw.ai/plugins/feature-plugins)
 [![Plugin type](https://img.shields.io/badge/plugin-feature-14b8a6)](https://docs.openclaw.ai/plugins/feature-plugins)
 [![Node](https://img.shields.io/badge/node-%E2%89%A5%2024.16-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
@@ -75,7 +75,7 @@ A signed-in kid already sees their own classes without pressing a chip. The Gate
 
 | Requirement | Why |
 | --- | --- |
-| OpenClaw `2026.11.1` or newer, before `2026.12` | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Tested on `2026.11.1`. npm `latest` at release time is `2026.11.2`, which the peer range admits. See [Development](#development) for the post-update smoke. |
+| OpenClaw `2026.11.2` or newer, before `2026.12` | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Tested on `2026.11.2`. See [Development](#development) for the post-update smoke. |
 | Node.js `>=24.16.0 <25` or `>=26.1.0` | Matches the OpenClaw runtime |
 | [`gog`](https://github.com/openclaw/gogcli) with Calendar access | Reads and writes Google Calendar using your default gog sign-in. `gog` runs on the Gateway host. The plugin does not switch between multiple Google accounts; use the default account for the family calendars |
 | **Custom plugin UI** lab enabled | Required for native pages from non-bundled plugins |
@@ -157,7 +157,7 @@ A calendar `key` is optional. Set one (`c` plus up to seven letters or digits) b
 
 `accessMode` is `solo` (the default) or `lan`. When Gateway auth mode is `trusted-proxy`, the plugin uses `lan` even if this is unset, so a paired device token is a guest rather than the shared owner. Setting `accessMode: "lan"` explicitly is still recommended.
 
-`reminders` omitted means a direct message when the person has a `discordId`, and `off` when they do not. Set `reminders: "off"` to stop event reminders for one person.
+`reminders` omitted means `off`. Set `reminders: "dm"` or `"channel"` to opt into event reminders for one person.
 
 `reminderLeadMinutes` defaults to `[15]`. `quietHours` defaults to 22:00–07:00 (`startHour` 22, `endHour` 7) in the household time zone.
 
@@ -205,7 +205,7 @@ The daily brief posts at 07:00 in the household time zone. The send window runs 
 
 Reminders use the lead times you set, 15 minutes if you set none. Quiet hours default to 22:00–07:00. A reminder that comes due during quiet hours waits, and is sent in the hour after quiet hours end. All-day events are not reminders.
 
-Each person has a mode: `dm`, `channel`, or `off`. Omitted means a direct message when they have a `discordId`, and `off` when they do not. Ask on Discord with `set_reminder_mode`; the shared owner can change anyone's mode. `dm` is a Discord direct message. `channel` mentions them in the summary channel, so that channel has to be set. `off` sends nothing. A person can change their own mode; changing someone else's needs a parent.
+Each person has a mode: `dm`, `channel`, or `off`. Omitted means `off`, even when they have a `discordId`; DMs are opt-in. Ask on Discord with `set_reminder_mode`, or change it in People; the shared owner can change anyone's mode. `dm` is a Discord direct message. `channel` mentions them in the summary channel, so that channel has to be set. `off` sends nothing. A person can change their own mode; changing someone else's needs a parent.
 
 Household briefs are separate, and each one runs only when its clock time is set:
 
@@ -294,7 +294,7 @@ After browser-only changes, rebuild and use **Plugins → Advanced → Customize
 
 ### Preparing for the next host
 
-The plugin pins the exact host it was built and tested against: currently `2026.11.1`. A newer host is not claimed until the smoke passes on that binary. The peer range is `>=2026.11.1 <2026.12`, so a later 2026.11 patch is admitted by the range, but only `2026.11.1` is tested.
+The plugin pins the exact host it was built and tested against: currently `2026.11.2`. A newer host is not claimed until the smoke passes on that binary. The peer range is `>=2026.11.2 <2026.12`, so a later 2026.11 patch is admitted by the range, but only `2026.11.2` is tested.
 
 When a new host is published:
 
@@ -318,7 +318,7 @@ Before the first family day, run this on a test state directory or an isolated G
 
 Only then run the writes/delivery pass: enable writes, prove a kid's shared write is approved by a parent and not by the kid, then enable reminders and briefs for one controlled channel.
 
-OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Tested on OpenClaw `2026.11.1`.** After you run `openclaw update`, run the smoke to check this plugin against your new host:
+OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Tested on OpenClaw `2026.11.2`.** After you run `openclaw update`, run the smoke to check this plugin against your new host:
 
 ```bash
 npm run smoke

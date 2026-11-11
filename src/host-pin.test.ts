@@ -12,7 +12,7 @@ const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url),
   openclaw: { install: { minHostVersion: string }; compat: { pluginApi: string }; build: { openclawVersion: string } };
 };
 
-const HOST = "2026.11.1";
+const HOST = "2026.11.2";
 const PEER = `>=${HOST} <2026.12`;
 
 test("the pinned host is the tested stable, and the peer range admits this 2026.11 line only", () => {
