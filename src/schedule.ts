@@ -5,11 +5,12 @@ import { CLASSES_LINE_MAX, LOOKUP_DAYS_MAX, SCHEDULE_DAYS_MAX, SCHEDULE_ITEMS_MA
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.ts";
 import { dedupEvents, memoryOf } from "./identity.ts";
 import { mergeGroup, normalTitle } from "./merge.ts";
+import { eventParticipants, extraParticipantIds } from "./participants.ts";
 import { resolveMemberReference } from "./person.ts";
 import { fitsHostLimits } from "./payload.ts";
 import { resolveRequester } from "./requester.ts";
 import type { CalendarConfig, CalendarKind, CalendarStateOf, Config, FamilyEvent, MemberConfig, ScheduleInput, ScheduleOutput } from "./types.ts";
-import { visibleCalendarIds, type Viewer } from "./visibility.ts";
+import { memberForViewer, visibleCalendarIds, type Viewer } from "./visibility.ts";
 import { addDays, localDate, type Week } from "./week.ts";
 
 export const ME_UNKNOWN = "I can't tell who 'me' is here. Name the person.";
@@ -121,24 +122,49 @@ export async function buildSchedule(
   }
   const span = { range: { start, end: addDays(end, -1), timezone } };
 
-  // Visibility first, then the member filter, so a member name never reaches a hidden calendar.
+  // Visibility first, then the member filter, so a member name never reaches a calendar the viewer cannot see.
+  // A kid's own question may also read hidden calendars, and keeps only events that name that kid.
   const visible = visibleCalendarIds({ members, calendars }, caller.viewer);
+  const viewerMember = memberForViewer({ members }, caller.viewer);
+  const seesAll = caller.viewer.kind === "owner" || viewerMember?.role === "parent";
   const shown = calendars.filter(
     (calendar) => visible.has(calendar.id) && (member === undefined || calendar.kind === "shared" || calendar.owners.includes(member)),
   );
+  const namedFrom = seesAll && member !== undefined ? calendars.filter((calendar) => visible.has(calendar.id) && !shown.includes(calendar)) : [];
+  const ownHidden =
+    !seesAll && viewerMember?.role === "kid" && (member === undefined || member === viewerMember.id)
+      ? calendars.filter((calendar) => !visible.has(calendar.id))
+      : [];
   const empty = lookup ? NO_MATCH : NOTHING_ON;
-  if (shown.length === 0 && calendars.length > 0) return { note: empty };
-  const read = await readEvents(config, shown, span, runGog);
-  if (read.status === "hidden") return { note: empty };
+  if (shown.length === 0 && namedFrom.length === 0 && ownHidden.length === 0 && calendars.length > 0) return { note: empty };
+  // An empty roster of calendars still goes through the reader so "not set up" stays an error.
+  // A base read with nothing to show is skipped only when a separate named read will run.
+  const extraCalendars = [...namedFrom, ...ownHidden];
+  const read =
+    shown.length === 0 && extraCalendars.length > 0
+      ? { status: "ok" as const, data: [] as ReadEvent[], warnings: [] as string[] }
+      : await readEvents(config, shown, span, runGog);
+  if (shown.length > 0 && read.status === "hidden") return { note: empty };
   if (read.status === "unconfigured") return { error: read.hint };
   if (read.status === "error") return { error: read.message };
-  const warnings = read.warnings.length > 0 ? { warnings: read.warnings } : {};
+  const targetId = member ?? viewerMember?.id;
+  const extra =
+    extraCalendars.length === 0 || targetId === undefined
+      ? []
+      : await readEvents(config, extraCalendars, span, runGog).then((result) =>
+          result.status === "ok"
+            ? result.data.filter((event) => eventParticipants(event, members, config.participantOverrides).ids.includes(targetId))
+            : [],
+        );
+  const warnings = read.status === "ok" && read.warnings.length > 0 ? { warnings: read.warnings } : {};
+  const visibleData = read.status === "ok" ? read.data : [];
 
-  const byKey = new Map(shown.map((calendar) => [calendar.key, calendar]));
+  const byKey = new Map(calendars.map((calendar) => [calendar.key, calendar]));
+  const visibleKeys = new Set(calendars.filter((calendar) => visible.has(calendar.id)).map((calendar) => calendar.key));
   const dayOf = (event: FamilyEvent) => (event.allDay ? event.start : localDate(Date.parse(event.start), timezone));
   const inRange = (event: FamilyEvent) =>
     event.allDay ? event.start < end && event.end > start : dayOf(event) < end && localDate(Math.max(Date.parse(event.end) - 1, Date.parse(event.start)), timezone) >= start;
-  const copies = read.data.flatMap((event) => {
+  const copies = [...visibleData, ...extra].flatMap((event) => {
     const calendar = byKey.get(event.calendarKey);
     if (!calendar || !inRange(event)) return [];
     if (lookup) {
@@ -160,19 +186,34 @@ export async function buildSchedule(
   const deduped = await dedupEvents(copies, memoryOf(identity?.()));
   const merged = deduped.groups
     .map((group) => {
-      const best = group.copies.reduce((a, b) => (PRECEDENCE.indexOf(b.section) < PRECEDENCE.indexOf(a.section) ? b : a));
-      const event = mergeGroup(group.copies);
-      return { event, section: best.section, due: best.due, input: best.input, owners: ownersOf(group.copies) };
+      const publicCopies = group.copies.filter((copy) => visibleKeys.has(copy.calendarKey));
+      const used = publicCopies.length > 0 ? publicCopies : group.copies;
+      const best = used.reduce((a, b) => (PRECEDENCE.indexOf(b.section) < PRECEDENCE.indexOf(a.section) ? b : a));
+      const event = mergeGroup(used);
+      const ownerIds = [...new Set(used.flatMap((copy) => byKey.get(copy.calendarKey)?.owners ?? []))];
+      const participantIds = extraParticipantIds(group.copies, ownerIds, members, config.participantOverrides);
+      return {
+        event,
+        section: best.section,
+        due: best.due,
+        input: best.input,
+        owners: ownersOf(used),
+        participants: participantIds.flatMap((id) => {
+          const name = names.get(id);
+          return name ? [name] : [];
+        }),
+      };
     })
     .sort((a, b) => (sortKey(a.event) < sortKey(b.event) ? -1 : sortKey(a.event) > sortKey(b.event) ? 1 : a.event.title.localeCompare(b.event.title)));
 
-  const item = ({ event, due, owners }: (typeof merged)[number]): Item => ({
+  const item = ({ event, due, owners, participants }: (typeof merged)[number]): Item => ({
     id: event.id,
     title: event.title,
     ...(event.allDay ? { allDay: true as const } : { time: clockTime(event.start, timezone) }),
     ...(days > 1 ? { date: dayLabel(dayOf(event)) } : {}),
     ...(due === undefined ? {} : { due: dayLabel(due) }),
     owners,
+    ...(participants.length > 0 ? { participants } : {}),
   });
 
   const lists: [name: (typeof SCHEDULE_SECTIONS)[number] | "matches", items: Item[]][] = lookup

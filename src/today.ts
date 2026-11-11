@@ -6,9 +6,10 @@ import type { GarbageFeed } from "./garbage.ts";
 import { buildHighlightLines, type HighlightEvent } from "./highlights.ts";
 import { dedupEvents, memoryOf } from "./identity.ts";
 import { mergeGroup } from "./merge.ts";
+import { eventParticipants, extraParticipantIds } from "./participants.ts";
 import { readEvents, type ScheduleCaller } from "./schedule.ts";
 import type { CalendarKind, Config, FamilyEvent, TodayPayload } from "./types.ts";
-import { visibleCalendarIds } from "./visibility.ts";
+import { memberForViewer, visibleCalendarIds } from "./visibility.ts";
 import { localDate, resolveWeek } from "./week.ts";
 
 const HOUR_MS = 3_600_000;
@@ -63,7 +64,10 @@ export async function buildToday(config: Config, caller: ScheduleCaller, now: nu
   const calendars = config.demo ? DEMO_CALENDARS : config.calendars;
   const visible = visibleCalendarIds({ members, calendars }, caller.viewer);
   const shown = calendars.filter((calendar) => visible.has(calendar.id));
-  const byKey = new Map(shown.map((calendar) => [calendar.key, calendar]));
+  const viewerMember = memberForViewer({ members }, caller.viewer);
+  const hidden = caller.viewer.kind !== "owner" && viewerMember?.role === "kid" ? calendars.filter((calendar) => !visible.has(calendar.id)) : [];
+  const byKey = new Map(calendars.map((calendar) => [calendar.key, calendar]));
+  const visibleKeys = new Set(shown.map((calendar) => calendar.key));
 
   let garbageTomorrow = false;
   if (config.garbageIcsUrl !== undefined && deps.garbage) {
@@ -82,13 +86,21 @@ export async function buildToday(config: Config, caller: ScheduleCaller, now: nu
       if (loaded.status === "ok") read = loaded.data;
     }
   }
+  if (hidden.length > 0 && viewerMember) {
+    const extra = config.demo
+      ? demoEvents(resolveWeek(undefined, now, timezone)).filter((event) => hidden.some((calendar) => calendar.key === event.calendarKey))
+      : await readEvents(config, hidden, { range: span(now, timezone) }, deps.runGog).then((loaded) => (loaded.status === "ok" ? loaded.data : []));
+    read = [...read, ...extra.filter((event) => eventParticipants(event, members, config.participantOverrides).ids.includes(viewerMember.id))];
+  }
 
   const scored: HighlightEvent[] = [];
   const exceptions: TodayPayload["exceptions"] = [];
   const deduped = await dedupEvents(read, memoryOf(deps.identity?.()));
   const rosterOrder = new Map(members.map((member, index) => [member.id, index]));
   for (const group of deduped.groups) {
-    const event = mergeGroup(group.copies);
+    const publicCopies = group.copies.filter((copy) => visibleKeys.has(copy.calendarKey));
+    const used = publicCopies.length > 0 ? publicCopies : group.copies;
+    const event = mergeGroup(used);
     const calendar = byKey.get(event.calendarKey);
     if (!calendar) continue;
     const startMs = Date.parse(event.start);
@@ -101,9 +113,10 @@ export async function buildToday(config: Config, caller: ScheduleCaller, now: nu
       school: calendar.kind === "school",
     });
     if (!overlapsToday(event, today, timezone) || classifyEvent(classifyInput(event, calendar.kind)).routine) continue;
-    const ownerIdsForGroup = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey)?.owners ?? []))]
+    const ownerIdsForGroup = [...new Set(used.flatMap((copy) => byKey.get(copy.calendarKey)?.owners ?? []))]
       .filter((id) => rosterOrder.has(id))
       .sort((a, b) => (rosterOrder.get(a) ?? 0) - (rosterOrder.get(b) ?? 0));
+    const participantIds = extraParticipantIds(group.copies, ownerIdsForGroup, members, config.participantOverrides);
     exceptions.push({
       id: event.id,
       title: event.title,
@@ -113,6 +126,7 @@ export async function buildToday(config: Config, caller: ScheduleCaller, now: nu
       ...(event.location === undefined ? {} : { location: event.location }),
       calendarKey: event.calendarKey,
       ownerIds: ownerIdsForGroup,
+      ...(participantIds.length > 0 ? { participantIds } : {}),
     });
   }
   exceptions.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : a.title.localeCompare(b.title)));

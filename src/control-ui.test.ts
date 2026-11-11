@@ -280,6 +280,43 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(page.container.querySelector("#ocfp-day-2026-09-30 .ocfp-day-events")?.textContent?.includes("Math"), true);
   });
 
+  test("a named appointment stays on that person's chip without listing its calendar", async () => {
+    const base = week();
+    const page = mountPage({
+      result: {
+        ...base,
+        viewer: { role: "kid", memberId: "riley" },
+        members: [...base.members, { memberId: "riley", displayName: "Riley", role: "kid", color: "oklch(0.7 0.12 200)" }],
+        days: base.days.map((day) => (day.date === "2026-09-30" ? { ...day, eventIds: ["e-alex", "e-named"] } : day)),
+        calendar: {
+          status: "ok",
+          warnings: [],
+          data: [
+            ...(base.calendar.status === "ok" ? base.calendar.data : []),
+            {
+              id: "e-named",
+              title: "Riley dentist",
+              start: "2026-09-30T14:00:00.000Z",
+              end: "2026-09-30T15:00:00.000Z",
+              allDay: false,
+              calendarKey: "c-hidden",
+              participantIds: ["riley"],
+            },
+          ],
+        },
+      },
+    });
+    await flush();
+    const text = () => page.container.querySelector("#ocfp-day-2026-09-30")?.textContent ?? "";
+    assert.equal(text().includes("Riley dentist"), true);
+    assert.equal(page.container.textContent?.includes("c-hidden"), false);
+    const chip = (name: string) => [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-chip")].find((button) => button.textContent?.startsWith(name));
+    chip("Riley")?.click();
+    assert.equal(text().includes("Riley dentist"), true);
+    chip("Alex")?.click();
+    assert.equal(text().includes("Riley dentist"), false);
+  });
+
   test("jordan does not see riley's classes, and both see a school-wide notice", async () => {
     const base = week();
     const sharedSchool = {

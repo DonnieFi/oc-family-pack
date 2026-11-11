@@ -1,6 +1,6 @@
 import { Type } from "typebox";
 import { LINK_MAX, MAX_CALENDARS, MAX_MEMBERS } from "./contract.ts";
-import type { CalendarConfig, CalendarKind, Config, DeviceReservation, Location, MemberConfig, MemberDevice, MemberRole, ReminderMode, WriteMode } from "./types.ts";
+import type { CalendarConfig, CalendarKind, Config, DeviceReservation, Location, MemberConfig, MemberDevice, MemberRole, ParticipantOverride, ReminderMode, WriteMode } from "./types.ts";
 
 const ROLES: readonly MemberRole[] = ["parent", "kid", "guest"];
 const KINDS: readonly CalendarKind[] = ["personal", "shared", "school"];
@@ -136,6 +136,20 @@ export const ConfigSchema = Type.Object(
           { additionalProperties: false },
         ),
         { maxItems: MAX_CALENDARS },
+      ),
+    ),
+    participantOverrides: Type.Optional(
+      Type.Array(
+        Type.Object(
+          {
+            calendar: Type.String({ pattern: "^c[0-9a-z]{1,7}$" }),
+            event: Type.String({ minLength: 1, maxLength: 1024 }),
+            member: Name,
+            decision: Type.Union([Type.Literal("confirm"), Type.Literal("reject")]),
+          },
+          { additionalProperties: false },
+        ),
+        { maxItems: 64 },
       ),
     ),
   },
@@ -433,6 +447,37 @@ function calendar(value: unknown, index: number, profileIds: ReadonlySet<string>
   };
 }
 
+function participantOverrideList(
+  value: unknown,
+  calendars: readonly CalendarConfig[],
+  memberIds: ReadonlySet<string>,
+): { participantOverrides: ParticipantOverride[] } | Record<string, never> {
+  if (value === undefined) return {};
+  const rows = atMost(list(value, "participantOverrides"), "participantOverrides", 64);
+  const keys = new Set(calendars.map((calendar) => calendar.key));
+  const seen = new Set<string>();
+  const participantOverrides = rows.map((row, index) => {
+    const field = `participantOverrides[${index}]`;
+    if (!isRecord(row)) throw new ConfigError(field, "must be an object");
+    const calendarKey = text(row.calendar, `${field}.calendar`);
+    if (!/^c[0-9a-z]{1,7}$/.test(calendarKey) || !keys.has(calendarKey)) {
+      throw new ConfigError(`${field}.calendar`, "must be a calendar key from this household");
+    }
+    const eventId = text(row.event, `${field}.event`);
+    if (eventId.length > 1024 || /[\u0000-\u001f]/.test(eventId)) {
+      throw new ConfigError(`${field}.event`, "must be one provider event id");
+    }
+    const memberId = profileId(row.member, `${field}.member`);
+    if (!memberIds.has(memberId)) throw new ConfigError(`${field}.member`, `"${memberId}" does not match any members[].id`);
+    const decision = oneOf(row.decision, `${field}.decision`, ["confirm", "reject"] as const);
+    const key = `${calendarKey}\u0000${eventId}\u0000${memberId}`;
+    if (seen.has(key)) throw new ConfigError(field, `names ${memberId} twice for that event`);
+    seen.add(key);
+    return { calendarKey, eventId, memberId, decision };
+  });
+  return participantOverrides.length > 0 ? { participantOverrides } : {};
+}
+
 function feedUrl(value: unknown, field: string): string {
   const url = text(value, field);
   let protocol: string | undefined;
@@ -704,6 +749,7 @@ export function parseConfig(raw: unknown): Config {
     writes: value.writes === undefined ? "confirm" : oneOf(value.writes, "writes", WRITE_MODES),
     members,
     calendars,
+    ...participantOverrideList(value.participantOverrides, calendars, profileIds),
   };
   const parsedLocation = location(value.location);
   if (parsedLocation) {

@@ -2,6 +2,7 @@ import { Type } from "typebox";
 import { DEMO_CALENDARS, DEMO_MEMBERS } from "./demo.ts";
 import { type DeliveryOutcome, type DeliveryTarget, type DiscordMessage } from "./discord-delivery.ts";
 import { dedupEvents, memoryOf } from "./identity.ts";
+import { extraParticipantIds } from "./participants.ts";
 import { mergeGroup } from "./merge.ts";
 import { alertDeliveryFailure } from "./briefs.ts";
 import { dueReminders, reminderAlert, reminderKey, reminderMessage, type QuietHours, type ReminderEvent, type ReminderMode } from "./reminder.ts";
@@ -60,10 +61,11 @@ async function reminderEvents(deps: ReminderDeps, now: number): Promise<Reminder
   );
   return deduped.groups.map((group) => {
     const event = mergeGroup(group.copies);
-    const owners = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey)!.owners))]
+    const ownerIds = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey)!.owners))]
       .filter((id) => names.has(id))
-      .sort((a, b) => order.get(a)! - order.get(b)!)
-      .map((id) => ({ profileId: id, displayName: names.get(id)! }));
+      .sort((a, b) => order.get(a)! - order.get(b)!);
+    const participantIds = extraParticipantIds(group.copies, ownerIds, members, config.participantOverrides).filter((id) => names.has(id));
+    const owners = [...ownerIds, ...participantIds].map((id) => ({ profileId: id, displayName: names.get(id)! }));
     const updated = group.copies.map((copy) => copy.google?.updated).filter((value): value is string => value !== undefined).sort().at(-1) ?? "";
     const legacyIds = group.legacyIds.filter((id) => id !== event.id);
     return {

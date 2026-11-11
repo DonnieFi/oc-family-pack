@@ -13,6 +13,8 @@ export type BriefEvent = ClassifyInput & {
   description?: string;
   /** Owner display names in roster order; Bernie's attendees. */
   owners: string[];
+  /** Household members the title or an attendee names, besides the owners. */
+  participants?: string[];
 };
 
 /** discord.Color.gold() and discord.Color.blue() (discord.py 2.7.1). */
@@ -111,7 +113,8 @@ export function occursOn(event: BriefEvent, day: string, timezone: string): bool
 /** _schedule_line: "• **10:00 AM** — Dentist (Riley) 📍 Main St". */
 export function scheduleLine(event: BriefEvent, timezone: string): string {
   const when = event.allDay ? "All day" : clockTime(event.start, timezone);
-  const who = event.owners.length > 0 ? ` (${event.owners.join(", ")})` : "";
+  const whoNames = [...event.owners, ...(event.participants ?? [])];
+  const who = whoNames.length > 0 ? ` (${whoNames.join(", ")})` : "";
   const where = event.location ? ` 📍 ${event.location}` : "";
   return `• **${when}** — ${event.title}${who}${where}`;
 }

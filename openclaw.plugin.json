@@ -561,14 +561,56 @@
           "additionalProperties": false
         },
         "maxItems": 16
+      },
+      "participantOverrides": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "calendar",
+            "event",
+            "member",
+            "decision"
+          ],
+          "properties": {
+            "calendar": {
+              "type": "string",
+              "pattern": "^c[0-9a-z]{1,7}$"
+            },
+            "event": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "member": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "decision": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "confirm"
+                },
+                {
+                  "type": "string",
+                  "const": "reject"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "maxItems": 64
       }
     },
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/97094ad29614a62836a9d6f056f068463e943a6edd7a8f31a9378748f93df5cf/index.js",
+    "entry": "dist/control-ui/8ad49ca27bd8e61473fb0dff42e5dd55440cac0e774deec4705ba6d359aa52cd/index.js",
     "styles": [
-      "dist/control-ui/97094ad29614a62836a9d6f056f068463e943a6edd7a8f31a9378748f93df5cf/index.css"
+      "dist/control-ui/8ad49ca27bd8e61473fb0dff42e5dd55440cac0e774deec4705ba6d359aa52cd/index.css"
     ]
   },
   "contracts": {

@@ -27,6 +27,10 @@ The four write tools, `set_reminder_mode`, and `family_contact` are optional too
 
 `family_contact` is the one tool that returns an email. It answers only when the host sets `senderIsOwner`. A direct-operator session is not enough: the host uses that flag for read visibility, not as a grant. A kid, a guest, and any other member are refused before the roster is read. It takes one member id and does not list the family. The refusal does not include an address. The week, briefs, widgets, and logs do not include an email. The People page shows contact details only to a sign-in with `operator.write`.
 
+## Named appointments
+
+A calendar stays with its owners. A title, or an attendee address already on the event, can also name another roster member. That one event is then included in their week, schedule, brief, and reminder. The rest of the calendar is not. The page does not list that calendar or its label. The plugin does not copy the event and does not send an invitation. Matching uses the display name, its first word, and aliases, on word boundaries. Member ids and Discord ids are not names. A word shared by two people matches nobody until `participantOverrides` confirms one person for that event. A reject removes a match. Guests are never participants. The description is not read.
+
 ## What it stores
 
 One SQLite file under `$OPENCLAW_STATE_DIR/plugins/oc-family-pack/`. The Privacy section of [README.md](README.md) lists what it holds and how to delete it.

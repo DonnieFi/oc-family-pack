@@ -2,6 +2,7 @@ import { dailyEmbed, longDay, weeklyEmbed } from "./brief.js";
 import { DEMO_CALENDARS, DEMO_MEMBERS } from "./demo.js";
 import {} from "./discord-delivery.js";
 import { dedupEvents, memoryOf } from "./identity.js";
+import { extraParticipantIds } from "./participants.js";
 import { mergeGroup } from "./merge.js";
 import { readEvents } from "./schedule.js";
 import { addDays, localDate, localTime } from "./week.js";
@@ -44,10 +45,14 @@ async function briefEvents(deps, start, end) {
     return deduped.groups.map((group) => {
         const event = mergeGroup(group.copies);
         const calendar = byKey.get(event.calendarKey);
-        const owners = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey).owners))]
+        const ownerIds = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey).owners))]
             .filter((id) => names.has(id))
-            .sort((a, b) => order.get(a) - order.get(b))
-            .map((id) => names.get(id));
+            .sort((a, b) => order.get(a) - order.get(b));
+        const owners = ownerIds.map((id) => names.get(id));
+        const participants = extraParticipantIds(group.copies, ownerIds, members, config.participantOverrides).flatMap((id) => {
+            const name = names.get(id);
+            return name ? [name] : [];
+        });
         return {
             title: event.title,
             start: event.start,
@@ -55,6 +60,7 @@ async function briefEvents(deps, start, end) {
             allDay: event.allDay,
             calendarKind: calendar.kind,
             owners,
+            ...(participants.length > 0 ? { participants } : {}),
             ...(event.location === undefined ? {} : { location: event.location }),
             ...(event.google?.description === undefined ? {} : { description: event.google.description }),
             ...(event.google?.recurringEventId === undefined ? {} : { recurringEventId: event.google.recurringEventId }),

@@ -89,6 +89,14 @@ export type MemberConfig = {
   devices: MemberDevice[];
 };
 
+/** A stored choice for one provider event. It does not copy the event or invite anyone. */
+export type ParticipantOverride = {
+  calendarKey: string;
+  eventId: string;
+  memberId: string;
+  decision: "confirm" | "reject";
+};
+
 export type CalendarConfig = {
   /** The calendar's stable wire key; omitted config falls back to its array position. */
   key: string;
@@ -134,6 +142,8 @@ export type Config = {
   writes: WriteMode;
   members: MemberConfig[];
   calendars: CalendarConfig[];
+  /** Manual confirm or reject for a named participant. Title matches still apply to every other event. */
+  participantOverrides?: ParticipantOverride[];
 };
 
 export type SourceState<T> =

@@ -40,6 +40,8 @@ export type GoogleEventFields = {
   iCalUID?: string;
   /** The event's notes, for the daily brief's homework line; never on the wire. */
   description?: string;
+  /** Explicit Google attendees. Names and emails stay off the wire; only a matched member id can be projected. */
+  attendees?: { email?: string; name?: string }[];
 };
 
 export type GogEvent = FamilyEvent & { google: GoogleEventFields };
@@ -141,7 +143,27 @@ function googleFields(eventId: string, item: Record<string, unknown>): GoogleEve
   if (iCalUID) fields.iCalUID = iCalUID;
   const description = nonEmpty(item.description);
   if (description) fields.description = description;
+  const attendees = attendeesOf(item.attendees);
+  if (attendees) fields.attendees = attendees;
   return fields;
+}
+
+/** At most 32 explicit attendees. A missing name and email is skipped. Nothing here is copied onto the wire. */
+function attendeesOf(value: unknown): { email?: string; name?: string }[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const attendees: { email?: string; name?: string }[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const email = nonEmpty(item.email)?.toLowerCase();
+    const name = nonEmpty(item.displayName);
+    const attendee: { email?: string; name?: string } = {};
+    if (email && email.length <= 254 && !email.includes("\n")) attendee.email = email;
+    if (name) attendee.name = clip(name, 200);
+    if (attendee.email === undefined && attendee.name === undefined) continue;
+    attendees.push(attendee);
+    if (attendees.length === 32) break;
+  }
+  return attendees.length > 0 ? attendees : undefined;
 }
 
 /** gog prints Google Calendar event resources, either bare (`--results-only`) or under `events`; anything else is unreadable. */

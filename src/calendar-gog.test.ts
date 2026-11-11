@@ -126,6 +126,26 @@ test("an iCal UID stays on the Gateway copy and a cancelled event is omitted", (
   assert.equal(JSON.stringify(events).includes("iCalUID"), true);
 });
 
+test("an attendee stays on the Gateway copy and off the wire fields", () => {
+  const events = parseGogEvents(
+    [
+      {
+        id: "visit",
+        summary: "Riley dentist",
+        attendees: [{ email: "Riley@example.com", displayName: "Riley" }, {}],
+        start: { dateTime: "2026-09-30T13:00:00Z" },
+        end: { dateTime: "2026-09-30T14:00:00Z" },
+      },
+    ],
+    kidCalendar,
+  );
+  assert.deepEqual(events?.[0]?.google.attendees, [{ email: "riley@example.com", name: "Riley" }]);
+  const event = events?.[0];
+  assert.ok(event);
+  const { google: _google, ...wire } = event;
+  assert.equal(JSON.stringify(wire).includes("example.com"), false);
+});
+
 test("over-long Google strings are cut to their wire limits and an over-long link is dropped", () => {
   const [event] =
     parseGogEvents(

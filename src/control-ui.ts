@@ -481,6 +481,13 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     const anyShared = (event: FamilyEvent) => sourcesOf(event).some((calendar) => calendar.kind === "shared");
     const familyOnly = (event: FamilyEvent) => isFamilyOnly(sourcesOf(event));
     const ownerIds = (event: FamilyEvent) => rosterOwners(week, sourcesOf(event));
+    const participantIds = (event: FamilyEvent) => event.participantIds ?? [];
+    const involves = (event: FamilyEvent, id: string) => ownerIds(event).includes(id) || participantIds(event).includes(id);
+    const labelIds = (event: FamilyEvent) => {
+      const ids = [...ownerIds(event)];
+      for (const id of participantIds(event)) if (!ids.includes(id)) ids.push(id);
+      return ids;
+    };
     const eventColor = (event: FamilyEvent) =>
       anyShared(event) || ownerIds(event).length > 1
         ? "var(--family-neutral)"
@@ -504,13 +511,13 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     // A selected person sees that child's school items. A shared school calendar can still carry a notice for every child.
     const ownsSchoolEvent = (event: FamilyEvent, id: string) => schoolOwners(event).includes(id);
     const viewedId = person ?? (week.viewer?.role === "kid" ? week.viewer.memberId : undefined);
-    const ownsVisibleCopy = (event: FamilyEvent, id: string) => ownsSchoolEvent(event, id) || ownerIds(event).includes(id);
+    const ownsVisibleCopy = (event: FamilyEvent, id: string) => ownsSchoolEvent(event, id) || involves(event, id);
     const showCourse = (event: FamilyEvent) => viewedId !== undefined && ownsVisibleCopy(event, viewedId);
     const inView = (event: FamilyEvent, layer: "uniform" | "homework" | "course" | "family") => {
       const selectedPerson = person;
       if (!selectedPerson) return true;
       if (layer !== "family") return ownsVisibleCopy(event, selectedPerson);
-      return familyOnly(event) || ownerIds(event).includes(selectedPerson);
+      return familyOnly(event) || involves(event, selectedPerson);
     };
 
     const start = noon(week.range.start);
@@ -617,7 +624,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     const ownerLabel = (event: FamilyEvent) =>
       familyOnly(event)
         ? "Family"
-        : ownerIds(event)
+        : labelIds(event)
             .flatMap((id) => {
               const member = members.get(id);
               return member ? [member.displayName] : [];
@@ -629,7 +636,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       return h(
         "span",
         { class: "ocfp-owner-dots" },
-        ...ownerIds(event).flatMap((id) => {
+        ...labelIds(event).flatMap((id) => {
           const member = members.get(id);
           return member
             ? [paint(h("span", { class: "ocfp-owner-dot", "aria-hidden": "true" }), { "--ocfp-dot": accentOnCard(member.color) })]

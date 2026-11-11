@@ -3,6 +3,7 @@ import { ConfigError } from "./config.js";
 import { MAX_WEEK_EVENTS } from "./contract.js";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.js";
 import { dedupEvents, memoryOf } from "./identity.js";
+import { eventParticipants, extraParticipantIds } from "./participants.js";
 import { mergeGroup } from "./merge.js";
 import { memberForViewer, visibleCalendarIds } from "./visibility.js";
 import { groupByDay, resolveMembers, resolveWeek } from "./week.js";
@@ -53,7 +54,7 @@ function readCalendar(config, shown, week) {
         return Promise.resolve({ status: "hidden" });
     return readGogCalendars({ ...config, calendars: shown }, week);
 }
-/** Display identity for the week page. It does not change which calendars were read. */
+/** Display identity for the week page. A named appointment can add one event; it does not add the calendar. */
 function pageViewer(members, viewer) {
     const member = memberForViewer({ members }, viewer);
     const role = viewer.kind === "owner" || member?.role === "parent" ? "parent" : member?.role === "kid" ? "kid" : "guest";
@@ -79,10 +80,33 @@ export async function buildWeekPayload(config, requestedStart, now, readWeather,
     // Hidden calendars are dropped before anything is read, so no count, warning or list entry reveals them.
     const visible = visibleCalendarIds({ members, calendars }, viewer);
     const shown = calendars.filter((entry) => visible.has(entry.id));
+    const viewerMember = memberForViewer({ members }, viewer);
+    const kid = viewer.kind !== "owner" && viewerMember?.role === "kid" ? viewerMember : undefined;
+    const hidden = kid ? calendars.filter((entry) => !visible.has(entry.id)) : [];
     const [read, weather] = await Promise.all([readCalendar(config, shown, week), readWeather()]);
-    // Dedup runs on visible calendars only, so a merged event never names a hidden one.
-    const merged = read.status === "ok" ? await dedupEvents(read.data, memoryOf(identity?.())) : undefined;
-    const calendar = read.status === "ok" && merged ? { ...read, data: merged.groups.map((group) => mergeGroup(group.copies)).map(toWire) } : read;
+    // A failed hidden read stays hidden. Its warning would name a calendar this person cannot see.
+    const namedHidden = kid && hidden.length > 0 && (read.status === "ok" || read.status === "hidden")
+        ? await readCalendar(config, hidden, week).then((extra) => extra.status === "ok"
+            ? extra.data.filter((event) => eventParticipants(event, members, config.participantOverrides).ids.includes(kid.id))
+            : [])
+        : [];
+    const visibleKeys = new Set(shown.map((entry) => entry.key));
+    const merged = read.status === "ok" || namedHidden.length > 0
+        ? await dedupEvents([...(read.status === "ok" ? read.data : []), ...namedHidden], memoryOf(identity?.()))
+        : undefined;
+    const project = (group) => {
+        const publicCopies = group.copies.filter((copy) => visibleKeys.has(copy.calendarKey));
+        const copies = publicCopies.length > 0 ? publicCopies : group.copies;
+        const event = toWire(mergeGroup(copies));
+        const ownerIds = [...new Set(copies.flatMap((copy) => calendars.find((calendar) => calendar.key === copy.calendarKey)?.owners ?? []))];
+        const participantIds = extraParticipantIds(group.copies, ownerIds, members, config.participantOverrides);
+        return participantIds.length > 0 ? { ...event, participantIds } : event;
+    };
+    const calendar = read.status === "ok" && merged
+        ? { ...read, data: merged.groups.map(project) }
+        : namedHidden.length > 0 && merged
+            ? { status: "ok", data: merged.groups.map(project), warnings: [] }
+            : read;
     return fitWeek({
         mode: config.demo ? "demo" : "live",
         range: week.range,

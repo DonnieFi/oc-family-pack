@@ -91,7 +91,8 @@ export function occursOn(event, day, timezone) {
 /** _schedule_line: "• **10:00 AM** — Dentist (Riley) 📍 Main St". */
 export function scheduleLine(event, timezone) {
     const when = event.allDay ? "All day" : clockTime(event.start, timezone);
-    const who = event.owners.length > 0 ? ` (${event.owners.join(", ")})` : "";
+    const whoNames = [...event.owners, ...(event.participants ?? [])];
+    const who = whoNames.length > 0 ? ` (${whoNames.join(", ")})` : "";
     const where = event.location ? ` 📍 ${event.location}` : "";
     return `• **${when}** — ${event.title}${who}${where}`;
 }

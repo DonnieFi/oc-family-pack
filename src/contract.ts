@@ -62,6 +62,8 @@ export const FamilyEventSchema = Type.Object({
   calendarKey: Text(8),
   /** Every visible calendar a merged event was read from, earliest first; absent for a single source. */
   calendarKeys: Type.Optional(Type.Array(Text(8), { minItems: 2, maxItems: MAX_CALENDARS })),
+  /** Household members named by this event who do not already own its visible calendars. */
+  participantIds: Type.Optional(Type.Array(Text(LABEL_MAX), { minItems: 1, maxItems: MAX_MEMBERS })),
   htmlLink: Type.Optional(Text(LINK_MAX)),
 });
 
@@ -210,6 +212,8 @@ export const TodayPayloadSchema = Type.Object(
           location: Type.Optional(Text(LOCATION_MAX)),
           calendarKey: Text(8),
           ownerIds: Type.Array(Text(LABEL_MAX), { maxItems: MAX_MEMBERS }),
+          /** Named participants who are not already in ownerIds. */
+          participantIds: Type.Optional(Type.Array(Text(LABEL_MAX), { minItems: 1, maxItems: MAX_MEMBERS })),
         },
         { additionalProperties: false },
       ),
@@ -304,7 +308,7 @@ export const ScheduleInputSchema = Type.Object(
       Type.String({
         minLength: 1,
         maxLength: LABEL_MAX,
-        description: 'Only calendars this person owns: a roster member id, login, display name, alias, or "me" for the person asking on Discord.',
+        description: 'Calendars this person owns, shared calendars, and appointments that name them. A roster member id, login, display name, alias, or "me" on Discord.',
       }),
     ),
     query: Type.Optional(
@@ -332,6 +336,8 @@ const ScheduleItemSchema = Type.Object(
     due: Type.Optional(Text(16)),
     /** Display names of the calendar owners, never profileIds. */
     owners: Type.Array(Text(LABEL_MAX), { maxItems: MAX_MEMBERS }),
+    /** Display names of household members the title or an attendee names, besides the owners. */
+    participants: Type.Optional(Type.Array(Text(LABEL_MAX), { minItems: 1, maxItems: MAX_MEMBERS })),
   },
   { additionalProperties: false },
 );

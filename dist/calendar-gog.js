@@ -117,7 +117,33 @@ function googleFields(eventId, item) {
     const description = nonEmpty(item.description);
     if (description)
         fields.description = description;
+    const attendees = attendeesOf(item.attendees);
+    if (attendees)
+        fields.attendees = attendees;
     return fields;
+}
+/** At most 32 explicit attendees. A missing name and email is skipped. Nothing here is copied onto the wire. */
+function attendeesOf(value) {
+    if (!Array.isArray(value))
+        return undefined;
+    const attendees = [];
+    for (const item of value) {
+        if (!isRecord(item))
+            continue;
+        const email = nonEmpty(item.email)?.toLowerCase();
+        const name = nonEmpty(item.displayName);
+        const attendee = {};
+        if (email && email.length <= 254 && !email.includes("\n"))
+            attendee.email = email;
+        if (name)
+            attendee.name = clip(name, 200);
+        if (attendee.email === undefined && attendee.name === undefined)
+            continue;
+        attendees.push(attendee);
+        if (attendees.length === 32)
+            break;
+    }
+    return attendees.length > 0 ? attendees : undefined;
 }
 /** gog prints Google Calendar event resources, either bare (`--results-only`) or under `events`; anything else is unreadable. */
 export function parseGogEvents(raw, calendar) {

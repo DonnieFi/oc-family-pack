@@ -112,6 +112,11 @@ The member chips filter the week in the view. They are not a privacy control. A 
 even parents should not see does not belong in the config. A kid who is signed in sees
 classes on school calendars they own. Pressing a chip does not grant that.
 
+An appointment on someone else's calendar is also shown to a household member
+when the title or an attendee names them. The calendar itself stays hidden,
+and the event is not copied or turned into an invitation. A name that matches
+two people is left unset until the config confirms one of them.
+
 The Chat with strip uses that person's own agent list, so it only shows agents
 they can already open.
 

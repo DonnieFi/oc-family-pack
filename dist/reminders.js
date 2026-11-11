@@ -2,6 +2,7 @@ import { Type } from "typebox";
 import { DEMO_CALENDARS, DEMO_MEMBERS } from "./demo.js";
 import {} from "./discord-delivery.js";
 import { dedupEvents, memoryOf } from "./identity.js";
+import { extraParticipantIds } from "./participants.js";
 import { mergeGroup } from "./merge.js";
 import { alertDeliveryFailure } from "./briefs.js";
 import { dueReminders, reminderAlert, reminderKey, reminderMessage } from "./reminder.js";
@@ -39,10 +40,11 @@ async function reminderEvents(deps, now) {
     const deduped = await dedupEvents(read.data.filter((event) => !event.allDay && byKey.has(event.calendarKey)), memoryOf(deps.store()));
     return deduped.groups.map((group) => {
         const event = mergeGroup(group.copies);
-        const owners = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey).owners))]
+        const ownerIds = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey).owners))]
             .filter((id) => names.has(id))
-            .sort((a, b) => order.get(a) - order.get(b))
-            .map((id) => ({ profileId: id, displayName: names.get(id) }));
+            .sort((a, b) => order.get(a) - order.get(b));
+        const participantIds = extraParticipantIds(group.copies, ownerIds, members, config.participantOverrides).filter((id) => names.has(id));
+        const owners = [...ownerIds, ...participantIds].map((id) => ({ profileId: id, displayName: names.get(id) }));
         const updated = group.copies.map((copy) => copy.google?.updated).filter((value) => value !== undefined).sort().at(-1) ?? "";
         const legacyIds = group.legacyIds.filter((id) => id !== event.id);
         return {

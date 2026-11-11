@@ -255,6 +255,8 @@ A weather request sends a search box around the coordinates in your config to En
 
 The Gateway decides who sees which calendar before the week is sent to the page. Parents see every calendar. So does the shared-token owner, except in LAN mode, where a paired device token is a guest. Everyone sees shared calendars. A school or personal calendar also goes to its owners when that person is a member, not a guest. Guests, and anyone signed in who is not on the roster, see shared calendars only. The chips filter the week in the view. They are not a privacy control.
 
+A title or an attendee can name another member on an appointment they do not own. That one event is shown to them. The calendar, its other events, and its label stay hidden. Nothing is copied and nobody is invited. `participantOverrides` can confirm or reject one person on one event. A name shared by two people confirms nobody until then. Guests are not named this way.
+
 Calendar write tool descriptions list the configured calendar labels so the agent knows where it can write. That metadata can name a calendar the person cannot read, though no event or contact detail from it is returned. If the labels themselves are sensitive, give each person their own agent instead of sharing one.
 
 The plugin keeps a SQLite file on the Gateway host:

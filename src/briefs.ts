@@ -4,6 +4,7 @@ import { DEMO_CALENDARS, DEMO_MEMBERS } from "./demo.ts";
 import { type DeliveryDirectory, type DeliveryOutcome, type DeliveryTarget, type DiscordMessage } from "./discord-delivery.ts";
 import type { Collection } from "./garbage.ts";
 import { dedupEvents, memoryOf } from "./identity.ts";
+import { extraParticipantIds } from "./participants.ts";
 import { mergeGroup } from "./merge.ts";
 import { readEvents, type ReadEvent } from "./schedule.ts";
 import type { DeliveryKind, DeliveryLogRow, DeliveryStatus, FamilyStore } from "./store.ts";
@@ -70,10 +71,14 @@ async function briefEvents(deps: BriefDeps, start: string, end: string): Promise
   return deduped.groups.map((group) => {
     const event = mergeGroup(group.copies);
     const calendar = byKey.get(event.calendarKey)!;
-    const owners = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey)!.owners))]
+    const ownerIds = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey)!.owners))]
       .filter((id) => names.has(id))
-      .sort((a, b) => order.get(a)! - order.get(b)!)
-      .map((id) => names.get(id)!);
+      .sort((a, b) => order.get(a)! - order.get(b)!);
+    const owners = ownerIds.map((id) => names.get(id)!);
+    const participants = extraParticipantIds(group.copies, ownerIds, members, config.participantOverrides).flatMap((id) => {
+      const name = names.get(id);
+      return name ? [name] : [];
+    });
     return {
       title: event.title,
       start: event.start,
@@ -81,6 +86,7 @@ async function briefEvents(deps: BriefDeps, start: string, end: string): Promise
       allDay: event.allDay,
       calendarKind: calendar.kind,
       owners,
+      ...(participants.length > 0 ? { participants } : {}),
       ...(event.location === undefined ? {} : { location: event.location }),
       ...(event.google?.description === undefined ? {} : { description: event.google.description }),
       ...(event.google?.recurringEventId === undefined ? {} : { recurringEventId: event.google.recurringEventId }),
