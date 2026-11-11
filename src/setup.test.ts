@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { planAccess } from "./access.ts";
 import type { GogSetupPlan } from "./gog-setup.ts";
+import { runGuide } from "./setup-guide.ts";
 import { PATCH_INTRO, planSetup } from "./setup.ts";
 
 const READY: GogSetupPlan = { status: "ready", command: "gog calendar calendars --json --no-input", message: "" };
@@ -38,6 +39,75 @@ function patchOf(text: string): { plugins: { entries: { "oc-family-pack": { conf
   const body = text.slice(start + PATCH_INTRO.length + 1);
   return JSON.parse(body.slice(0, body.indexOf("\n}\n") + 2));
 }
+
+test("configured alerts, briefs, and the garbage feed stay done, and a different Discord listener is left alone", () => {
+  const family = "222222222222222222";
+  const listener = "333333333333333333";
+  const config = {
+    ...complete,
+    channels: { family },
+    summaryChannel: "family",
+    morningTime: "07:00",
+    weekendPreviewTime: "16:00",
+    garbageIcsUrl: "https://example.com/collection.ics",
+  };
+  const result = planSetup(
+    {
+      ...host(config),
+      channels: { discord: { enabled: true, guilds: { "100000000000000001": { channels: { [listener]: { enabled: true } } } } } },
+    },
+    {},
+    READY,
+    "UTC",
+  );
+  assert.equal(result.ok, true);
+  assert.match(result.text, /^Alerts: Done$/m);
+  assert.match(result.text, /^Morning brief: Done$/m);
+  assert.match(result.text, /^After-school brief: To do$/m);
+  assert.match(result.text, /^Weekend preview: Done$/m);
+  assert.match(result.text, /^Garbage calendar: Done$/m);
+  assert.match(result.text, /afterSchoolTime 15:30/);
+  assert.equal(result.text.includes(family), false);
+  assert.equal(result.text.includes(listener), false);
+  assert.equal(result.text.split("\n").at(-1), "Everything is set up.");
+});
+
+test("one Discord channel already on the Gateway is the alerts channel to reuse", () => {
+  const listener = "333333333333333333";
+  const result = planSetup(
+    {
+      ...host(complete),
+      channels: {
+        discord: { enabled: true, guilds: { "100000000000000001": { channels: { [listener]: { enabled: true }, "444444444444444444": { enabled: false } } } } },
+      },
+    },
+    {},
+    READY,
+    "UTC",
+  );
+  assert.match(result.text, /^Alerts: To do$/m);
+  assert.match(result.text, /Reuse it as `family`/);
+  assert.match(result.text, new RegExp(listener));
+  assert.equal(result.text.includes("444444444444444444"), false);
+  assert.match(result.text, /does not add a bot token/);
+  assert.equal(result.ok, true);
+  const steps = [
+    { name: "Alerts", done: false, optional: true as const, next: `reuse ${listener}` },
+    { name: "Morning brief", done: true, optional: true as const, next: "07:00" },
+  ];
+  const guided = runGuide({ steps, answers: ["yes"], dryRun: true, settled: { ok: true, text: "Everything is set up." } });
+  assert.equal(JSON.stringify(guided.checkpoint).includes(listener), false);
+});
+
+test("a channels key without a summary channel is reused, and several keys are listed", () => {
+  const one = planSetup(host({ ...complete, channels: { family: "222222222222222222" } }), {}, READY, "UTC");
+  assert.match(one.text, /^Alerts: To do$/m);
+  assert.match(one.text, /summaryChannel family/);
+  assert.equal(one.text.includes("222222222222222222"), false);
+  const two = planSetup(host({ ...complete, channels: { family: "222222222222222222", kids: "333333333333333333" } }), {}, READY, "UTC");
+  assert.match(two.text, /family, kids/);
+  assert.equal(two.text.includes("222222222222222222"), false);
+});
 
 test("a finished setup lists every part as Done and passes", () => {
   const result = planSetup(host(complete), {}, READY, "UTC");

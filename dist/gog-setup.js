@@ -1,7 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { runAccess } from "./access.js";
-import { planSetup } from "./setup.js";
+import { readGuideCheckpoint, runGuide } from "./setup-guide.js";
+import { planSetup, setupSteps } from "./setup.js";
+import { openFamilyStore } from "./store.js";
 const execFileAsync = promisify(execFile);
 export function execGogSetup(timeoutMs = 20_000) {
     return (file, args) => execFileAsync(file, args, { timeout: timeoutMs, maxBuffer: 1024 * 1024 });
@@ -292,8 +294,13 @@ export function registerFamilyCli(program, deps) {
         .option("--discord <name=id...>", "Discord user IDs, like alex=123456789012345678")
         .option("--email <name=address...>", "Email addresses, like riley=riley@example.com")
         .option("--materialize-ids", "Print a patch that writes the member and device ids this config already uses")
+        .option("--guide", "Ask each remaining step and remember the answers")
+        .option("--dry-run", "With --guide, show the result and do not apply it")
+        .option("--noninteractive", "With --guide, print the checklist instead of asking")
+        .option("--answer <choice...>", "Answers for --guide, in order: yes, no, back, skip, or cancel")
         .action(async (opts) => {
         const gog = await diagnoseGog(deps.run, deps.gogPath ? { gogPath: deps.gogPath } : {});
+        const zone = deps.hostZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
         const result = planSetup(deps.host, {
             ...(opts.parent ? { parent: opts.parent } : {}),
             ...(opts.kid ? { kid: opts.kid } : {}),
@@ -301,8 +308,60 @@ export function registerFamilyCli(program, deps) {
             ...(opts.discord ? { discord: opts.discord } : {}),
             ...(opts.email ? { email: opts.email } : {}),
             ...(opts.materializeIds ? { materializeIds: true } : {}),
-        }, gog, deps.hostZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
-        write(result.text);
-        process.exitCode = result.ok ? 0 : 1;
+        }, gog, zone);
+        if (opts.guide !== true) {
+            write(result.text);
+            process.exitCode = result.ok ? 0 : 1;
+            return;
+        }
+        if (result.text.startsWith("The family config needs fixing")) {
+            write(result.text);
+            process.exitCode = 1;
+            return;
+        }
+        let checkpoint;
+        let opened;
+        const saver = deps.guideState?.save;
+        try {
+            if (deps.guideState)
+                checkpoint = await deps.guideState.load();
+            else if (deps.stateDir) {
+                try {
+                    opened = await openFamilyStore({ stateDir: deps.stateDir });
+                    checkpoint = readGuideCheckpoint(await opened.guideCheckpoint());
+                }
+                catch {
+                    await opened?.stop();
+                    opened = undefined;
+                }
+            }
+            const guided = runGuide({
+                steps: setupSteps(deps.host, gog, zone),
+                ...(checkpoint ? { checkpoint } : {}),
+                answers: opts.answer ?? [],
+                dryRun: opts.dryRun === true,
+                ...(opts.noninteractive === true ? { noninteractive: result } : {}),
+                settled: result,
+            });
+            let text = guided.text;
+            if (guided.save) {
+                const save = saver ?? (opened ? (value) => opened.saveGuideCheckpoint(JSON.stringify(value)) : undefined);
+                if (save) {
+                    try {
+                        await save(guided.checkpoint);
+                    }
+                    catch {
+                        text = `${text}\nThis run was not saved.`;
+                    }
+                }
+                else
+                    text = `${text}\nThis run was not saved.`;
+            }
+            write(text);
+            process.exitCode = guided.ok ? 0 : 1;
+        }
+        finally {
+            await opened?.stop();
+        }
     });
 }

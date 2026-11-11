@@ -196,6 +196,16 @@ const handlers: Record<string, (input: unknown) => unknown> = {
     const result = db.prepare("INSERT OR IGNORE INTO oc_family_pack_home (id, at) VALUES ('today', ?)").run(Date.now());
     return { inserted: result.changes === 1 };
   },
+  "guide.load": () => {
+    const row = db.prepare("SELECT body FROM oc_family_pack_guide WHERE id = 'guide'").get() as { body?: unknown } | undefined;
+    return typeof row?.body === "string" ? row.body : null;
+  },
+  "guide.save": (input) => {
+    const body = field(input, "body");
+    if (body.length > 8192) throw new Error("oc-family-pack: guide checkpoint is too long");
+    db.prepare("INSERT INTO oc_family_pack_guide (id, body) VALUES ('guide', ?) ON CONFLICT(id) DO UPDATE SET body = excluded.body").run(body);
+    return true;
+  },
   "identity.book": () => ({
     sources: db.prepare("SELECT calendar_key AS calendarKey, event_id AS eventId, fp_id AS fpId, ical_uid AS iCalUid, series_id AS seriesId, occurrence FROM oc_family_pack_fp_source").all(),
     overrides: db.prepare("SELECT kind, sources_json AS sourcesJson FROM oc_family_pack_fp_override ORDER BY id").all().map((row) => {

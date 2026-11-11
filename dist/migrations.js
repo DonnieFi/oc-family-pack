@@ -115,4 +115,12 @@ CREATE TABLE oc_family_pack_fp_legacy (
   PRIMARY KEY (fp_id, ref)
 ) STRICT;`,
     },
+    {
+        id: "0008-guide-checkpoint",
+        // One setup-guide checkpoint. The body is the answer list, never a secret.
+        sql: `CREATE TABLE oc_family_pack_guide (
+  id TEXT PRIMARY KEY,
+  body TEXT NOT NULL
+) STRICT;`,
+    },
 ];

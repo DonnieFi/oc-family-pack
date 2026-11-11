@@ -90,8 +90,8 @@ test("a first start applies 0001 to 0005 and a second start applies nothing", as
   const { openFamilyStore } = await loadStore();
   try {
     const first = await openFamilyStore({ stateDir });
-    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind", "0007-event-identity"]);
-    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind", "0007-event-identity"]);
+    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind", "0007-event-identity", "0008-guide-checkpoint"]);
+    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind", "0007-event-identity", "0008-guide-checkpoint"]);
     assert.deepEqual(first.ready.unknown, []);
     assert.equal(first.ready.journalMode, "wal");
     assert.equal(first.ready.isMainThread, false);
@@ -101,13 +101,13 @@ test("a first start applies 0001 to 0005 and a second start applies nothing", as
     assert.equal(status.scriptUrl.endsWith("/dist/store-worker.js"), true);
     assertPermissions(dbPath(stateDir));
     const rows = migrationRows(dbPath(stateDir));
-    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind", "0007-event-identity"]);
+    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind", "0007-event-identity", "0008-guide-checkpoint"]);
     const appliedAt = rows[0]?.applied_at;
     await first.stop();
 
     const second = await openFamilyStore({ stateDir });
     assert.deepEqual(second.ready.appliedNow, []);
-    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind", "0007-event-identity"]);
+    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind", "0007-event-identity", "0008-guide-checkpoint"]);
     assert.equal(second.ready.journalMode, "wal");
     assertPermissions(dbPath(stateDir));
     const again = migrationRows(dbPath(stateDir));
@@ -115,6 +115,21 @@ test("a first start applies 0001 to 0005 and a second start applies nothing", as
     await second.stop();
   } finally {
     process.umask(previous);
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("a setup guide checkpoint round-trips as one row", async () => {
+  const stateDir = tempState();
+  const { openFamilyStore } = await loadStore();
+  const store = await openFamilyStore({ stateDir });
+  try {
+    assert.equal(await store.guideCheckpoint(), undefined);
+    const body = JSON.stringify({ version: 1, answers: [{ id: "timezone", value: "yes" }] });
+    await store.saveGuideCheckpoint(body);
+    assert.equal(await store.guideCheckpoint(), body);
+  } finally {
+    await store.stop();
     rmSync(stateDir, { recursive: true, force: true });
   }
 });

@@ -11,9 +11,11 @@ import { WEATHER_SETUP_HINT } from "./weather-ec.ts";
 export type SetupResult = { ok: boolean; text: string };
 /** `discord` holds `NAME=ID` pairs from `--discord`. `email` holds `NAME=address` pairs from `--email`. */
 export type SetupInput = AccessPeople & { discord?: string[]; email?: string[]; materializeIds?: boolean };
-type Step = { name: string; done: boolean; next: string };
+export type SetupStep = { name: string; done: boolean; next: string; optional?: true };
 
 const CONFIG_PATH = "plugins.entries.oc-family-pack.config";
+const CLOCK = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+const CHANNEL_KEY = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const DISCORD_HELP = "Optional. In Discord, turn on Developer Mode, then right-click the person and pick Copy User ID.";
 const BAD_DISCORD = "Give each Discord ID as `--discord NAME=ID`. The ID is the number Copy User ID gives you, 17 to 20 digits long.";
 const BAD_EMAIL = "Give each email as `--email NAME=address`.";
@@ -99,7 +101,7 @@ function named(names: string[]): string {
   return names.length === 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
-function accessStep(host: unknown): Step {
+function accessStep(host: unknown): SetupStep {
   const gateway = record(host).gateway;
   const done = !outsideSignIn(gateway) && detectAccess(gateway).missing.length === 0;
   return { name: "Access mode", done, next: "`openclaw family access`" };
@@ -136,7 +138,7 @@ function accessCommand(gateway: unknown, members: unknown[], allowed: string[]):
   return `openclaw family access lan ${flags.join(" ")}`;
 }
 
-function membersStep(host: unknown, members: unknown[]): Step {
+function membersStep(host: unknown, members: unknown[]): SetupStep {
   const name = "Members";
   if (!members.some((member) => rosterRole(member) === "parent")) return { name, done: false, next: ADD_PARENT };
   const gateway = record(host).gateway;
@@ -180,7 +182,97 @@ function membersStep(host: unknown, members: unknown[]): Step {
   return { name, done: true, next: "" };
 }
 
-function steps(host: unknown, gog: GogSetupPlan, hostZone: string): Step[] {
+function clockDone(value: unknown): boolean {
+  return typeof value === "string" && CLOCK.test(value.trim());
+}
+
+function httpFeed(value: unknown): boolean {
+  if (typeof value !== "string" || value.trim() === "") return false;
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+/** Family channel keys whose values are Discord channel ids. */
+function familyChannels(config: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, id] of Object.entries(record(config.channels))) {
+    if (!CHANNEL_KEY.test(key) || typeof id !== "string" || !DISCORD_ID.test(id.trim())) continue;
+    out[key] = id.trim();
+  }
+  return out;
+}
+
+function alertsDone(config: Record<string, unknown>): boolean {
+  const key = config.summaryChannel;
+  if (typeof key !== "string" || !CHANNEL_KEY.test(key)) return false;
+  return familyChannels(config)[key] !== undefined;
+}
+
+/** Discord channel ids OpenClaw already allows the bot to see. The key is the id. */
+function discordChannelIds(host: unknown): string[] {
+  const discord = record(record(record(host).channels).discord);
+  if (discord.enabled === false) return [];
+  const ids: string[] = [];
+  for (const guild of Object.values(record(discord.guilds))) {
+    for (const [id, body] of Object.entries(record(record(guild).channels))) {
+      if (!DISCORD_ID.test(id) || record(body).enabled === false) continue;
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+function alertKey(config: Record<string, unknown>): string {
+  const taken = new Set<string>();
+  const members = Array.isArray(config.members) ? config.members : [];
+  for (const member of members) {
+    const id = record(member).id;
+    if (typeof id === "string" && id.trim() !== "") taken.add(id.trim().toLowerCase());
+  }
+  for (const key of ["family", "briefs", "alerts"]) if (!taken.has(key)) return key;
+  return "household";
+}
+
+function alertsNext(host: unknown, config: Record<string, unknown>): string {
+  const intro = "Briefs and reminders post to one Discord channel. This plugin does not add a bot token. This version uses the Discord service OpenClaw already runs.";
+  const existing = familyChannels(config);
+  const keys = Object.keys(existing);
+  if (keys.length === 1) {
+    const key = keys[0] ?? "family";
+    return `${intro}\n\`channels\` already has \`${key}\`. Point alerts at that channel:\n\`openclaw config set ${CONFIG_PATH}.summaryChannel ${key}\``;
+  }
+  if (keys.length > 1) {
+    return `${intro}\nPick one key already in \`channels\` (${keys.join(", ")}):\n\`openclaw config set ${CONFIG_PATH}.summaryChannel KEY\``;
+  }
+  const key = alertKey(config);
+  const ids = discordChannelIds(host);
+  if (ids.length === 1) {
+    const id = ids[0] ?? "";
+    return `${intro}\nOpenClaw already has one Discord channel. Reuse it as \`${key}\`:\n\`openclaw config set ${CONFIG_PATH}.channels '{"${key}":"${id}"}' --strict-json\`\n\`openclaw config set ${CONFIG_PATH}.summaryChannel ${key}\``;
+  }
+  if (ids.length > 1) {
+    return `${intro}\nOpenClaw has more than one Discord channel. Pick one id and set it as \`${key}\`:\n${ids.map((id) => `- \`${id}\``).join("\n")}\n\`openclaw config set ${CONFIG_PATH}.channels '{"${key}":"CHANNEL_ID"}' --strict-json\`\n\`openclaw config set ${CONFIG_PATH}.summaryChannel ${key}\``;
+  }
+  return `${intro}\nNo Discord channel is configured on the Gateway yet. After you add one, set \`channels.${key}\` to its id and \`summaryChannel\` to \`${key}\`.\n\`openclaw config set ${CONFIG_PATH}.channels '{"${key}":"CHANNEL_ID"}' --strict-json\`\n\`openclaw config set ${CONFIG_PATH}.summaryChannel ${key}\``;
+}
+
+function clockNext(field: string, detail: string, example: string): string {
+  return `${detail}\nLeave it unset to keep this brief off.\n\`openclaw config set ${CONFIG_PATH}.${field} ${example}\``;
+}
+
+function garbageNext(): string {
+  return `Optional city collection calendar. \`garbage_schedule\` and the daily brief's garbage line use it. The rest of the plugin works without it.\nUse an http or https \`.ics\` link. For a \`webcal://\` link, use \`https://\` instead.\n\`openclaw config set ${CONFIG_PATH}.garbageIcsUrl 'https://example.com/collection.ics'\``;
+}
+
+function optionalPiece(name: string, done: boolean, next: string): SetupStep {
+  return { name, done, next, optional: true };
+}
+
+export function setupSteps(host: unknown, gog: GogSetupPlan, hostZone: string): SetupStep[] {
   const config = familyConfig(host);
   const location = record(config.location);
   const members = Array.isArray(config.members) ? config.members : [];
@@ -224,6 +316,11 @@ function steps(host: unknown, gog: GogSetupPlan, hostZone: string): Step[] {
           : "`openclaw family gog`";
       })(),
     },
+    optionalPiece("Alerts", alertsDone(config), alertsNext(host, config)),
+    optionalPiece("Morning brief", clockDone(config.morningTime), clockNext("morningTime", "Weekday morning direct message to parents.", "07:00")),
+    optionalPiece("After-school brief", clockDone(config.afterSchoolTime), clockNext("afterSchoolTime", "Weekday after-school post to the summary channel. It stays quiet until `summaryChannel` is set.", "15:30")),
+    optionalPiece("Weekend preview", clockDone(config.weekendPreviewTime), clockNext("weekendPreviewTime", "Weekend preview posted to the summary channel. It runs on Friday unless you set `weekendPreviewWeekday` (`0` is Sunday and `6` is Saturday).", "16:00")),
+    optionalPiece("Garbage calendar", httpFeed(config.garbageIcsUrl), garbageNext()),
   ];
 }
 
@@ -455,7 +552,7 @@ export function planSetup(host: unknown, input: SetupInput, gog: GogSetupPlan, h
     const message = error instanceof ConfigError || error instanceof MemberError ? error.message : error instanceof Error ? error.message : String(error);
     return { ok: false, text: `The family config needs fixing before setup can report it ready:\n${message}` };
   }
-  const list = steps(host, gog, hostZone);
+  const list = setupSteps(host, gog, hostZone);
   const checklist = list.map((step) => `${step.name}: ${step.done ? "Done" : "To do"}`);
   if (input.materializeIds) {
     const namedPeople = (input.parent ?? []).length + (input.kid ?? []).length + (input.guest ?? []).length > 0;
@@ -500,13 +597,17 @@ export function planSetup(host: unknown, input: SetupInput, gog: GogSetupPlan, h
     checklist.unshift(...skipped, "No changes to make.", "");
   }
   const optional = asked ? [] : discordHint(host);
-  const next = list.find((step) => !step.done);
+  const next = list.find((step) => !step.done && step.optional !== true);
   const derived = derivedIds(host);
   const warnings = [...derived, ...unreachable(host)];
   const warned = warnings.length > 0 ? ["", ...warnings] : [];
   const approvals = approvalLines(host, new Map());
   if (!next) {
     const pendingApproval = approvals.length > 0;
+    const unset = list.filter((step) => step.optional === true && !step.done);
+    const optionalLeft = unset.length > 0 && !pendingApproval && derived.length === 0
+      ? ["", "Optional pieces still unset. `openclaw family setup --guide` asks each one. skip leaves it off.", ...unset.flatMap((step) => ["", step.name, step.next])]
+      : [];
     return {
       ok: !pendingApproval && derived.length === 0,
       text: [
@@ -514,6 +615,7 @@ export function planSetup(host: unknown, input: SetupInput, gog: GogSetupPlan, h
         ...warned,
         ...optional,
         ...approvals,
+        ...optionalLeft,
         "",
         pendingApproval
           ? "The config is complete. Apply the approval block, then run the pilot preflight."

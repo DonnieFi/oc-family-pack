@@ -248,3 +248,42 @@ test("stderr that says only ACCESS_TOKEN_SCOPE is the read-only grant error", ()
   grant.noteWriteFailure(Object.assign(new Error("Command failed"), { stderr: "ACCESS_TOKEN_SCOPE" }));
   assert.equal(grant.get(), "read-only");
 });
+
+test("family setup --guide remembers answers and does not report success after cancel", async () => {
+  const lines: string[] = [];
+  const saved: string[] = [];
+  const { program, actions } = fakeProgram();
+  const host = {
+    plugins: { entries: { "oc-family-pack": { config: { timezone: "America/Halifax", members: [{ id: "alex", profileId: "alex", name: "Alex", role: "parent", email: "alex@example.com" }] } } } },
+  };
+  registerFamilyCli(program, {
+    run: async () => {
+      const error = new Error("missing") as Error & { code: string };
+      error.code = "ENOENT";
+      throw error;
+    },
+    host,
+    hostZone: "America/Halifax",
+    write: (text) => lines.push(text),
+    guideState: {
+      load: async () => undefined,
+      save: async (checkpoint) => {
+        saved.push(JSON.stringify(checkpoint));
+      },
+    },
+  });
+  const action = actions.get("setup");
+  assert.ok(action);
+  const previous = process.exitCode;
+  await action({ guide: true, noninteractive: true });
+  assert.equal(lines[0]?.includes("Timezone: Done"), true);
+  assert.equal(saved.length, 0);
+  await action({ guide: true, answer: ["cancel"] });
+  assert.equal(process.exitCode, 1);
+  assert.equal(lines[1], "Setup was cancelled. Nothing was changed.");
+  assert.equal(lines[1]?.includes("complete"), false);
+  assert.equal(saved[0]?.includes("example.com"), false);
+  await action({ guide: true, dryRun: true, answer: ["no", "skip", "no", "skip", "skip", "skip", "skip", "skip"] });
+  assert.match(lines[2] ?? "", /Dry run\. Nothing was applied\./);
+  process.exitCode = previous;
+});

@@ -136,7 +136,9 @@ require `summaryChannel`. Without it, they stay off.
 
 A morning parent DM, an after-school post, and a weekend preview are separate
 optional times. Each stays off until that time is set. The weekend preview
-runs on Friday unless you set another day.
+runs on Friday unless you set another day. `openclaw family setup` lists
+those times, the Discord summary channel, and `garbageIcsUrl`. One that is
+already set is Done. skip in `openclaw family setup --guide` leaves it off.
 
 Reminders fire the lead time before a timed event, 15 minutes if you leave
 that unset. Quiet hours default to 22:00–07:00. A reminder that comes due

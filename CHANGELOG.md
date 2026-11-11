@@ -3,6 +3,8 @@
 ## Unreleased
 
 - An appointment that names someone, such as "Riley dentist" on Alex's calendar, shows in that person's week and answers. It is not copied and nobody is invited. A name shared by two people is left unset until the household confirms one. The rest of a hidden calendar stays hidden.
+- `openclaw family setup --guide` asks the remaining steps, remembers the answers, and can resume. cancel does not report success. `--noninteractive` prints the checklist. `--dry-run` says nothing was applied. The guide does not write Gateway config.
+- Setup lists the Discord alerts channel, the morning, after-school, and weekend-preview briefs, and the garbage calendar. A channel, clock time, or `.ics` link already in the config is Done. One Discord channel already on the Gateway is the id the alerts step prints. These five are optional and do not block "Everything is set up."
 - A shared school calendar can name who a title is for. `audienceRules` match a title phrase, first rule wins, and keep only people who already own that calendar. `school` is every owner, `cohort` is owners in that cohort, and `student` is the named owners. Put the narrower rule first. When no rule matches, the owners are unchanged.
 - The People page opens a profile banner and the Lobsterdex. A parent picks up to eight companions. The choice is stored on that person's card and applied with the config patch. The page stays parent-only.
 - An all-day uniform or homework note whose calendar end is the same day still shows on that day.

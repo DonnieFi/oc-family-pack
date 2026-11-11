@@ -92,6 +92,10 @@ export type FamilyStore = {
   rememberIdentity: (patch: IdentityPatch) => Promise<void>;
   /** Remembers a manual merge or split. The next read applies it. */
   recordIdentityOverride: (kind: IdentityOverride["kind"], sources: IdentityOverride["sources"]) => Promise<void>;
+  /** The setup guide checkpoint, if one was saved. The body has no secrets. */
+  guideCheckpoint: () => Promise<string | undefined>;
+  /** Replaces the one setup guide checkpoint. */
+  saveGuideCheckpoint: (body: string) => Promise<void>;
   stop: () => Promise<void>;
   spawned: () => number;
 };
@@ -349,6 +353,15 @@ async function openSession(options: {
     async recordIdentityOverride(kind, sources) {
       await ensureOpen();
       await post("identity.override", { kind, sources });
+    },
+    async guideCheckpoint() {
+      await ensureOpen();
+      const body = await post("guide.load", {});
+      return typeof body === "string" ? body : undefined;
+    },
+    async saveGuideCheckpoint(body) {
+      await ensureOpen();
+      await post("guide.save", { body });
     },
     stop() {
       if (stopPromise) return stopPromise;

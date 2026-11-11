@@ -233,6 +233,15 @@ async function openSession(options) {
             await ensureOpen();
             await post("identity.override", { kind, sources });
         },
+        async guideCheckpoint() {
+            await ensureOpen();
+            const body = await post("guide.load", {});
+            return typeof body === "string" ? body : undefined;
+        },
+        async saveGuideCheckpoint(body) {
+            await ensureOpen();
+            await post("guide.save", { body });
+        },
         stop() {
             if (stopPromise)
                 return stopPromise;

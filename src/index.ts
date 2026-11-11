@@ -47,7 +47,14 @@ const plugin = defineFeaturePlugin({
   // sets requiredScopes, which the shipped command gate then limits to the owner.
   setup(api, events) {
     api.registerCli(({ program, config }) => {
-      registerFamilyCli(program, { run: execGog(), gogPath: configuredGogPath(api.pluginConfig), gateway: config.gateway, host: config });
+      const stateDir = process.env.OPENCLAW_STATE_DIR;
+      registerFamilyCli(program, {
+        run: execGog(),
+        gogPath: configuredGogPath(api.pluginConfig),
+        gateway: config.gateway,
+        host: config,
+        ...(stateDir ? { stateDir } : {}),
+      });
     }, {
       commands: ["family"],
       descriptors: [{ name: "family", description: "Set up family calendars, members, and household access", hasSubcommands: true }],

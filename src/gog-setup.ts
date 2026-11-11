@@ -1,7 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { runAccess } from "./access.ts";
-import { planSetup } from "./setup.ts";
+import { readGuideCheckpoint, runGuide, type GuideCheckpoint, type GuideState } from "./setup-guide.ts";
+import { planSetup, setupSteps } from "./setup.ts";
+import { openFamilyStore, type FamilyStore } from "./store.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -271,7 +273,16 @@ function gatewayPort(gateway: unknown): number | undefined {
  */
 export function registerFamilyCli(
   program: { command: (name: string) => FamilyCliCommand },
-  deps: { run: RunGog; gogPath?: string; gateway?: unknown; host?: unknown; hostZone?: string; write?: (text: string) => void },
+  deps: {
+    run: RunGog;
+    gogPath?: string;
+    gateway?: unknown;
+    host?: unknown;
+    hostZone?: string;
+    write?: (text: string) => void;
+    guideState?: GuideState;
+    stateDir?: string;
+  },
 ): void {
   const write = deps.write ?? ((text: string) => console.log(text));
   const family = program.command("family").description("Set up family calendars, members, and household access");
@@ -324,8 +335,13 @@ export function registerFamilyCli(
     .option("--discord <name=id...>", "Discord user IDs, like alex=123456789012345678")
     .option("--email <name=address...>", "Email addresses, like riley=riley@example.com")
     .option("--materialize-ids", "Print a patch that writes the member and device ids this config already uses")
-    .action(async (opts: AccessOptions & { discord?: string[]; email?: string[]; materializeIds?: boolean }) => {
+    .option("--guide", "Ask each remaining step and remember the answers")
+    .option("--dry-run", "With --guide, show the result and do not apply it")
+    .option("--noninteractive", "With --guide, print the checklist instead of asking")
+    .option("--answer <choice...>", "Answers for --guide, in order: yes, no, back, skip, or cancel")
+    .action(async (opts: AccessOptions & { discord?: string[]; email?: string[]; materializeIds?: boolean; guide?: boolean; dryRun?: boolean; noninteractive?: boolean; answer?: string[] }) => {
       const gog = await diagnoseGog(deps.run, deps.gogPath ? { gogPath: deps.gogPath } : {});
+      const zone = deps.hostZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
       const result = planSetup(
         deps.host,
         {
@@ -337,9 +353,55 @@ export function registerFamilyCli(
           ...(opts.materializeIds ? { materializeIds: true } : {}),
         },
         gog,
-        deps.hostZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+        zone,
       );
-      write(result.text);
-      process.exitCode = result.ok ? 0 : 1;
+      if (opts.guide !== true) {
+        write(result.text);
+        process.exitCode = result.ok ? 0 : 1;
+        return;
+      }
+      if (result.text.startsWith("The family config needs fixing")) {
+        write(result.text);
+        process.exitCode = 1;
+        return;
+      }
+      let checkpoint: GuideCheckpoint | undefined;
+      let opened: FamilyStore | undefined;
+      const saver = deps.guideState?.save;
+      try {
+        if (deps.guideState) checkpoint = await deps.guideState.load();
+        else if (deps.stateDir) {
+          try {
+            opened = await openFamilyStore({ stateDir: deps.stateDir });
+            checkpoint = readGuideCheckpoint(await opened.guideCheckpoint());
+          } catch {
+            await opened?.stop();
+            opened = undefined;
+          }
+        }
+        const guided = runGuide({
+          steps: setupSteps(deps.host, gog, zone),
+          ...(checkpoint ? { checkpoint } : {}),
+          answers: opts.answer ?? [],
+          dryRun: opts.dryRun === true,
+          ...(opts.noninteractive === true ? { noninteractive: result } : {}),
+          settled: result,
+        });
+        let text = guided.text;
+        if (guided.save) {
+          const save = saver ?? (opened ? (value: GuideCheckpoint) => opened!.saveGuideCheckpoint(JSON.stringify(value)) : undefined);
+          if (save) {
+            try {
+              await save(guided.checkpoint);
+            } catch {
+              text = `${text}\nThis run was not saved.`;
+            }
+          } else text = `${text}\nThis run was not saved.`;
+        }
+        write(text);
+        process.exitCode = guided.ok ? 0 : 1;
+      } finally {
+        await opened?.stop();
+      }
     });
 }

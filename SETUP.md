@@ -104,6 +104,18 @@ Setup checks the shape and does not repeat a bad address. The checklist and the 
 
 5. **Calendars.** Next is `openclaw family gog`. The steps are below.
 
+6. **Alerts.** Optional. Done when `summaryChannel` is a key in `channels` and that value is a Discord channel id. If `channels` already has one key, setup points `summaryChannel` at it. If the family config has no channel yet and the Gateway Discord config has one enabled channel, setup prints that channel id in the command. A channel OpenClaw only listens in is not a replacement for a summary channel that is already set. The plugin does not ask for a bot token. This version posts through Discord. skip leaves briefs and reminders off.
+
+7. **Morning brief.** Optional. Done when `morningTime` is `HH:MM`, for example `07:00`. A weekday morning direct message to parents. Leave it unset to keep it off.
+
+8. **After-school brief.** Optional. Done when `afterSchoolTime` is set, for example `15:30`. A weekday post to the summary channel.
+
+9. **Weekend preview.** Optional. Done when `weekendPreviewTime` is set, for example `16:00`. Friday unless `weekendPreviewWeekday` is set (`0` is Sunday, `6` is Saturday).
+
+10. **Garbage calendar.** Optional. Done when `garbageIcsUrl` is an http or https `.ics` link. A `webcal://` link has to be written as `https://`.
+
+These five are listed as To do until they are set. They do not change the exit code, and they do not replace "Everything is set up." `openclaw family setup --guide` asks each one. skip leaves that one off.
+
 After members exist, a checklist run may also print an optional Discord command, with `DISCORD_ID_alex` as a placeholder:
 
 ```bash
