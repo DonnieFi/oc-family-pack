@@ -1547,8 +1547,12 @@ async function scheduleTool(configPath: string, port: number): Promise<void> {
   // The fixture is built from UTC instants, so assert the wall time in the same
   // family zone rather than a fixed EDT time. After DST ends, 16:00Z is 11:00 AM.
   const localTime = (utc: string) => new Intl.DateTimeFormat("en-US", { timeZone: "America/Toronto", hour: "numeric", minute: "2-digit" }).format(new Date(utc));
-  const expected = { sections: [{ name: "not the usual", items: [{ id: "c0/dentist", title: "Dentist", time: localTime(`${today}T16:00:00Z`), owners: [] }] }], usual: `Usual: Swim ${localTime(`${today}T21:00:00Z`)}` };
+  const fpId = (owner as { sections?: { items?: { fpId?: string }[] }[] }).sections?.[0]?.items?.[0]?.fpId;
+  if (typeof fpId !== "string" || !/^fp_[0-9a-f]{32}$/.test(fpId)) fail(step, "family_schedule omitted a valid durable household fpId");
+  const expected = { sections: [{ name: "not the usual", items: [{ id: "c0/dentist", fpId, title: "Dentist", time: localTime(`${today}T16:00:00Z`), owners: [] }] }], usual: `Usual: Swim ${localTime(`${today}T21:00:00Z`)}` };
   if (JSON.stringify(owner) !== JSON.stringify(expected)) fail(step, `family_schedule returned ${JSON.stringify(owner)}, expected ${JSON.stringify(expected)}`);
+  const repeated = await invoke({});
+  if (JSON.stringify(repeated) !== JSON.stringify(expected)) fail(step, "family_schedule changed its household identity on a repeated read");
   note("the agent tool, called with the shared password, put Dentist (with the id the change tools take) under not the usual and Swim in the usual line", step);
   const claimed = await invoke({ member: "me" }, { "x-openclaw-message-channel": "discord" });
   if (JSON.stringify(claimed) !== JSON.stringify({ error: "I can't tell who 'me' is here. Name the person." })) {
