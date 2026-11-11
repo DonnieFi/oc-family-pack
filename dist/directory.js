@@ -142,6 +142,12 @@ export function planDirectoryEdit(rawMembers, edits, calendars = []) {
             else
                 next.aliases = aliases;
         }
+        if (edit.lobsterPreferences !== undefined) {
+            if (edit.lobsterPreferences.length)
+                next.lobsterPreferences = edit.lobsterPreferences;
+            else
+                delete next.lobsterPreferences;
+        }
         if (edit.role !== undefined)
             next.role = edit.role;
         if (edit.color !== undefined)
@@ -176,6 +182,7 @@ export function directoryMembers(members) {
         role: member.role,
         ...(member.color !== undefined ? { color: member.color } : {}),
         ...(member.aliases !== undefined ? { aliases: member.aliases } : {}),
+        ...(member.lobsterPreferences !== undefined ? { lobsterPreferences: member.lobsterPreferences } : {}),
         ...(member.profileId !== undefined ? { login: member.profileId } : {}),
         ...(member.gatewayProfileId !== undefined ? { gatewayProfileId: member.gatewayProfileId } : {}),
         ...(member.email !== undefined ? { email: member.email } : {}),

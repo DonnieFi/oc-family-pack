@@ -24,7 +24,7 @@ function rawRoster(raw: unknown): { members: unknown[]; calendars: unknown[] } {
   };
 }
 
-const EDIT_KEYS = ["id", "displayName", "login", "email", "phone", "discordId", "aliases", "role", "color", "reminders", "devices"] as const;
+const EDIT_KEYS = ["id", "displayName", "login", "email", "phone", "discordId", "aliases", "lobsterPreferences", "role", "color", "reminders", "devices"] as const;
 
 function parseEdits(value: unknown): DirectoryEdit[] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -44,6 +44,10 @@ function parseEdits(value: unknown): DirectoryEdit[] | undefined {
       const field = entry[key];
       if (field !== null && typeof field !== "string") return undefined;
       (edit as unknown as Record<string, unknown>)[key] = field;
+    }
+    if ("lobsterPreferences" in entry) {
+      if (!Array.isArray(entry.lobsterPreferences) || entry.lobsterPreferences.some((item) => typeof item !== "string")) return undefined;
+      edit.lobsterPreferences = entry.lobsterPreferences;
     }
     if ("aliases" in entry) {
       if (!Array.isArray(entry.aliases) || entry.aliases.some((alias) => typeof alias !== "string")) return undefined;

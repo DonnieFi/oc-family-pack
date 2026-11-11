@@ -381,3 +381,14 @@ test("clearing the alias field removes stored aliases", () => {
   const patch = JSON.parse(result.patch) as { plugins: { entries: { "oc-family-pack": { config: { members: Record<string, unknown>[] } } } } };
   assert.equal("aliases" in patch.plugins.entries["oc-family-pack"].config.members[0]!, false);
 });
+
+test("lobster preferences survive profile edits and can be cleared", () => {
+  const original = [{ id: "riley", name: "Riley", role: "kid", lobsterPreferences: ["balloon", "bee"] }];
+  const changed = planDirectoryEdit(original, [{ id: "riley", displayName: "Riley Renamed" }]);
+  assert.equal(changed.ok, true);
+  if (!changed.ok) return;
+  assert.deepEqual((changed.members[0] as { lobsterPreferences: string[] }).lobsterPreferences, ["balloon", "bee"]);
+  const cleared = planDirectoryEdit(changed.members, [{ id: "riley", lobsterPreferences: [] }]);
+  assert.equal(cleared.ok, true);
+  if (cleared.ok) assert.equal("lobsterPreferences" in (cleared.members[0] as object), false);
+});

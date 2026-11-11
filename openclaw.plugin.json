@@ -342,6 +342,15 @@
               },
               "maxItems": 8
             },
+            "lobsterPreferences": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "maxItems": 8
+            },
             "profileId": {
               "type": "string",
               "minLength": 1,
@@ -557,9 +566,9 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/bb6e942a9e95afc7cdd8bfa44aa4835d3f454b239d5086b1bb457acae340bcc8/index.js",
+    "entry": "dist/control-ui/6a7699df5e4f5629a18e73c0ee0e7ade31afe6127805b0c4fc1d66c31e5a9dfd/index.js",
     "styles": [
-      "dist/control-ui/bb6e942a9e95afc7cdd8bfa44aa4835d3f454b239d5086b1bb457acae340bcc8/index.css"
+      "dist/control-ui/6a7699df5e4f5629a18e73c0ee0e7ade31afe6127805b0c4fc1d66c31e5a9dfd/index.css"
     ]
   },
   "contracts": {

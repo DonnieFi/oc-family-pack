@@ -17,7 +17,7 @@ function rawRoster(raw) {
         calendars: Array.isArray(config.calendars) ? config.calendars : [],
     };
 }
-const EDIT_KEYS = ["id", "displayName", "login", "email", "phone", "discordId", "aliases", "role", "color", "reminders", "devices"];
+const EDIT_KEYS = ["id", "displayName", "login", "email", "phone", "discordId", "aliases", "lobsterPreferences", "role", "color", "reminders", "devices"];
 function parseEdits(value) {
     if (!Array.isArray(value))
         return undefined;
@@ -42,6 +42,11 @@ function parseEdits(value) {
             if (field !== null && typeof field !== "string")
                 return undefined;
             edit[key] = field;
+        }
+        if ("lobsterPreferences" in entry) {
+            if (!Array.isArray(entry.lobsterPreferences) || entry.lobsterPreferences.some((item) => typeof item !== "string"))
+                return undefined;
+            edit.lobsterPreferences = entry.lobsterPreferences;
         }
         if ("aliases" in entry) {
             if (!Array.isArray(entry.aliases) || entry.aliases.some((alias) => typeof alias !== "string"))

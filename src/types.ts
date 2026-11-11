@@ -74,6 +74,7 @@ export type MemberConfig = {
    * a page viewer.
    */
   aliases?: string[];
+  lobsterPreferences?: string[];
   /** Stored on the card only. Nothing in the plugin sends email or shows it on the week. */
   email?: string;
   /** Stored on the card only. Nothing in the plugin sends SMS. */

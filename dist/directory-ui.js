@@ -52,6 +52,7 @@ export function editFrom(member) {
         displayName: member.displayName,
         login: member.login ?? null,
         aliases: member.aliases ?? [],
+        lobsterPreferences: member.lobsterPreferences ?? [],
         role: member.role,
         color: member.color ?? null,
         reminders: member.reminders,
@@ -138,6 +139,9 @@ export function mountPeoplePage(container, initial) {
                 edited.add(selected);
             }), selectField("Role", member.role, ["parent", "kid", "guest"], (value) => {
                 member.role = value;
+                edited.add(selected);
+            }), field("Lobster preferences", (member.lobsterPreferences ?? []).join(", "), (value) => {
+                member.lobsterPreferences = value.split(",").map((part) => part.trim()).filter(Boolean);
                 edited.add(selected);
             }), field("Color", member.color ?? "", (value) => {
                 if (value === "")

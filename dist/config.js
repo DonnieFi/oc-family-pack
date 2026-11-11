@@ -59,6 +59,7 @@ export const ConfigSchema = Type.Object({
         name: Type.Optional(Name),
         displayName: Type.Optional(Name),
         aliases: Type.Optional(Type.Array(Name, { maxItems: MAX_ALIASES })),
+        lobsterPreferences: Type.Optional(Type.Array(Name, { maxItems: 8 })),
         profileId: Type.Optional(Name),
         login: Type.Optional(Name),
         gatewayProfileId: Type.Optional(Name),
@@ -312,6 +313,9 @@ function member(value, index) {
     }
     if (aliases.length > 0)
         parsed.aliases = aliases;
+    const lobsterPreferences = atMost(list(value.lobsterPreferences, `${field}.lobsterPreferences`), `${field}.lobsterPreferences`, 8).map((item, i) => text(item, `${field}.lobsterPreferences[${i}]`));
+    if (lobsterPreferences.length > 0)
+        parsed.lobsterPreferences = lobsterPreferences;
     if (value.email !== undefined) {
         if (typeof value.email !== "string")
             throw new MemberError(`${displayName}'s email doesn't look right. Check it and try again.`);

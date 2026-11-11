@@ -15,6 +15,7 @@ export type DirectoryEdit = {
   phone?: string | null;
   discordId?: string | null;
   aliases?: string[];
+  lobsterPreferences?: string[];
   role?: MemberRole;
   color?: string | null;
   reminders?: ReminderMode;
@@ -38,6 +39,7 @@ export type DirectoryMember = {
   role: MemberRole;
   color?: string;
   aliases?: string[];
+  lobsterPreferences?: string[];
   login?: string;
   gatewayProfileId?: string;
   email?: string;
@@ -178,6 +180,10 @@ export function planDirectoryEdit(
       if (aliases.length === 0) delete next.aliases;
       else next.aliases = aliases;
     }
+    if (edit.lobsterPreferences !== undefined) {
+      if (edit.lobsterPreferences.length) next.lobsterPreferences = edit.lobsterPreferences;
+      else delete next.lobsterPreferences;
+    }
     if (edit.role !== undefined) next.role = edit.role;
     if (edit.color !== undefined) applyOptional(next, "color", edit.color);
     if (edit.reminders !== undefined) next.reminders = edit.reminders;
@@ -204,6 +210,7 @@ export function directoryMembers(members: readonly MemberConfig[]): DirectoryMem
     role: member.role,
     ...(member.color !== undefined ? { color: member.color } : {}),
     ...(member.aliases !== undefined ? { aliases: member.aliases } : {}),
+    ...(member.lobsterPreferences !== undefined ? { lobsterPreferences: member.lobsterPreferences } : {}),
     ...(member.profileId !== undefined ? { login: member.profileId } : {}),
     ...(member.gatewayProfileId !== undefined ? { gatewayProfileId: member.gatewayProfileId } : {}),
     ...(member.email !== undefined ? { email: member.email } : {}),
