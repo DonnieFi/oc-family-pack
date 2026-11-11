@@ -674,7 +674,11 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
           if (!event) continue;
           const layer = layerOf(event);
           // All-day school assignments and uniform notes belong on their due day.
-          if ((layer === "homework" || layer === "uniform") && event.allDay && day.date !== addDays(event.end, -1)) continue;
+          // An end that is not the exclusive next day would otherwise miss every column.
+          if ((layer === "homework" || layer === "uniform") && event.allDay) {
+            const due = addDays(event.end, -1);
+            if (day.date !== (due < event.start ? event.start : due)) continue;
+          }
           if (!inView(event, layer)) continue;
           if (layer === "uniform") uniforms.push(event);
           else if (layer === "homework") homework.push(event);

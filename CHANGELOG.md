@@ -3,6 +3,7 @@
 ## Unreleased
 
 - The People page opens a profile banner and the Lobsterdex. A parent picks up to eight companions. The choice is stored on that person's card and applied with the config patch. The page stays parent-only.
+- An all-day uniform or homework note whose calendar end is the same day still shows on that day.
 
 - Start calendar change polling with a seven-day window so Google does not reject the initial 30-day request.
 

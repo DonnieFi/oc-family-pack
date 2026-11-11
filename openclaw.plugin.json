@@ -566,9 +566,9 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/6591c2b4eaf61d92bf4f5ddfc5e4d63381d178872422a812682a260b869cdf31/index.js",
+    "entry": "dist/control-ui/97094ad29614a62836a9d6f056f068463e943a6edd7a8f31a9378748f93df5cf/index.js",
     "styles": [
-      "dist/control-ui/6591c2b4eaf61d92bf4f5ddfc5e4d63381d178872422a812682a260b869cdf31/index.css"
+      "dist/control-ui/97094ad29614a62836a9d6f056f068463e943a6edd7a8f31a9378748f93df5cf/index.css"
     ]
   },
   "contracts": {

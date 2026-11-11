@@ -360,6 +360,16 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(page.container.querySelector("#ocfp-day-2026-09-30")?.textContent?.includes("Worksheet"), true);
   });
 
+  test("a same-day uniform note stays on that day", async () => {
+    const base = week();
+    const event = { id: "e-uniform-same", title: "Red Dress Day", start: "2026-09-30", end: "2026-09-30", allDay: true, calendarKey: "cschool" };
+    const page = mountPage({ result: { ...base, viewer: { role: "parent", memberId: "alex" }, calendars: [...base.calendars, { key: "cschool", label: "School", kind: "school", ownerIds: ["riley"] }], days: base.days.map((day) => ({ ...day, eventIds: day.date === "2026-09-30" ? [event.id] : [] })), calendar: { status: "ok", warnings: [], data: [event] } } });
+    await flush();
+    const today = page.container.querySelector("#ocfp-day-2026-09-30")?.textContent ?? "";
+    assert.match(today, /Uniform/);
+    assert.match(today, /Red Dress Day/);
+  });
+
   test("a kid still sees classes on a school calendar they own", async () => {
     const base = week();
     const page = mountPage({
