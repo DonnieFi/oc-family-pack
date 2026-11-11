@@ -95,6 +95,7 @@ test("a parent edits the sample login and previews a patch that keeps the member
   assert.match(text, /does not write the Gateway config/);
   assert.match(text, /does not change the router/);
   assert.match(text, /through Discord/);
+  page.container.querySelector<HTMLButtonElement>(".ocfp-person")?.click();
   const email = page.container.querySelector('input[aria-label="Email"]') as HTMLInputElement;
   const reserved = page.container.querySelector('input[aria-label="Reserved IP"]') as HTMLInputElement;
   assert.equal(email.value, "riley@example.com");

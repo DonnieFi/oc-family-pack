@@ -114,6 +114,7 @@ export function mountPeoplePage(container, initial) {
     };
     const render = (members, persistence, delivery, reservation, demo) => {
         let selected = 0;
+        let profileOpen = false;
         const edited = new Set();
         const list = h("div", { class: "ocfp-people-list", role: "list" });
         const form = h("div", { class: "ocfp-people-form" });
@@ -172,6 +173,14 @@ export function mountPeoplePage(container, initial) {
                     member.discordId = value;
                 edited.add(selected);
             }));
+            const identity = h("section", { class: "ocfp-people-group" }, h("h3", {}, "Identity & role"));
+            const signIn = h("section", { class: "ocfp-people-group" }, h("h3", {}, "Sign-in & linked accounts"), h("p", { class: "ocfp-people-note" }, "Changing your login also requires updating the proxy allowlist. Link Discord with users.linkChannelIdentity."));
+            const contact = h("section", { class: "ocfp-people-group" }, h("h3", {}, "Contact card"), h("p", { class: "ocfp-people-note" }, delivery));
+            for (const label of [...form.querySelectorAll("label.ocfp-field")]) {
+                const key = label.querySelector("input, select")?.getAttribute("aria-label");
+                (key === "Email" || key === "Phone" ? contact : key === "Login" || key === "Discord id" || key === "Reminders" ? signIn : identity).append(label);
+            }
+            form.append(identity, signIn, contact, h("h3", { class: "ocfp-people-devices-title" }, "Network devices"), h("p", { class: "ocfp-people-note ocfp-people-wide" }, reservation));
             for (const device of member.devices) {
                 const touch = () => edited.add(selected);
                 form.append(h("fieldset", { class: "ocfp-device" }, h("legend", {}, device.label || "Device"), field("Device label", device.label, (value) => {
@@ -201,14 +210,31 @@ export function mountPeoplePage(container, initial) {
         };
         const paintList = () => {
             list.replaceChildren(...members.map((member, index) => {
-                const button = h("button", { type: "button", class: index === selected ? "ocfp-person is-selected" : "ocfp-person", "aria-pressed": index === selected ? "true" : "false" }, member.displayName);
+                const button = h("button", { type: "button", class: "ocfp-person", "aria-label": `Open ${member.displayName}'s profile` }, h("span", { class: "ocfp-people-avatar", "aria-hidden": "true" }, member.displayName.slice(0, 1).toUpperCase()), h("strong", {}, member.displayName), h("span", { class: "ocfp-people-role" }, member.role), h("span", { class: "ocfp-people-note" }, (member.aliases ?? []).join(", ") || "No aliases"), h("span", { class: "ocfp-people-status" }, member.login ? "Sign-in ready" : "Sign-in needed", " · ", member.discordId ? "Discord linked" : "No Discord", ` · ${member.devices.length} devices`), ...(edited.has(index) ? [h("span", { class: "ocfp-people-dirty" }, "Edited")] : []));
+                if (member.color)
+                    button.style.setProperty("--ocfp-person-color", member.color);
                 button.addEventListener("click", () => {
                     selected = index;
-                    paintList();
+                    profileOpen = true;
                     paintForm();
+                    syncView();
+                    back.focus();
                 });
                 return button;
             }));
+        };
+        const back = h("button", { type: "button", class: "ocfp-btn ocfp-people-back" }, "← Everyone");
+        back.addEventListener("click", () => { profileOpen = false; paintList(); syncView(); list.querySelector("button")?.focus(); });
+        const profileTitle = h("h2", { class: "ocfp-people-title" });
+        const actions = h("div", { class: "ocfp-people-actions" });
+        const syncView = () => {
+            list.hidden = profileOpen;
+            form.hidden = !profileOpen;
+            back.hidden = !profileOpen;
+            profileTitle.hidden = !profileOpen;
+            actions.hidden = !profileOpen;
+            if (profileOpen)
+                profileTitle.textContent = `${members[selected]?.displayName ?? ""}’s profile`;
         };
         const preview = h("button", { type: "button" }, "Preview patch");
         preview.addEventListener("click", () => {
@@ -251,7 +277,9 @@ export function mountPeoplePage(container, initial) {
         });
         paintList();
         paintForm();
-        section.replaceChildren(h("h2", { class: "ocfp-people-title" }, "People"), h("p", { class: "ocfp-people-note" }, delivery), h("p", { class: "ocfp-people-note" }, persistence), h("p", { class: "ocfp-people-note" }, reservation), ...(demo ? [h("p", { class: "ocfp-people-note" }, "Demo mode shows the sample family. Turn demo off before previewing a roster patch.")] : []), list, form, h("div", { class: "ocfp-people-actions" }, preview, migrate), result);
+        actions.append(preview, migrate);
+        syncView();
+        section.replaceChildren(h("div", { class: "ocfp-masthead" }, h("div", {}, h("p", { class: "ocfp-kicker" }, "Family · a place for everyone"), h("h2", { class: "ocfp-title" }, "People"), h("p", { class: "ocfp-subtitle" }, "All your people, together in one place."))), h("p", { class: "ocfp-people-note" }, delivery), h("p", { class: "ocfp-people-note" }, persistence), h("p", { class: "ocfp-people-note" }, reservation), ...(demo ? [h("p", { class: "ocfp-people-note" }, "Demo mode shows the sample family. Turn demo off before previewing a roster patch.")] : []), list, back, profileTitle, form, actions, result);
     };
     load();
     let connected = host.connection.connected;
