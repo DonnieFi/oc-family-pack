@@ -12,6 +12,7 @@ import { createFeatureClient } from "openclaw/plugin-sdk/feature-contract";
 import { contract, PAGE_WRITE_METHOD, TODAY_VIEW_METHOD, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.ts";
 import { homeSessionKey, seededFlag, todayHomeDecision, todayPutParams, widgetsOf, TODAY_HOME_METHOD } from "./today-home.ts";
 import { DELIVERY_STATUS_METHOD } from "./delivery-status.ts";
+import { DEFAULT_VOCABULARY } from "./classify.ts";
 import { mixTowardInk } from "./contrast.ts";
 import { roundHalfEven } from "./recommendation.ts";
 import type { CalendarRef, FamilyEvent, Member, TodayPayload, WeekPayload } from "./types.ts";
@@ -283,6 +284,8 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     return mixTowardInk(color, ink, card).color;
   };
   let person: string | null = null;
+  /** Homework stays under the day, collapsed, until someone opens it. */
+  let homeworkOpen = false;
   let selectedDay = "";
   let dialog: ControlUiComponentHandle<ControlUiDialogProps> | undefined;
   let stopWatching: () => void = () => {};
@@ -482,7 +485,38 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       anyShared(event) || ownerIds(event).length > 1
         ? "var(--family-neutral)"
         : accentOnCard(members.get(ownerIds(event)[0] ?? "")?.color ?? "var(--family-neutral)");
-    const matches = (event: FamilyEvent) => !person || anyShared(event) || ownerIds(event).includes(person);
+    const UNIFORM = DEFAULT_VOCABULARY.uniform;
+    const schoolSources = (event: FamilyEvent) => {
+      const sources = sourcesOf(event);
+      return sources.length > 0 && sources.every((calendar) => calendar.kind === "school") ? sources : undefined;
+    };
+    const layerOf = (event: FamilyEvent): "uniform" | "homework" | "course" | "family" => {
+      const sources = schoolSources(event);
+      if (!sources) return "family";
+      if (UNIFORM.test(event.title) && event.allDay) return "uniform";
+      if (DEFAULT_VOCABULARY.alwaysSignal.test(event.title)) return "family";
+      if (!event.allDay) return "course";
+      return UNIFORM.test(event.title) ? "uniform" : "homework";
+    };
+    const schoolOwners = (event: FamilyEvent) => [
+      ...new Set(sourcesOf(event).filter((calendar) => calendar.kind === "school").flatMap((calendar) => calendar.ownerIds)),
+    ];
+    // A selected person sees that child's school items. A shared school calendar can still carry a notice for every child.
+    const kidSeesSchool = (event: FamilyEvent, id: string) => {
+      const owners = schoolOwners(event);
+      return owners.includes(id);
+    };
+    const viewedId = person ?? (week.viewer?.role === "kid" ? week.viewer.memberId : undefined);
+    const showCourse = (event: FamilyEvent) => viewedId !== undefined && kidSeesSchool(event, viewedId);
+    const inView = (event: FamilyEvent) => {
+      const selectedPerson = person;
+      if (!selectedPerson) return true;
+      const layer = layerOf(event);
+      if (layer !== "family") return kidSeesSchool(event, selectedPerson);
+      if (familyOnly(event)) return true;
+      if (ownerIds(event).includes(selectedPerson)) return true;
+      return sourcesOf(event).some((calendar) => calendar.kind !== "school" && calendar.ownerIds.includes(selectedPerson));
+    };
 
     const start = noon(week.range.start);
     const end = noon(week.range.end);
@@ -527,7 +561,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       ),
     );
 
-    const filters = h("div", { class: "ocfp-filters", role: "group", "aria-label": "Dim events by person" });
+    const filters = h("div", { class: "ocfp-filters", role: "group", "aria-label": "Show one person's week" });
     const syncFilters = () => {
       for (const button of filters.querySelectorAll<HTMLButtonElement>(".ocfp-chip")) {
         const id = button.dataset.member ?? "";
@@ -546,8 +580,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
         "click",
         () => {
           person = person === id || id === null ? null : id;
-          syncFilters();
-          applyFilter();
+          render({ kind: "ready", week });
         },
       );
       return color ? paint(button, { "--ocfp-chip": accentOnCard(color) }) : button;
@@ -637,10 +670,47 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       { class: `ocfp-week-grid ocfp-panel${entering ? " is-entering" : ""}` },
       ...week.days.map((day) => {
         const date = noon(day.date);
-        const cards = day.eventIds.flatMap((id) => {
+        const dayEvents = day.eventIds.flatMap((id) => {
           const event = events.get(id);
-          return event ? [eventCard(event, day.date)] : [];
+          return event ? [event] : [];
         });
+        const visible = dayEvents.filter(inView);
+        const uniforms = visible.filter((event) => layerOf(event) === "uniform");
+        const homework = visible.filter((event) => layerOf(event) === "homework");
+        const cards = visible.flatMap((event) => {
+          const layer = layerOf(event);
+          if (layer === "uniform" || layer === "homework") return [];
+          if (layer === "course" && !showCourse(event)) return [];
+          return [eventCard(event, day.date)];
+        });
+        const uniformRow = uniforms.length
+          ? h(
+              "p",
+              { class: "ocfp-uniform" },
+              h("span", { class: "ocfp-layer-label" }, "Uniform"),
+              " ",
+              uniforms.map((event) => event.title).join(" · "),
+            )
+          : null;
+        const homeworkRow = homework.length
+          ? h(
+              "details",
+              { class: "ocfp-homework", ...(homeworkOpen ? { open: "" } : {}) },
+              h("summary", {}, h("span", { class: "ocfp-layer-label" }, "Homework"), ` · ${homework.length}`),
+              h(
+                "div",
+                { class: "ocfp-homework-items" },
+                ...homework.map((event) =>
+                  h(
+                    "span",
+                    { class: "ocfp-homework-item", "data-event-id": event.id },
+                    event.title,
+                    ownerLabel(event) ? h("span", { class: "ocfp-owner-name" }, ` ${ownerLabel(event)}`) : null,
+                  ),
+                ),
+              ),
+            )
+          : null;
         const classes = ["ocfp-day", day.isToday && "is-today", isWeekend(day.date) && "is-weekend", selectedDay === day.date && "is-selected"];
         return h(
           "section",
@@ -650,8 +720,10 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
             { class: "ocfp-day-head" },
             h("span", { class: "ocfp-day-weekday" }, fmt.weekday.format(date), day.isToday ? h("span", { class: "ocfp-today-badge" }, "Today") : null),
             h("span", { class: "ocfp-day-number" }, fmt.day.format(date)),
+            uniformRow,
           ),
           h("div", { class: "ocfp-day-events" }, ...(cards.length ? cards : [week.calendar.status === "ok" ? h("p", { class: "ocfp-day-empty" }, "Nothing planned") : null])),
+          homeworkRow,
         );
       }),
     );
@@ -700,14 +772,15 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       ),
     );
 
-    const applyFilter = () => {
-      for (const node of grid.querySelectorAll<HTMLElement>(".ocfp-event[data-event-id]")) {
-        const event = events.get(node.dataset.eventId ?? "");
-        node.classList.toggle("is-dimmed", event !== undefined && !matches(event));
-      }
+    for (const node of grid.querySelectorAll<HTMLDetailsElement>("details.ocfp-homework")) {
+      node.addEventListener("toggle", () => {
+        homeworkOpen = node.open;
+        for (const other of grid.querySelectorAll<HTMLDetailsElement>("details.ocfp-homework")) {
+          if (other !== node) other.open = homeworkOpen;
+        }
+      });
     };
     syncFilters();
-    applyFilter();
 
     const focused = focusTarget(content);
     showDelivery = true;

@@ -14,6 +14,7 @@ test("family.week returns one literal demo week to the owner", async () => {
   const config = parseConfig({ demo: true, timezone: "America/Toronto" });
   const week = await familyWeek(config, { now: () => Date.parse("2026-09-30T16:00:00Z") })({ start: "2026-10-01" }, { kind: "owner" });
   assert.deepEqual(week, {
+    viewer: { role: "parent" },
     mode: "demo",
     range: { start: "2026-09-28", end: "2026-10-04", timezone: "America/Toronto" },
     today: "2026-09-30",

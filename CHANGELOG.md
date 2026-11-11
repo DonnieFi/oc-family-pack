@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The Family week separates uniforms, day information and collapsible homework. Person chips filter to one person and include their classes; important school notices remain in day information. Display ownership follows configured calendars rather than guessing a student from feed volume.
+
 - Legacy devices with repeated labels now load and materialize collision-free ids. Unique label-based ids and all explicit ids are preserved. Migration is deterministic across roster/device ordering, and freezes ids before later renames.
 - Device reservations now accept only IPv4 literals. IPv6 (including previously accepted malformed literals) is refused with an explicit IPv4 error; remove or replace existing IPv6 reservations before upgrading.
 - The tested host is now OpenClaw `2026.11.1`. The devDependency, `build.openclawVersion`, `install.minHostVersion`, `compat.pluginApi`, peer range (`>=2026.11.1 <2026.12`), lockfile and host-pin test move together. The isolated smoke passes on 11.1. The `family_schedule` smoke derives its expected wall times from the family zone, so it passes in both EST and EDT.

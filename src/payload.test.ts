@@ -271,7 +271,7 @@ test("copies merge after the visibility filter, so a kid never sees a hidden cal
   }
 });
 
-test("family.week is byte-identical to the 00a3483 build, plus the two write flags, for a week with a merged copy and Google fields", async () => {
+test("family.week is byte-identical to the 00a3483 build, plus viewer identity and the two write flags, for a week with a merged copy and Google fields", async () => {
   const dir = mkdtempSync(join(tmpdir(), "ocfp-golden-"));
   const gogPath = join(dir, "gog");
   const fixtures = join(import.meta.dirname, "fixtures");
@@ -308,7 +308,7 @@ test("family.week is byte-identical to the 00a3483 build, plus the two write fla
     // s5k.39 renamed members[].profileId to memberId; the values are unchanged.
     const golden = readFileSync(join(fixtures, "week-00a3483.json"), "utf8")
       .replaceAll('"profileId":', '"memberId":')
-      .replace(/}$/, ',"canEdit":false,"calendarsReadOnly":false}');
+      .replace(/}$/, ',"viewer":{"role":"parent"},"canEdit":false,"calendarsReadOnly":false}');
     assert.equal(JSON.stringify(payload), golden);
   } finally {
     rmSync(dir, { recursive: true, force: true });

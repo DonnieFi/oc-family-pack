@@ -585,6 +585,45 @@
   font-style: italic;
 }
 
+.ocfp-uniform {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ocfp-layer-label {
+  color: var(--text-strong);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ocfp-homework {
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  padding: 8px 9px 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ocfp-homework summary {
+  cursor: pointer;
+}
+
+.ocfp-homework-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.ocfp-homework-item.is-dimmed {
+  opacity: 0.35;
+}
+
 .ocfp-event {
   --ocfp-event: var(--family-neutral);
   display: flex;

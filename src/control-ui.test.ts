@@ -224,6 +224,156 @@ function declaredColor(css: string, selector: string): string | undefined {
 }
 
 describe("family page", { concurrency: 1 }, () => {
+  test("parents see family events, with uniforms above and homework collapsed", async () => {
+    const base = week();
+    const page = mountPage({
+      result: {
+        ...base,
+        viewer: { role: "parent", memberId: "alex" },
+        calendars: [...base.calendars, { key: "cschool", label: "School", kind: "school", ownerIds: ["riley"] }],
+        days: base.days.map((day) => (day.date === "2026-09-30" ? { ...day, eventIds: ["e-alex", "e-class", "e-hw", "e-uniform"] } : day)),
+        calendar: {
+          status: "ok",
+          warnings: [],
+          data: [
+            ...(base.calendar.status === "ok" ? base.calendar.data.filter((event) => event.id === "e-alex") : []),
+            {
+              id: "e-class",
+              title: "Math",
+              start: "2026-09-30T12:00:00.000Z",
+              end: "2026-09-30T13:00:00.000Z",
+              allDay: false,
+              calendarKey: "cschool",
+            },
+            {
+              id: "e-hw",
+              title: "Math worksheet",
+              start: "2026-09-30",
+              end: "2026-10-01",
+              allDay: true,
+              calendarKey: "cschool",
+            },
+            {
+              id: "e-uniform",
+              title: "PE uniform",
+              start: "2026-09-30",
+              end: "2026-10-01",
+              allDay: true,
+              calendarKey: "cschool",
+            },
+          ],
+        },
+      },
+    });
+    await flush();
+    const day = page.container.querySelector("#ocfp-day-2026-09-30");
+    assert.equal(day?.querySelector(".ocfp-day-events")?.textContent?.includes("Dentist"), true);
+    assert.equal(day?.querySelector(".ocfp-day-events")?.textContent?.includes("Math"), false);
+    assert.equal(day?.querySelector(".ocfp-uniform")?.textContent?.includes("PE uniform"), true);
+    const homework = day?.querySelector("details.ocfp-homework");
+    assert.equal(homework?.querySelector("summary")?.textContent, "Homework · 1");
+    assert.equal(homework?.hasAttribute("open"), false);
+    assert.equal(homework?.textContent?.includes("Math worksheet"), true);
+  });
+
+  test("jordan does not see riley's classes, and both see a school-wide notice", async () => {
+    const base = week();
+    const sharedSchool = {
+      key: "cboth",
+      label: "Example School",
+      kind: "school" as const,
+      ownerIds: ["riley", "jordan"],
+    };
+    const rileyFeed = { key: "cfeed", label: "Riley classes", kind: "school" as const, ownerIds: ["riley"] };
+    const result = {
+      ...base,
+      viewer: { role: "parent" as const, memberId: "alex" },
+      members: [
+        ...base.members.filter((member) => !["riley", "jordan"].includes(member.memberId)),
+        { memberId: "riley", displayName: "Riley", role: "kid" as const, color: "oklch(0.7 0.1 300)" },
+        { memberId: "jordan", displayName: "Jordan", role: "kid" as const, color: "oklch(0.7 0.1 140)" },
+      ],
+      calendars: [...base.calendars, rileyFeed, sharedSchool, { key: "cjunior", label: "Jordan activities", kind: "school" as const, ownerIds: ["jordan"] }],
+      days: base.days.map((day) =>
+        day.date === "2026-09-30" ? { ...day, eventIds: ["e-math", "e-closed", "e-choir"] } : { ...day, eventIds: [] },
+      ),
+      calendar: {
+        status: "ok" as const,
+        warnings: [],
+        data: [
+          {
+            id: "e-math",
+            title: "Mathematics 10",
+            start: "2026-09-30T13:00:00.000Z",
+            end: "2026-09-30T14:00:00.000Z",
+            allDay: false,
+            calendarKey: "cfeed",
+          },
+          {
+            id: "e-closed",
+            title: "Remembrance Day — No School",
+            start: "2026-09-30",
+            end: "2026-10-01",
+            allDay: true,
+            calendarKey: "cboth",
+          },
+          {
+            id: "e-choir",
+            title: "Elementary School Choir",
+            start: "2026-09-30T20:00:00.000Z",
+            end: "2026-09-30T21:00:00.000Z",
+            allDay: false,
+            calendarKey: "cjunior",
+          },
+        ],
+      },
+    };
+    const page = mountPage({ result });
+    await flush();
+    assert.equal(page.container.querySelector("#ocfp-day-2026-09-30 .ocfp-day-events")?.textContent?.includes("No School"), true);
+    assert.equal(page.container.querySelector("#ocfp-day-2026-09-30 details.ocfp-homework")?.textContent?.includes("No School") ?? false, false);
+    const jordan = [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-chip")].find((chip) => chip.textContent?.startsWith("Jordan"));
+    jordan?.click();
+    const day = () => page.container.querySelector("#ocfp-day-2026-09-30")?.textContent ?? "";
+    assert.equal(day().includes("Mathematics 10"), false);
+    assert.equal(day().includes("No School"), true);
+    assert.equal(day().includes("Elementary"), true);
+    const riley = [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-chip")].find((chip) => chip.textContent?.startsWith("Riley"));
+    riley?.click();
+    const rileyDay = page.container.querySelector("#ocfp-day-2026-09-30")?.textContent ?? "";
+    assert.equal(rileyDay.includes("Mathematics 10"), true);
+    assert.equal(rileyDay.includes("No School"), true);
+    assert.equal(rileyDay.includes("Elementary"), false);
+  });
+
+  test("a kid still sees classes on a school calendar they own", async () => {
+    const base = week();
+    const page = mountPage({
+      result: {
+        ...base,
+        viewer: { role: "kid", memberId: "riley" },
+        calendars: [...base.calendars, { key: "cschool", label: "School", kind: "school", ownerIds: ["riley"] }],
+        days: base.days.map((day) => (day.date === "2026-09-30" ? { ...day, eventIds: ["e-class"] } : { ...day, eventIds: [] })),
+        calendar: {
+          status: "ok",
+          warnings: [],
+          data: [
+            {
+              id: "e-class",
+              title: "Math",
+              start: "2026-09-30T12:00:00.000Z",
+              end: "2026-09-30T13:00:00.000Z",
+              allDay: false,
+              calendarKey: "cschool",
+            },
+          ],
+        },
+      },
+    });
+    await flush();
+    assert.equal(page.container.querySelector("#ocfp-day-2026-09-30 .ocfp-day-events")?.textContent?.includes("Math"), true);
+  });
+
   test("phone today tab says Today and marks the date", async () => {
     const page = mountPage({});
     await flush();
@@ -266,17 +416,14 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(shared?.style.getPropertyValue("--ocfp-event"), "var(--family-neutral)");
   });
 
-  test("a dimmed event title uses the muted token", async () => {
+  test("choosing a person hides the others instead of dimming them", async () => {
     const page = mountPage({});
     await flush();
     const sam = [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-chip")].find((chip) => chip.textContent?.startsWith("Sam"));
     assert.ok(sam);
     sam.click();
-    const alex = page.container.querySelector("[data-event-id='e-alex']");
-    const title = alex?.querySelector(".ocfp-event-title");
-    assert.equal(alex?.classList.contains("is-dimmed"), true);
-    assert.equal(title?.textContent, "Dentist");
-    assert.equal(declaredColor(readFileSync(new URL("./control-ui.css", import.meta.url), "utf8"), ".ocfp-event.is-dimmed .ocfp-event-title"), "var(--muted)");
+    assert.equal(page.container.querySelector("[data-event-id='e-alex']"), null);
+    assert.ok(page.container.querySelector("[data-event-id='e-family']"));
   });
 
   test("dark mode keeps a member colour that already clears 3:1", async () => {
@@ -522,10 +669,10 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(disabledBody.includes("var(--muted)"), true);
   });
 
-  test("person chips keep focus, dim instead of hiding, and name the owner", async () => {
+  test("person chips keep focus, filter the week, and name the owner", async () => {
     const page = mountPage({ mode: "light" });
     await flush();
-    assert.equal(page.container.querySelector(".ocfp-filters")?.getAttribute("aria-label"), "Dim events by person");
+    assert.equal(page.container.querySelector(".ocfp-filters")?.getAttribute("aria-label"), "Show one person's week");
     const chips = () => [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-chip")];
     const everyone = chips().find((chip) => chip.textContent?.startsWith("Everyone"));
     const sam = chips().find((chip) => chip.textContent?.startsWith("Sam"));
@@ -533,20 +680,17 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(everyone?.getAttribute("aria-pressed"), "true");
     assert.equal(sam?.getAttribute("aria-pressed"), "false");
     assert.equal(alexChip?.style.getPropertyValue("--ocfp-chip"), "oklch(0.6509 0.1212 220.72)");
-    sam?.click();
-    assert.equal(chips().find((chip) => chip.textContent?.startsWith("Sam")), sam);
-    assert.equal(sam?.isConnected, true);
-    assert.equal(sam?.getAttribute("aria-pressed"), "true");
-    assert.equal(everyone?.getAttribute("aria-pressed"), "false");
     const alex = page.container.querySelector<HTMLElement>("[data-event-id='e-alex']");
-    const family = page.container.querySelector("[data-event-id='e-family']");
     assert.equal(alex?.querySelector(".ocfp-owner-name")?.textContent, "Alex");
-    assert.match(alex?.getAttribute("aria-label") ?? "", /^Dentist, .+, Alex$/);
-    assert.equal(family?.querySelector(".ocfp-chip-role")?.textContent, "Family");
-    assert.match(family?.getAttribute("aria-label") ?? "", /Family$/);
     alex?.click();
     const dot = page.dialogs[0]?.content.querySelector<HTMLElement>(".ocfp-owner-dot");
     assert.equal(dot?.style.getPropertyValue("--ocfp-dot"), "oklch(0.6509 0.1212 220.72)");
+    sam?.click();
+    const samNow = chips().find((chip) => chip.textContent?.startsWith("Sam"));
+    assert.equal(samNow?.getAttribute("aria-pressed"), "true");
+    assert.equal(chips().find((chip) => chip.textContent?.startsWith("Everyone"))?.getAttribute("aria-pressed"), "false");
+    assert.equal(page.container.querySelector("[data-event-id='e-alex']"), null);
+    assert.ok(page.container.querySelector("[data-event-id='e-family']"));
   });
 
   test("a merged event is one card with every owner's dot, a neutral stripe, and any owner's chip keeps it lit", async () => {

@@ -3,7 +3,7 @@ import { ConfigError } from "./config.js";
 import { MAX_WEEK_EVENTS } from "./contract.js";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.js";
 import { mergeCopies } from "./merge.js";
-import { visibleCalendarIds } from "./visibility.js";
+import { memberForViewer, visibleCalendarIds } from "./visibility.js";
 import { groupByDay, resolveMembers, resolveWeek } from "./week.js";
 /** The host's bounded-JSON limits for feature results (openclaw `host-hook-json`). Depth, key count, and string length are fixed by the schema. */
 const HOST_MAX_NODES = 4096;
@@ -52,6 +52,16 @@ function readCalendar(config, shown, week) {
         return Promise.resolve({ status: "hidden" });
     return readGogCalendars({ ...config, calendars: shown }, week);
 }
+/** Display identity for the week page. It does not change which calendars were read. */
+function pageViewer(members, viewer) {
+    const member = memberForViewer({ members }, viewer);
+    if (viewer.kind === "owner" || member?.role === "parent") {
+        return member ? { role: "parent", memberId: member.id } : { role: "parent" };
+    }
+    if (member?.role === "kid")
+        return { role: "kid", memberId: member.id };
+    return member ? { role: "guest", memberId: member.id } : { role: "guest" };
+}
 function calendarRef({ key, label, kind, owners }) {
     return { key, label, kind, ownerIds: owners };
 }
@@ -85,6 +95,7 @@ export async function buildWeekPayload(config, requestedStart, now, readWeather,
         calendar,
         weather,
         // The demo has no Google calendar to write to.
+        viewer: pageViewer(members, viewer),
         canEdit: access.canEdit && !config.demo,
         calendarsReadOnly: access.canEdit && !config.demo && access.grantReadOnly,
     });

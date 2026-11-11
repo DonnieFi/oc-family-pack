@@ -199,6 +199,14 @@ export const WeekPayloadSchema = Type.Object({
         Failed,
     ]),
     weather: WeatherStateSchema,
+    /**
+     * Who is looking. Display only: it never changes which calendars were read.
+     * A kid sees courses on school calendars they own. A parent does not.
+     */
+    viewer: Type.Optional(Type.Object({
+        role: MemberRole,
+        memberId: Type.Optional(Text(LABEL_MAX)),
+    })),
     /** The viewer's connection may write (operator.write or operator.admin): the page shows edit controls. */
     canEdit: Type.Boolean(),
     /** A viewer who may write, while the Google grant is read-only: the page says so instead. */

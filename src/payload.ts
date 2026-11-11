@@ -4,7 +4,7 @@ import { MAX_WEEK_EVENTS } from "./contract.ts";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.ts";
 import { mergeCopies } from "./merge.ts";
 import type { CalendarConfig, CalendarRef, CalendarState, CalendarStateOf, Config, FamilyEvent, SourceState, WeatherCard, WeekPayload } from "./types.ts";
-import { visibleCalendarIds, type Viewer } from "./visibility.ts";
+import { memberForViewer, visibleCalendarIds, type Viewer } from "./visibility.ts";
 import { groupByDay, resolveMembers, resolveWeek, type Week } from "./week.ts";
 
 /** The host's bounded-JSON limits for feature results (openclaw `host-hook-json`). Depth, key count, and string length are fixed by the schema. */
@@ -60,6 +60,16 @@ function readCalendar(config: Config, shown: CalendarConfig[], week: Week): Prom
   return readGogCalendars({ ...config, calendars: shown }, week);
 }
 
+/** Display identity for the week page. It does not change which calendars were read. */
+function pageViewer(members: Config["members"], viewer: Viewer): NonNullable<WeekPayload["viewer"]> {
+  const member = memberForViewer({ members }, viewer);
+  if (viewer.kind === "owner" || member?.role === "parent") {
+    return member ? { role: "parent", memberId: member.id } : { role: "parent" };
+  }
+  if (member?.role === "kid") return { role: "kid", memberId: member.id };
+  return member ? { role: "guest", memberId: member.id } : { role: "guest" };
+}
+
 function calendarRef({ key, label, kind, owners }: CalendarConfig): CalendarRef {
   return { key, label, kind, ownerIds: owners };
 }
@@ -100,6 +110,7 @@ export async function buildWeekPayload(
     calendar,
     weather,
     // The demo has no Google calendar to write to.
+    viewer: pageViewer(members, viewer),
     canEdit: access.canEdit && !config.demo,
     calendarsReadOnly: access.canEdit && !config.demo && access.grantReadOnly,
   });

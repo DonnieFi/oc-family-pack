@@ -59,7 +59,7 @@ The pictures below are the demo week (Alex, Sam, Riley, and Jordan). Demo mode d
 
 | Feature | What you get | Status |
 | --- | --- | --- |
-| Family page | Monday–Sunday week, a color per person, chips that dim events, Environment Canada weather, and a chat strip | Available |
+| Family page | Monday–Sunday week, a color per person, person chips that filter the week, Environment Canada weather, and a chat strip | Available |
 | Today widget | Up to three highlight lines on the Control UI dashboard for the shared owner and roster parents. A fresh Home gets the card once. If you remove it, the Family page offers to pin it again | Available |
 | Calendar changes | One write path from the page and from chat. A parent approves anything a kid cannot change alone. No undo | Available |
 | Daily and weekly briefs | 07:00 daily and Sunday 20:00 weekly, posted to the Discord summary channel you configure | Available |
@@ -165,7 +165,7 @@ A calendar `key` is optional. Set one (`c` plus up to seven letters or digits) b
 
 ## The Family page
 
-The week runs Monday through Sunday, in the household time zone. Each person has a color. The chips dim events in the view. They do not decide who you are, and they do not hide a calendar you are allowed to see.
+The week runs Monday through Sunday, in the household time zone. Each person has a color. The person chips filter the week in the view. They do not decide who you are, and they do not hide a calendar you are allowed to see.
 
 The weather card shows current conditions, today's high and low, and the next forecast periods. It only works in Canada. Elsewhere the card says so.
 
