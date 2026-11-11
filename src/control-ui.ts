@@ -503,11 +503,12 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     // A selected person sees that child's school items. A shared school calendar can still carry a notice for every child.
     const ownsSchoolEvent = (event: FamilyEvent, id: string) => schoolOwners(event).includes(id);
     const viewedId = person ?? (week.viewer?.role === "kid" ? week.viewer.memberId : undefined);
-    const showCourse = (event: FamilyEvent) => viewedId !== undefined && ownsSchoolEvent(event, viewedId);
+    const ownsVisibleCopy = (event: FamilyEvent, id: string) => ownsSchoolEvent(event, id) || ownerIds(event).includes(id);
+    const showCourse = (event: FamilyEvent) => viewedId !== undefined && ownsVisibleCopy(event, viewedId);
     const inView = (event: FamilyEvent, layer: "uniform" | "homework" | "course" | "family") => {
       const selectedPerson = person;
       if (!selectedPerson) return true;
-      if (layer !== "family") return ownsSchoolEvent(event, selectedPerson);
+      if (layer !== "family") return ownsVisibleCopy(event, selectedPerson);
       return familyOnly(event) || ownerIds(event).includes(selectedPerson);
     };
 

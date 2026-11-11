@@ -275,6 +275,9 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(homework?.querySelector("summary")?.textContent, "Homework · 1");
     assert.equal(homework?.hasAttribute("open"), false);
     assert.equal(homework?.textContent?.includes("Math worksheet"), true);
+    const alex = [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-chip")].find((chip) => chip.textContent?.startsWith("Alex"));
+    alex?.click();
+    assert.equal(page.container.querySelector("#ocfp-day-2026-09-30 .ocfp-day-events")?.textContent?.includes("Math"), true);
   });
 
   test("jordan does not see riley's classes, and both see a school-wide notice", async () => {
