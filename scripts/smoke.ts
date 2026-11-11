@@ -932,14 +932,14 @@ async function main(): Promise<void> {
   const opened = await waitForStore(stateDir);
   assertStoreModes(opened);
   const firstRows = readMigrations(opened);
-  if (firstRows.map((row) => row.id).join(",") !== "0001-initial,0002-write-log,0003-delivery-log,0004-reminder-mode,0005-home-seed,0006-delivery-target-kind") {
-    fail("sqlite store", `expected 0001-initial through 0006-delivery-target-kind, got ${JSON.stringify(firstRows)}`);
+  if (firstRows.map((row) => row.id).join(",") !== "0001-initial,0002-write-log,0003-delivery-log,0004-reminder-mode,0005-home-seed,0006-delivery-target-kind,0007-event-identity") {
+    fail("sqlite store", `expected 0001-initial through 0007-event-identity, got ${JSON.stringify(firstRows)}`);
   }
   const logsBlocked = readLogGuards(opened);
   if (logsBlocked.join(",") !== "write update,write delete,delivery update,delivery delete,reminder update,reminder delete") {
     fail("sqlite store", `the logs are not append-only in the Gateway's database: ${JSON.stringify(logsBlocked)}`);
   }
-  note("0002-write-log through 0006-delivery-target-kind are applied, and both logs refuse UPDATE and DELETE", "sqlite store");
+  note("0002-write-log through 0007-event-identity are applied, and both logs refuse UPDATE and DELETE", "sqlite store");
   const appliedAt = firstRows[0]?.applied_at ?? 0;
   const readyLine = stripAnsi(readFileSync(logPath, "utf8"))
     .split("\n")

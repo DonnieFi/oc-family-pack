@@ -90,8 +90,8 @@ test("a first start applies 0001 to 0005 and a second start applies nothing", as
   const { openFamilyStore } = await loadStore();
   try {
     const first = await openFamilyStore({ stateDir });
-    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind"]);
-    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind"]);
+    assert.deepEqual(first.ready.appliedNow, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind", "0007-event-identity"]);
+    assert.deepEqual(first.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind", "0007-event-identity"]);
     assert.deepEqual(first.ready.unknown, []);
     assert.equal(first.ready.journalMode, "wal");
     assert.equal(first.ready.isMainThread, false);
@@ -101,13 +101,13 @@ test("a first start applies 0001 to 0005 and a second start applies nothing", as
     assert.equal(status.scriptUrl.endsWith("/dist/store-worker.js"), true);
     assertPermissions(dbPath(stateDir));
     const rows = migrationRows(dbPath(stateDir));
-    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind"]);
+    assert.deepEqual(rows.map((row) => row.id), ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind", "0007-event-identity"]);
     const appliedAt = rows[0]?.applied_at;
     await first.stop();
 
     const second = await openFamilyStore({ stateDir });
     assert.deepEqual(second.ready.appliedNow, []);
-    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind"]);
+    assert.deepEqual(second.ready.applied, ["0001-initial", "0002-write-log", "0003-delivery-log", "0004-reminder-mode", "0005-home-seed", "0006-delivery-target-kind", "0007-event-identity"]);
     assert.equal(second.ready.journalMode, "wal");
     assertPermissions(dbPath(stateDir));
     const again = migrationRows(dbPath(stateDir));
@@ -500,6 +500,42 @@ test("fake timers fire the 5 second terminate fallback", async () => {
   } finally {
     mock.timers.reset();
     await worker?.terminate().catch(() => undefined);
+    rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("event identity survives a restart and a manual split", async () => {
+  const stateDir = tempState();
+  const { openFamilyStore } = await loadStore();
+  const { reconcile } = await import("./identity.ts");
+  let store = await openFamilyStore({ stateDir });
+  try {
+    const swim = [
+      { id: "c0/a", title: "Swim", start: "2026-09-30T13:00:00.000Z", end: "2026-09-30T14:00:00.000Z", allDay: false, calendarKey: "c0", google: { eventId: "a" } },
+      { id: "c1/b", title: "Swim", start: "2026-09-30T13:05:00.000Z", end: "2026-09-30T14:00:00.000Z", allDay: false, calendarKey: "c1", google: { eventId: "b" } },
+    ];
+    const first = reconcile(swim, await store.identityBook());
+    assert.equal(first.groups.length, 1);
+    if (first.patch.dirty) await store.rememberIdentity(first.patch);
+    await store.stop();
+    store = await openFamilyStore({ stateDir });
+    const renamed = reconcile(
+      swim.map((event) => ({ ...event, title: event.calendarKey === "c0" ? "Lane swim" : "Practice", start: "2026-09-30T18:00:00.000Z" })),
+      await store.identityBook(),
+    );
+    assert.equal(renamed.groups.length, 1);
+    assert.equal(renamed.groups[0]?.fpId, first.groups[0]?.fpId);
+    await store.recordIdentityOverride("split", [
+      { calendarKey: "c0", eventId: "a" },
+      { calendarKey: "c1", eventId: "b" },
+    ]);
+    const split = reconcile(swim, await store.identityBook());
+    assert.equal(split.groups.length, 2);
+    const chosen = split.groups.map((group) => group.fpId);
+    assert.equal(new Set(chosen).size, 2);
+    assert.equal(chosen.includes(first.groups[0]!.fpId), true);
+  } finally {
+    await store.stop().catch(() => undefined);
     rmSync(stateDir, { recursive: true, force: true });
   }
 });

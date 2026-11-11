@@ -114,6 +114,18 @@ test("a Google link whose eid decodes to a calendar address is omitted", () => {
   );
 });
 
+test("an iCal UID stays on the Gateway copy and a cancelled event is omitted", () => {
+  const events = parseGogEvents(
+    [
+      { id: "keep", summary: "Swim", iCalUID: "swim-uid", start: { dateTime: "2026-09-30T13:00:00Z" }, end: { dateTime: "2026-09-30T14:00:00Z" } },
+      { id: "gone", summary: "Swim", status: "cancelled", iCalUID: "swim-uid", start: { dateTime: "2026-09-30T13:00:00Z" } },
+    ],
+    kidCalendar,
+  );
+  assert.deepEqual(events?.map((event) => [event.id, event.google.iCalUID]), [["c0/keep", "swim-uid"]]);
+  assert.equal(JSON.stringify(events).includes("iCalUID"), true);
+});
+
 test("over-long Google strings are cut to their wire limits and an over-long link is dropped", () => {
   const [event] =
     parseGogEvents(

@@ -2,7 +2,8 @@ import { readGogCalendars, type GoogleEventFields } from "./calendar-gog.ts";
 import { ConfigError } from "./config.ts";
 import { MAX_WEEK_EVENTS } from "./contract.ts";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.ts";
-import { mergeCopies } from "./merge.ts";
+import { dedupEvents, memoryOf } from "./identity.ts";
+import { mergeGroup } from "./merge.ts";
 import type { CalendarConfig, CalendarRef, CalendarState, CalendarStateOf, Config, FamilyEvent, SourceState, WeatherCard, WeekPayload } from "./types.ts";
 import { memberForViewer, visibleCalendarIds, type Viewer } from "./visibility.ts";
 import { groupByDay, resolveMembers, resolveWeek, type Week } from "./week.ts";
@@ -78,6 +79,7 @@ export async function buildWeekPayload(
   readWeather: () => Promise<SourceState<WeatherCard>>,
   viewer: Viewer,
   access: { canEdit: boolean; grantReadOnly: boolean } = { canEdit: false, grantReadOnly: false },
+  identity?: () => object | undefined,
 ): Promise<WeekPayload> {
   let week: Week;
   try {
@@ -95,8 +97,9 @@ export async function buildWeekPayload(
   const visible = visibleCalendarIds({ members, calendars }, viewer);
   const shown = calendars.filter((entry) => visible.has(entry.id));
   const [read, weather] = await Promise.all([readCalendar(config, shown, week), readWeather()]);
-  // Merging runs on visible calendars only, so a merged event never names a hidden one.
-  const calendar: CalendarState = read.status === "ok" ? { ...read, data: mergeCopies(read.data).map(toWire) } : read;
+  // Dedup runs on visible calendars only, so a merged event never names a hidden one.
+  const merged = read.status === "ok" ? await dedupEvents(read.data, memoryOf(identity?.())) : undefined;
+  const calendar: CalendarState = read.status === "ok" && merged ? { ...read, data: merged.groups.map((group) => mergeGroup(group.copies)).map(toWire) } : read;
   return fitWeek({
     mode: config.demo ? "demo" : "live",
     range: week.range,

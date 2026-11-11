@@ -24,6 +24,8 @@ export type FamilyHandlerDeps = {
   fetchGarbage?: GarbageFetch;
   /** Where a failed garbage-calendar read is reported (never with the URL). */
   log?: (line: string) => void;
+  /** The open family store, for durable event identity. Absent until the service starts. */
+  identity?: () => object | undefined;
 };
 
 /** The Environment Canada card for the configured location, in the household's zone, cached for 30 minutes. */
@@ -39,7 +41,7 @@ export function familyWeek(config: Config, deps: FamilyHandlerDeps = {}) {
     buildWeekPayload(config, start, now(), readWeather, viewer, {
       canEdit,
       grantReadOnly: deps.grant?.get() === "read-only",
-    });
+    }, deps.identity);
 }
 
 /** Today for a page viewer resolved by the Gateway, using the same builder as the agent tool. */
@@ -47,7 +49,11 @@ export function familyTodayView(config: Config, deps: FamilyHandlerDeps = {}) {
   const now = deps.now ?? Date.now;
   const garbage = createGarbageFeed(deps.fetchGarbage, deps.log ? { log: deps.log } : {});
   return (viewer: Viewer): Promise<TodayPayload> =>
-    buildToday(config, { viewer }, now(), { ...(deps.runGog === undefined ? {} : { runGog: deps.runGog }), garbage });
+    buildToday(config, { viewer }, now(), {
+      ...(deps.runGog === undefined ? {} : { runGog: deps.runGog }),
+      garbage,
+      ...(deps.identity === undefined ? {} : { identity: deps.identity }),
+    });
 }
 
 /** Handlers for the registered queries. `family.schedule`, `family.today`, and `family.garbage` are also the agent's tools. */
@@ -62,9 +68,13 @@ export function familyHandlers(config: Config, deps: FamilyHandlerDeps = {}) {
     }),
     "family.weather": (): Promise<WeatherState> => readWeather(),
     "family.schedule": (input: ScheduleInput, context: FeatureInvocationContext): Promise<ScheduleOutput> =>
-      buildSchedule(config, input, caller(context), now(), deps.runGog),
+      buildSchedule(config, input, caller(context), now(), deps.runGog, deps.identity),
     "family.today": (_input: object, context: FeatureInvocationContext): Promise<TodayPayload> =>
-      buildToday(config, caller(context), now(), { ...(deps.runGog === undefined ? {} : { runGog: deps.runGog }), garbage }),
+      buildToday(config, caller(context), now(), {
+        ...(deps.runGog === undefined ? {} : { runGog: deps.runGog }),
+        garbage,
+        ...(deps.identity === undefined ? {} : { identity: deps.identity }),
+      }),
     "family.garbage": (): Promise<GarbageOutput> => garbageSchedule(garbage, config, now()),
   };
 }

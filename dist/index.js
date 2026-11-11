@@ -193,8 +193,8 @@ const plugin = defineFeaturePlugin({
             label: "Today",
             requiredScopes: ["operator.read"],
         });
-        api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant }), config), { scope: "operator.read" });
-        api.registerGatewayMethod(TODAY_VIEW_METHOD, todayViewMethod(familyTodayView(config, { grant: familyGrant, log: (line) => api.logger.warn(line) }), config.accessMode), { scope: "operator.read" });
+        api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant, identity: () => store }), config), { scope: "operator.read" });
+        api.registerGatewayMethod(TODAY_VIEW_METHOD, todayViewMethod(familyTodayView(config, { grant: familyGrant, log: (line) => api.logger.warn(line), identity: () => store }), config.accessMode), { scope: "operator.read" });
         // operator.write: a kid can read the week and cannot read contact details.
         const directoryConfig = () => config;
         const directoryRaw = () => api.pluginConfig;
@@ -208,6 +208,7 @@ const plugin = defineFeaturePlugin({
             runGog: execGog(),
             grant: familyGrant,
             log: () => store,
+            identity: () => store,
             changed: () => {
                 try {
                     // Guests receive this event, so it carries no calendar keys. The page refetches the week.
@@ -220,7 +221,7 @@ const plugin = defineFeaturePlugin({
         });
         api.registerGatewayMethod(PAGE_WRITE_METHOD, pageWriteMethod(() => config, writePage), { scope: "operator.write" });
         return {
-            ...familyHandlers(config, { log: (line) => api.logger.warn(line) }),
+            ...familyHandlers(config, { log: (line) => api.logger.warn(line), identity: () => store }),
         };
     },
 });

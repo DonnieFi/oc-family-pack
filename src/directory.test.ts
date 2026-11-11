@@ -398,7 +398,8 @@ test("a kid's saved lobster choices apply to Lobsterdex artwork", () => {
   const result = planDirectoryEdit([{ id: "riley", name: "Riley", role: "kid" }], [{ id: "riley", lobsterPreferences: ["balloon", "bee", "balloon", "not-a-lobster"] }]);
   assert.equal(result.ok, true);
   if (!result.ok) return;
-  assert.deepEqual(result.members[0]?.lobsterPreferences, ["balloon", "bee", "not-a-lobster"]);
+  const saved = result.members[0] as { lobsterPreferences?: string[] };
+  assert.deepEqual(saved.lobsterPreferences, ["balloon", "bee", "not-a-lobster"]);
   const config = parseConfig({ timezone: "UTC", members: result.members });
   const applied = applyLobsterChoices(config.members[0]?.lobsterPreferences);
   assert.deepEqual(applied.map((lobster) => lobster.id), ["balloon", "bee"]);

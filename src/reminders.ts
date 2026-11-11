@@ -1,9 +1,10 @@
 import { Type } from "typebox";
 import { DEMO_CALENDARS, DEMO_MEMBERS } from "./demo.ts";
 import { type DeliveryOutcome, type DeliveryTarget, type DiscordMessage } from "./discord-delivery.ts";
-import { groupCopies, mergeGroup } from "./merge.ts";
+import { dedupEvents, memoryOf } from "./identity.ts";
+import { mergeGroup } from "./merge.ts";
 import { alertDeliveryFailure } from "./briefs.ts";
-import { dueReminders, reminderAlert, reminderMessage, type QuietHours, type ReminderEvent, type ReminderMode } from "./reminder.ts";
+import { dueReminders, reminderAlert, reminderKey, reminderMessage, type QuietHours, type ReminderEvent, type ReminderMode } from "./reminder.ts";
 import { requesterFromFacts, type Requester } from "./requester.ts";
 import { resolveMemberReference } from "./person.ts";
 import { readEvents, type ReadEvent } from "./schedule.ts";
@@ -53,13 +54,18 @@ async function reminderEvents(deps: ReminderDeps, now: number): Promise<Reminder
   const byKey = new Map(calendars.map((calendar) => [calendar.key, calendar]));
   const order = new Map(members.map((member, index) => [member.id, index]));
   const names = new Map(members.map((member) => [member.id, member.displayName]));
-  return groupCopies(read.data.filter((event) => !event.allDay && byKey.has(event.calendarKey))).map((group) => {
-    const event = mergeGroup(group);
-    const owners = [...new Set(group.flatMap((copy) => byKey.get(copy.calendarKey)!.owners))]
+  const deduped = await dedupEvents(
+    read.data.filter((event) => !event.allDay && byKey.has(event.calendarKey)),
+    memoryOf(deps.store()),
+  );
+  return deduped.groups.map((group) => {
+    const event = mergeGroup(group.copies);
+    const owners = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey)!.owners))]
       .filter((id) => names.has(id))
       .sort((a, b) => order.get(a)! - order.get(b)!)
       .map((id) => ({ profileId: id, displayName: names.get(id)! }));
-    const updated = group.map((copy) => copy.google?.updated).filter((value): value is string => value !== undefined).sort().at(-1) ?? "";
+    const updated = group.copies.map((copy) => copy.google?.updated).filter((value): value is string => value !== undefined).sort().at(-1) ?? "";
+    const legacyIds = group.legacyIds.filter((id) => id !== event.id);
     return {
       id: event.id,
       title: event.title,
@@ -67,6 +73,7 @@ async function reminderEvents(deps: ReminderDeps, now: number): Promise<Reminder
       end: event.end,
       updated,
       owners,
+      ...(legacyIds.length > 0 ? { legacyIds } : {}),
       ...(event.location === undefined ? {} : { location: event.location }),
     };
   });
@@ -108,7 +115,8 @@ export async function reminderTick(deps: ReminderDeps, now: number): Promise<voi
     // mention in the summary channel; a repeated no-channel row is only for
     // an explicit dm request with nowhere to send it.
     if (member?.discordId === undefined && mode === "dm") continue;
-    if (await store.deliveryDone(due.key)) continue;
+    const prior = (due.event.legacyIds ?? []).map((id) => reminderKey(id, due.leadMinutes, due.event.updated, due.profileId));
+    if (await store.deliveryDone(due.key) || (await Promise.all(prior.map((key) => store.deliveryDone(key)))).some(Boolean)) continue;
     const channel = deps.config.summaryChannel;
     let outcome: DeliveryOutcome;
     let target: string;

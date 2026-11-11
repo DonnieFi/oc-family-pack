@@ -2,6 +2,7 @@ import { changeLine, ChangeInputError, NO_SUCH_EVENT, readChange } from "./calen
 import { approverPhrase, bernieWhen, calendarPlace, clean, createdLine, extraFields, failedLine, notApprovedLine } from "./calendar-create.js";
 import { checkKey, getEvent, normalizeCreate, somethingWrongLine, submitChange, submitCreate, END_BEFORE_START } from "./calendar-write.js";
 import { CalendarWriteSchema } from "./contract.js";
+import { memoryOf, resolveWriteSource } from "./identity.js";
 import { visibleCalendarIds } from "./visibility.js";
 /** The page's one write action. The answer is ux's line only: no event id, no key, no gog or store text. */
 export function pageWrite(deps) {
@@ -80,6 +81,23 @@ export function pageWrite(deps) {
         }
         if (!log)
             return { ok: false, message: somethingWrongLine(changeOp, undefined) };
+        const memory = memoryOf(deps.identity?.());
+        if (memory) {
+            const book = await memory.identityBook();
+            const bound = book.sources.find((source) => source.calendarKey === target.calendar.key && source.eventId === target.eventId);
+            const sources = bound ? book.sources.filter((source) => source.fpId === bound.fpId) : [{ calendarKey: target.calendar.key, eventId: target.eventId }];
+            const authorized = new Set(deps.config.calendars.filter((calendar) => visible === undefined || visible.has(calendar.id)).map((calendar) => calendar.key));
+            const chosen = resolveWriteSource({ calendarKey: target.calendar.key, eventId: target.eventId }, sources, authorized);
+            if (!chosen)
+                return { ok: false, message: NO_SUCH_EVENT };
+            if (chosen.calendarKey !== target.calendar.key || chosen.eventId !== target.eventId) {
+                const calendar = deps.config.calendars.find((entry) => entry.key === chosen.calendarKey);
+                if (!calendar)
+                    return { ok: false, message: NO_SUCH_EVENT };
+                target.calendar = calendar;
+                target.eventId = chosen.eventId;
+            }
+        }
         const result = await submitChange(submitDeps(log), {
             context,
             payload: input,

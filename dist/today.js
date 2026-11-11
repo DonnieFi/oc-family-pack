@@ -2,6 +2,8 @@ import { classifyEvent } from "./classify.js";
 import { MAX_WEEK_EVENTS } from "./contract.js";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.js";
 import { buildHighlightLines } from "./highlights.js";
+import { dedupEvents, memoryOf } from "./identity.js";
+import { mergeGroup } from "./merge.js";
 import { readEvents } from "./schedule.js";
 import { visibleCalendarIds } from "./visibility.js";
 import { localDate, resolveWeek } from "./week.js";
@@ -24,10 +26,6 @@ function overlapsToday(event, today, timezone) {
     const start = localDate(startMs, timezone);
     const end = localDate(Math.max((Number.isFinite(endMs) ? endMs : startMs) - 1, startMs), timezone);
     return start <= today && today <= end;
-}
-function ownerIds(calendar, members) {
-    const order = new Map(members.map((member, index) => [member.id, index]));
-    return calendar.owners.filter((id) => order.has(id)).sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
 }
 function classifyInput(event, kind) {
     return {
@@ -74,7 +72,10 @@ export async function buildToday(config, caller, now, deps = {}) {
     }
     const scored = [];
     const exceptions = [];
-    for (const event of read) {
+    const deduped = await dedupEvents(read, memoryOf(deps.identity?.()));
+    const rosterOrder = new Map(members.map((member, index) => [member.id, index]));
+    for (const group of deduped.groups) {
+        const event = mergeGroup(group.copies);
         const calendar = byKey.get(event.calendarKey);
         if (!calendar)
             continue;
@@ -89,6 +90,9 @@ export async function buildToday(config, caller, now, deps = {}) {
         });
         if (!overlapsToday(event, today, timezone) || classifyEvent(classifyInput(event, calendar.kind)).routine)
             continue;
+        const ownerIdsForGroup = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey)?.owners ?? []))]
+            .filter((id) => rosterOrder.has(id))
+            .sort((a, b) => (rosterOrder.get(a) ?? 0) - (rosterOrder.get(b) ?? 0));
         exceptions.push({
             id: event.id,
             title: event.title,
@@ -97,7 +101,7 @@ export async function buildToday(config, caller, now, deps = {}) {
             allDay: event.allDay,
             ...(event.location === undefined ? {} : { location: event.location }),
             calendarKey: event.calendarKey,
-            ownerIds: ownerIds(calendar, members),
+            ownerIds: ownerIdsForGroup,
         });
     }
     exceptions.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : a.title.localeCompare(b.title)));

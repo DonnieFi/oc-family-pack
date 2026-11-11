@@ -4,6 +4,7 @@
 
 - The People page opens a profile banner and the Lobsterdex. A parent picks up to eight companions. The choice is stored on that person's card and applied with the config patch. The page stays parent-only.
 - An all-day uniform or homework note whose calendar end is the same day still shows on that day.
+- Shared copies of one event keep a durable id. A title or time edit does not change it, and two appointments on one calendar stay separate. A write still changes one authorized calendar event.
 
 - Start calendar change polling with a seven-day window so Google does not reject the initial 30-day request.
 

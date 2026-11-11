@@ -196,6 +196,60 @@ const handlers: Record<string, (input: unknown) => unknown> = {
     const result = db.prepare("INSERT OR IGNORE INTO oc_family_pack_home (id, at) VALUES ('today', ?)").run(Date.now());
     return { inserted: result.changes === 1 };
   },
+  "identity.book": () => ({
+    sources: db.prepare("SELECT calendar_key AS calendarKey, event_id AS eventId, fp_id AS fpId, ical_uid AS iCalUid, series_id AS seriesId, occurrence FROM oc_family_pack_fp_source").all(),
+    overrides: db.prepare("SELECT kind, sources_json AS sourcesJson FROM oc_family_pack_fp_override ORDER BY id").all().map((row) => {
+      const record = row as { kind?: unknown; sourcesJson?: unknown };
+      let sources: unknown = [];
+      if (typeof record.sourcesJson === "string") {
+        try {
+          sources = JSON.parse(record.sourcesJson);
+        } catch {
+          sources = [];
+        }
+      }
+      return { kind: record.kind, sources };
+    }),
+    legacy: db.prepare("SELECT fp_id AS fpId, ref FROM oc_family_pack_fp_legacy").all(),
+  }),
+  "identity.remember": (input) => {
+    const sources = arrayField(input, "sources");
+    const legacy = arrayField(input, "legacy");
+    const dropLegacy = arrayField(input, "dropLegacy");
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const upsert = db.prepare(
+        `INSERT INTO oc_family_pack_fp_source (calendar_key, event_id, fp_id, ical_uid, series_id, occurrence) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (calendar_key, event_id) DO UPDATE SET fp_id = excluded.fp_id, ical_uid = excluded.ical_uid, series_id = excluded.series_id, occurrence = excluded.occurrence`,
+      );
+      for (const source of sources) {
+        const fpId = field(source, "fpId");
+        if (!/^fp_[0-9a-f]{32}$/.test(fpId)) throw new Error("oc-family-pack: event identity must be an fp-id");
+        upsert.run(field(source, "calendarKey"), field(source, "eventId"), fpId, optional(source, "iCalUid"), optional(source, "seriesId"), optional(source, "occurrence"));
+      }
+      const addLegacy = db.prepare("INSERT OR IGNORE INTO oc_family_pack_fp_legacy (fp_id, ref) VALUES (?, ?)");
+      for (const ref of legacy) addLegacy.run(field(ref, "fpId"), field(ref, "ref"));
+      const drop = db.prepare("DELETE FROM oc_family_pack_fp_legacy WHERE fp_id = ? AND ref = ?");
+      for (const ref of dropLegacy) drop.run(field(ref, "fpId"), field(ref, "ref"));
+      db.exec("COMMIT");
+    } catch (error) {
+      try {
+        db.exec("ROLLBACK");
+      } catch {
+        // The transaction is already closed when SQLite aborted it.
+      }
+      throw error;
+    }
+    return { ok: true };
+  },
+  "identity.override": (input) => {
+    const kind = field(input, "kind");
+    if (kind !== "merge" && kind !== "split") throw new Error("oc-family-pack: identity override is merge or split");
+    const sources = arrayField(input, "sources").map((source) => ({ calendarKey: field(source, "calendarKey"), eventId: field(source, "eventId") }));
+    if (sources.length < 2 || sources.length > 16) throw new Error("oc-family-pack: an identity override names two to sixteen sources");
+    db.prepare("INSERT INTO oc_family_pack_fp_override (kind, sources_json, at) VALUES (?, ?, ?)").run(kind, JSON.stringify(sources), Date.now());
+    return { ok: true };
+  },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -211,6 +265,15 @@ function field(input: unknown, name: string): string {
 function optional(input: unknown, name: string): string | null {
   const value = isRecord(input) ? input[name] : undefined;
   return typeof value === "string" ? value : null;
+}
+
+function arrayField(input: unknown, name: string): Record<string, unknown>[] {
+  const value = isRecord(input) ? input[name] : undefined;
+  if (!Array.isArray(value)) throw new Error(`oc-family-pack: store call needs ${name}`);
+  return value.map((entry) => {
+    if (!isRecord(entry)) throw new Error(`oc-family-pack: store call needs ${name}`);
+    return entry;
+  });
 }
 
 port.on("message", (message: unknown) => {

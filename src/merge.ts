@@ -1,44 +1,23 @@
+import { reconcile, type IdentityBook, normalTitle } from "./identity.ts";
 import type { FamilyEvent } from "./types.ts";
 
-/** Copies of one event start within this window of the earliest copy. */
-const MERGE_WINDOW_MS = 15 * 60_000;
-
-/** The title form copies are matched on, and that schedule lookups match words in. */
-export const normalTitle = (title: string) => title.normalize("NFKC").toLowerCase().trim().replace(/\s+/g, " ");
-
-const byStartThenCalendarThenId = (a: FamilyEvent, b: FamilyEvent) =>
-  Date.parse(a.start) - Date.parse(b.start) || a.calendarKey.localeCompare(b.calendarKey) || a.id.localeCompare(b.id);
+export { normalTitle };
 
 /**
- * The same event read from several calendars is one group of copies. Copies
- * match when their normalized titles are equal, both are all-day or both timed,
- * and each starts within 15 minutes of the earliest copy, so copies never chain.
- * Each group is ordered earliest copy first; groups keep their input order, so
- * a group sits where its earliest copy was.
+ * Copies of one household event. Provider identity matches first. A title and
+ * a 15-minute window match only an imported copy that has no provider identity,
+ * across calendars, and only when one candidate fits. Two appointments on one
+ * calendar stay apart. Pass `book` to keep fp-ids and manual merge or split.
  */
-export function groupCopies<E extends FamilyEvent>(events: readonly E[]): E[][] {
-  const groups: E[][] = [];
-  const open = new Map<string, E[]>();
-  const order = new Map(events.map((event, index) => [event, index]));
-  for (const event of [...events].sort(byStartThenCalendarThenId)) {
-    const key = `${event.allDay ? "day" : "time"}:${normalTitle(event.title)}`;
-    const group = open.get(key);
-    const first = group?.[0];
-    if (group && first && Date.parse(event.start) - Date.parse(first.start) <= MERGE_WINDOW_MS) {
-      group.push(event);
-      continue;
-    }
-    const fresh = [event];
-    groups.push(fresh);
-    open.set(key, fresh);
-  }
-  return groups.sort((a, b) => order.get(a[0]!)! - order.get(b[0]!)!);
+export function groupCopies<E extends FamilyEvent>(events: readonly E[], book?: IdentityBook): E[][] {
+  return reconcile(events, book).groups.map((group) => group.copies);
 }
 
 /**
  * One event for a group of copies. The earliest copy supplies id, title, times
- * and `calendarKey`; `calendarKeys` lists every source calendar and is set only
- * when there are two or more.
+ * and `calendarKey`; `calendarKeys` lists every source calendar in the group
+ * and is set only when there are two or more. The id is that copy's wire id,
+ * never an fp-id.
  */
 export function mergeGroup<E extends FamilyEvent>([first, ...rest]: readonly E[]): E {
   const merged: E = { ...first! };
@@ -56,6 +35,6 @@ export function mergeGroup<E extends FamilyEvent>([first, ...rest]: readonly E[]
 }
 
 /** The same event read from several calendars becomes one event, as `groupCopies` and `mergeGroup` describe. */
-export function mergeCopies<E extends FamilyEvent>(events: readonly E[]): E[] {
-  return groupCopies(events).map(mergeGroup);
+export function mergeCopies<E extends FamilyEvent>(events: readonly E[], book?: IdentityBook): E[] {
+  return groupCopies(events, book).map(mergeGroup);
 }

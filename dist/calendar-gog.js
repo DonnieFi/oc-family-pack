@@ -111,6 +111,9 @@ function googleFields(eventId, item) {
         fields.recurringEventId = recurringEventId;
     if (originalStart)
         fields.originalStart = originalStart;
+    const iCalUID = nonEmpty(item.iCalUID);
+    if (iCalUID)
+        fields.iCalUID = iCalUID;
     const description = nonEmpty(item.description);
     if (description)
         fields.description = description;

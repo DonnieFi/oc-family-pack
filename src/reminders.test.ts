@@ -177,6 +177,33 @@ test("a reminder mode that cannot deliver is refused instead of confirmed", asyn
   assert.equal((await setReminderMode(store, CONFIG.members, parent, "jordan", "off")).ok, true);
 });
 
+test("a reminder already sent under an older wire id is not sent again after the copies merge", async () => {
+  const store = await freshStore();
+  const updated = EVENT.google!.updated;
+  const later: ReadEvent = { ...EVENT, id: "c1/evt-later", calendarKey: "c1", google: { eventId: "evt-later", updated } };
+  const earlier: ReadEvent = { ...EVENT, id: "c0/evt-earlier", calendarKey: "c0", google: { eventId: "evt-earlier", updated } };
+  const config: Config = {
+    ...CONFIG,
+    calendars: [
+      { key: "c0", id: "demo-alex", label: "Alex", kind: "personal", owners: ["alex", "sam"] },
+      { key: "c1", id: "demo-sam", label: "Sam", kind: "personal", owners: ["alex", "sam"] },
+    ],
+  };
+  const first = rig(store);
+  first.deps.config = config;
+  first.deps.readCalendars = async () => ({ status: "ok", data: [later], warnings: [] });
+  await reminderTick(first.deps, at("2026-10-14", 9.75));
+  assert.deepEqual(
+    first.calls.map((call) => call.key),
+    [`reminder:c1/evt-later:15:${updated}:alex`, `reminder:c1/evt-later:15:${updated}:sam`],
+  );
+  const merged = rig(store);
+  merged.deps.config = config;
+  merged.deps.readCalendars = async () => ({ status: "ok", data: [earlier, later], warnings: [] });
+  await reminderTick(merged.deps, at("2026-10-14", 9.76));
+  assert.deepEqual(merged.calls, []);
+});
+
 test("a legacy email-login member keeps the reminder rows saved under that id", async () => {
   const store = await freshStore();
   const config = parseConfig({

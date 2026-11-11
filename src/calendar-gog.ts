@@ -36,6 +36,8 @@ export type GoogleEventFields = {
   recurringEventId?: string;
   /** The instance's slot in its series, in the same form as `start`; present only on recurring instances. */
   originalStart?: string;
+  /** Provider identity shared by copies of one event. Recurring instances also share it; the occurrence keeps them apart. */
+  iCalUID?: string;
   /** The event's notes, for the daily brief's homework line; never on the wire. */
   description?: string;
 };
@@ -135,6 +137,8 @@ function googleFields(eventId: string, item: Record<string, unknown>): GoogleEve
   if (etag) fields.etag = etag;
   if (recurringEventId) fields.recurringEventId = recurringEventId;
   if (originalStart) fields.originalStart = originalStart;
+  const iCalUID = nonEmpty(item.iCalUID);
+  if (iCalUID) fields.iCalUID = iCalUID;
   const description = nonEmpty(item.description);
   if (description) fields.description = description;
   return fields;

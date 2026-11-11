@@ -2,7 +2,8 @@ import { readGogCalendars } from "./calendar-gog.js";
 import { classifyEvent, clockTime, usualLine } from "./classify.js";
 import { CLASSES_LINE_MAX, LOOKUP_DAYS_MAX, SCHEDULE_DAYS_MAX, SCHEDULE_ITEMS_MAX, SCHEDULE_SECTIONS, USUAL_MAX } from "./contract.js";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.js";
-import { groupCopies, mergeGroup, normalTitle } from "./merge.js";
+import { dedupEvents, memoryOf } from "./identity.js";
+import { mergeGroup, normalTitle } from "./merge.js";
 import { resolveMemberReference } from "./person.js";
 import { fitsHostLimits } from "./payload.js";
 import { resolveRequester } from "./requester.js";
@@ -65,7 +66,7 @@ export async function readEvents(config, shown, span, runGog) {
     return readGogCalendars({ ...config, calendars: shown }, span, runGog);
 }
 /** The `family_schedule` tool: sections a parent scans, or title matches, from the calendars `viewer` may see. */
-export async function buildSchedule(config, input, caller, now, runGog) {
+export async function buildSchedule(config, input, caller, now, runGog, identity) {
     const timezone = config.timezone;
     const query = input.query === undefined ? [] : words(input.query);
     // A query with no words would match everything, so it reads as no query and keeps the week cap.
@@ -136,11 +137,12 @@ export async function buildSchedule(config, input, caller, now, runGog) {
         .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))
         .map((id) => names.get(id) ?? id);
     const sortKey = (event) => (event.allDay ? `${event.start}T00` : new Date(Date.parse(event.start)).toISOString());
-    const merged = groupCopies(copies)
+    const deduped = await dedupEvents(copies, memoryOf(identity?.()));
+    const merged = deduped.groups
         .map((group) => {
-        const best = group.reduce((a, b) => (PRECEDENCE.indexOf(b.section) < PRECEDENCE.indexOf(a.section) ? b : a));
-        const event = mergeGroup(group);
-        return { event, section: best.section, due: best.due, input: best.input, owners: ownersOf(group) };
+        const best = group.copies.reduce((a, b) => (PRECEDENCE.indexOf(b.section) < PRECEDENCE.indexOf(a.section) ? b : a));
+        const event = mergeGroup(group.copies);
+        return { event, section: best.section, due: best.due, input: best.input, owners: ownersOf(group.copies) };
     })
         .sort((a, b) => (sortKey(a.event) < sortKey(b.event) ? -1 : sortKey(a.event) > sortKey(b.event) ? 1 : a.event.title.localeCompare(b.event.title)));
     const item = ({ event, due, owners }) => ({

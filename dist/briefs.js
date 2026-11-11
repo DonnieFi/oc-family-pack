@@ -1,7 +1,8 @@
 import { dailyEmbed, longDay, weeklyEmbed } from "./brief.js";
 import { DEMO_CALENDARS, DEMO_MEMBERS } from "./demo.js";
 import {} from "./discord-delivery.js";
-import { groupCopies, mergeGroup } from "./merge.js";
+import { dedupEvents, memoryOf } from "./identity.js";
+import { mergeGroup } from "./merge.js";
 import { readEvents } from "./schedule.js";
 import { addDays, localDate, localTime } from "./week.js";
 /** Bernie's 07:00 daily and Sunday 20:00 weekly (jobs/bts_registration.py:92-103, :162-173), in the household zone. */
@@ -39,10 +40,11 @@ async function briefEvents(deps, start, end) {
     const byKey = new Map(calendars.map((calendar) => [calendar.key, calendar]));
     const order = new Map(members.map((member, index) => [member.id, index]));
     const names = new Map(members.map((member) => [member.id, member.displayName]));
-    return groupCopies(read.data.filter((event) => byKey.has(event.calendarKey))).map((group) => {
-        const event = mergeGroup(group);
+    const deduped = await dedupEvents(read.data.filter((event) => byKey.has(event.calendarKey)), memoryOf(deps.store()));
+    return deduped.groups.map((group) => {
+        const event = mergeGroup(group.copies);
         const calendar = byKey.get(event.calendarKey);
-        const owners = [...new Set(group.flatMap((copy) => byKey.get(copy.calendarKey).owners))]
+        const owners = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey).owners))]
             .filter((id) => names.has(id))
             .sort((a, b) => order.get(a) - order.get(b))
             .map((id) => names.get(id));

@@ -58,13 +58,13 @@ test("15 minutes apart merges, 16 does not, and all-day never merges with timed"
   assert.deepEqual([at15.length, at16.length, mixed.length], [1, 2, 2]);
 });
 
-test("different titles stay apart, ties break on calendar then id, and one calendar's copies carry no calendarKeys", () => {
+test("different titles stay apart, ties break on calendar then id, and one calendar's appointments stay apart", () => {
   const apart = mergeCopies([timed("c0/a", "c0", "Swim", "2026-09-30T13:00:00.000Z"), timed("c1/b", "c1", "Swim lesson", "2026-09-30T13:00:00.000Z")]);
   assert.equal(apart.length, 2);
   const tie = mergeCopies([timed("c3/z", "c3", "Swim", "2026-09-30T13:00:00.000Z"), timed("c1/y", "c1", "swim", "2026-09-30T13:00:00.000Z")]);
   assert.deepEqual(tie.map((event) => [event.id, event.title, event.calendarKeys]), [["c1/y", "swim", ["c1", "c3"]]]);
   const sameCalendar = mergeCopies([timed("c0/a", "c0", "Swim", "2026-09-30T13:00:00.000Z"), timed("c0/b", "c0", "Swim", "2026-09-30T13:05:00.000Z")]);
-  assert.deepEqual(sameCalendar.map((event) => [event.id, "calendarKeys" in event]), [["c0/a", false]]);
+  assert.deepEqual(sameCalendar.map((event) => event.id), ["c0/a", "c0/b"]);
 });
 
 test("events keep the order they came in, with a merged event where its earliest copy was", () => {

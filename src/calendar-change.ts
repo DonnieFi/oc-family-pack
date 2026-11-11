@@ -171,7 +171,8 @@ export function resolveWireId(calendars: readonly CalendarConfig[], wire: unknow
   if (slash <= 0) return undefined;
   const calendar = calendars.find((entry) => entry.key === wire.slice(0, slash));
   const eventId = wire.slice(slash + 1);
-  if (!calendar || !/^[^\s/\p{Cc}\p{Cf}]{1,1024}$/u.test(eventId)) return undefined;
+  // An fp-id names a household event inside the plugin. It is not a Google event id.
+  if (!calendar || /^fp_[0-9a-f]{32}$/.test(eventId) || !/^[^\s/\p{Cc}\p{Cf}]{1,1024}$/u.test(eventId)) return undefined;
   return { calendar, eventId };
 }
 

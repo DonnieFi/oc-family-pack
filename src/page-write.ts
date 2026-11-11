@@ -5,6 +5,7 @@ import { checkKey, getEvent, normalizeCreate, somethingWrongLine, submitChange, 
 import { CalendarWriteSchema } from "./contract.ts";
 import type { Requester } from "./requester.ts";
 import type { CalendarWrite, Config } from "./types.ts";
+import { memoryOf, resolveWriteSource } from "./identity.ts";
 import { visibleCalendarIds, type Viewer } from "./visibility.ts";
 
 export type PageWriteDeps = Omit<SubmitDeps, "log" | "config"> & {
@@ -12,6 +13,8 @@ export type PageWriteDeps = Omit<SubmitDeps, "log" | "config"> & {
   log: () => WriteLog | undefined;
   /** Tells open pages which calendars changed. */
   changed: (calendarKeys: string[]) => void;
+  /** The open family store, so a write follows one authorized source of a merged event. */
+  identity?: () => object | undefined;
 };
 
 export type PageWriteResult = { ok: boolean; message: string };
@@ -84,6 +87,21 @@ export function pageWrite(deps: PageWriteDeps) {
       return { ok: false, message: NO_SUCH_EVENT };
     }
     if (!log) return { ok: false, message: somethingWrongLine(changeOp, undefined) };
+    const memory = memoryOf(deps.identity?.());
+    if (memory) {
+      const book = await memory.identityBook();
+      const bound = book.sources.find((source) => source.calendarKey === target.calendar.key && source.eventId === target.eventId);
+      const sources = bound ? book.sources.filter((source) => source.fpId === bound.fpId) : [{ calendarKey: target.calendar.key, eventId: target.eventId }];
+      const authorized = new Set(deps.config.calendars.filter((calendar) => visible === undefined || visible.has(calendar.id)).map((calendar) => calendar.key));
+      const chosen = resolveWriteSource({ calendarKey: target.calendar.key, eventId: target.eventId }, sources, authorized);
+      if (!chosen) return { ok: false, message: NO_SUCH_EVENT };
+      if (chosen.calendarKey !== target.calendar.key || chosen.eventId !== target.eventId) {
+        const calendar = deps.config.calendars.find((entry) => entry.key === chosen.calendarKey);
+        if (!calendar) return { ok: false, message: NO_SUCH_EVENT };
+        target.calendar = calendar;
+        target.eventId = chosen.eventId;
+      }
+    }
     const result = await submitChange(submitDeps(log), {
       context,
       payload: input,

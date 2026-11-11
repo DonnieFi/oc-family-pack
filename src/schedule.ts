@@ -3,7 +3,8 @@ import { readGogCalendars, type GoogleEventFields, type RunGog } from "./calenda
 import { classifyEvent, clockTime, usualLine, type ClassifyInput } from "./classify.ts";
 import { CLASSES_LINE_MAX, LOOKUP_DAYS_MAX, SCHEDULE_DAYS_MAX, SCHEDULE_ITEMS_MAX, SCHEDULE_SECTIONS, USUAL_MAX } from "./contract.ts";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.ts";
-import { groupCopies, mergeGroup, normalTitle } from "./merge.ts";
+import { dedupEvents, memoryOf } from "./identity.ts";
+import { mergeGroup, normalTitle } from "./merge.ts";
 import { resolveMemberReference } from "./person.ts";
 import { fitsHostLimits } from "./payload.ts";
 import { resolveRequester } from "./requester.ts";
@@ -87,6 +88,7 @@ export async function buildSchedule(
   caller: ScheduleCaller,
   now: number,
   runGog?: RunGog,
+  identity?: () => object | undefined,
 ): Promise<ScheduleOutput> {
   const timezone = config.timezone;
   const query = input.query === undefined ? [] : words(input.query);
@@ -155,11 +157,12 @@ export async function buildSchedule(
       .map((id) => names.get(id) ?? id);
   const sortKey = (event: FamilyEvent) => (event.allDay ? `${event.start}T00` : new Date(Date.parse(event.start)).toISOString());
 
-  const merged = groupCopies(copies)
+  const deduped = await dedupEvents(copies, memoryOf(identity?.()));
+  const merged = deduped.groups
     .map((group) => {
-      const best = group.reduce((a, b) => (PRECEDENCE.indexOf(b.section) < PRECEDENCE.indexOf(a.section) ? b : a));
-      const event = mergeGroup(group);
-      return { event, section: best.section, due: best.due, input: best.input, owners: ownersOf(group) };
+      const best = group.copies.reduce((a, b) => (PRECEDENCE.indexOf(b.section) < PRECEDENCE.indexOf(a.section) ? b : a));
+      const event = mergeGroup(group.copies);
+      return { event, section: best.section, due: best.due, input: best.input, owners: ownersOf(group.copies) };
     })
     .sort((a, b) => (sortKey(a.event) < sortKey(b.event) ? -1 : sortKey(a.event) > sortKey(b.event) ? 1 : a.event.title.localeCompare(b.event.title)));
 

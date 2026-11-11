@@ -4,8 +4,10 @@ import { MAX_WEEK_EVENTS } from "./contract.ts";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.ts";
 import type { GarbageFeed } from "./garbage.ts";
 import { buildHighlightLines, type HighlightEvent } from "./highlights.ts";
+import { dedupEvents, memoryOf } from "./identity.ts";
+import { mergeGroup } from "./merge.ts";
 import { readEvents, type ScheduleCaller } from "./schedule.ts";
-import type { CalendarConfig, CalendarKind, Config, FamilyEvent, MemberConfig, TodayPayload } from "./types.ts";
+import type { CalendarKind, Config, FamilyEvent, TodayPayload } from "./types.ts";
 import { visibleCalendarIds } from "./visibility.ts";
 import { localDate, resolveWeek } from "./week.ts";
 
@@ -17,6 +19,7 @@ type ReadEvent = FamilyEvent & { google?: GoogleEventFields };
 export type TodayDeps = {
   runGog?: RunGog;
   garbage?: GarbageFeed;
+  identity?: () => object | undefined;
 };
 
 /** Local today, and far enough either side for a class that just ended or an event inside four hours. */
@@ -35,11 +38,6 @@ function overlapsToday(event: FamilyEvent, today: string, timezone: string): boo
   const start = localDate(startMs, timezone);
   const end = localDate(Math.max((Number.isFinite(endMs) ? endMs : startMs) - 1, startMs), timezone);
   return start <= today && today <= end;
-}
-
-function ownerIds(calendar: CalendarConfig, members: readonly MemberConfig[]): string[] {
-  const order = new Map(members.map((member, index) => [member.id, index]));
-  return calendar.owners.filter((id) => order.has(id)).sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
 }
 
 function classifyInput(event: ReadEvent, kind: CalendarKind): ClassifyInput {
@@ -87,7 +85,10 @@ export async function buildToday(config: Config, caller: ScheduleCaller, now: nu
 
   const scored: HighlightEvent[] = [];
   const exceptions: TodayPayload["exceptions"] = [];
-  for (const event of read) {
+  const deduped = await dedupEvents(read, memoryOf(deps.identity?.()));
+  const rosterOrder = new Map(members.map((member, index) => [member.id, index]));
+  for (const group of deduped.groups) {
+    const event = mergeGroup(group.copies);
     const calendar = byKey.get(event.calendarKey);
     if (!calendar) continue;
     const startMs = Date.parse(event.start);
@@ -100,6 +101,9 @@ export async function buildToday(config: Config, caller: ScheduleCaller, now: nu
       school: calendar.kind === "school",
     });
     if (!overlapsToday(event, today, timezone) || classifyEvent(classifyInput(event, calendar.kind)).routine) continue;
+    const ownerIdsForGroup = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey)?.owners ?? []))]
+      .filter((id) => rosterOrder.has(id))
+      .sort((a, b) => (rosterOrder.get(a) ?? 0) - (rosterOrder.get(b) ?? 0));
     exceptions.push({
       id: event.id,
       title: event.title,
@@ -108,7 +112,7 @@ export async function buildToday(config: Config, caller: ScheduleCaller, now: nu
       allDay: event.allDay,
       ...(event.location === undefined ? {} : { location: event.location }),
       calendarKey: event.calendarKey,
-      ownerIds: ownerIds(calendar, members),
+      ownerIds: ownerIdsForGroup,
     });
   }
   exceptions.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : a.title.localeCompare(b.title)));

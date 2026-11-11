@@ -2,7 +2,8 @@ import { readGogCalendars } from "./calendar-gog.js";
 import { ConfigError } from "./config.js";
 import { MAX_WEEK_EVENTS } from "./contract.js";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.js";
-import { mergeCopies } from "./merge.js";
+import { dedupEvents, memoryOf } from "./identity.js";
+import { mergeGroup } from "./merge.js";
 import { memberForViewer, visibleCalendarIds } from "./visibility.js";
 import { groupByDay, resolveMembers, resolveWeek } from "./week.js";
 /** The host's bounded-JSON limits for feature results (openclaw `host-hook-json`). Depth, key count, and string length are fixed by the schema. */
@@ -61,7 +62,7 @@ function pageViewer(members, viewer) {
 function calendarRef({ key, label, kind, owners }) {
     return { key, label, kind, ownerIds: owners };
 }
-export async function buildWeekPayload(config, requestedStart, now, readWeather, viewer, access = { canEdit: false, grantReadOnly: false }) {
+export async function buildWeekPayload(config, requestedStart, now, readWeather, viewer, access = { canEdit: false, grantReadOnly: false }, identity) {
     let week;
     try {
         // A start in the last week of year 9999 makes addDays throw: the range end is not a four-digit date.
@@ -79,8 +80,9 @@ export async function buildWeekPayload(config, requestedStart, now, readWeather,
     const visible = visibleCalendarIds({ members, calendars }, viewer);
     const shown = calendars.filter((entry) => visible.has(entry.id));
     const [read, weather] = await Promise.all([readCalendar(config, shown, week), readWeather()]);
-    // Merging runs on visible calendars only, so a merged event never names a hidden one.
-    const calendar = read.status === "ok" ? { ...read, data: mergeCopies(read.data).map(toWire) } : read;
+    // Dedup runs on visible calendars only, so a merged event never names a hidden one.
+    const merged = read.status === "ok" ? await dedupEvents(read.data, memoryOf(identity?.())) : undefined;
+    const calendar = read.status === "ok" && merged ? { ...read, data: merged.groups.map((group) => mergeGroup(group.copies)).map(toWire) } : read;
     return fitWeek({
         mode: config.demo ? "demo" : "live",
         range: week.range,

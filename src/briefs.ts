@@ -3,7 +3,8 @@ import { dailyEmbed, longDay, weeklyEmbed, type BriefEvent } from "./brief.ts";
 import { DEMO_CALENDARS, DEMO_MEMBERS } from "./demo.ts";
 import { type DeliveryDirectory, type DeliveryOutcome, type DeliveryTarget, type DiscordMessage } from "./discord-delivery.ts";
 import type { Collection } from "./garbage.ts";
-import { groupCopies, mergeGroup } from "./merge.ts";
+import { dedupEvents, memoryOf } from "./identity.ts";
+import { mergeGroup } from "./merge.ts";
 import { readEvents, type ReadEvent } from "./schedule.ts";
 import type { DeliveryKind, DeliveryLogRow, DeliveryStatus, FamilyStore } from "./store.ts";
 import type { CalendarStateOf, Config, WeatherCard } from "./types.ts";
@@ -65,10 +66,11 @@ async function briefEvents(deps: BriefDeps, start: string, end: string): Promise
   const byKey = new Map(calendars.map((calendar) => [calendar.key, calendar]));
   const order = new Map(members.map((member, index) => [member.id, index]));
   const names = new Map(members.map((member) => [member.id, member.displayName]));
-  return groupCopies(read.data.filter((event) => byKey.has(event.calendarKey))).map((group) => {
-    const event = mergeGroup(group);
+  const deduped = await dedupEvents(read.data.filter((event) => byKey.has(event.calendarKey)), memoryOf(deps.store()));
+  return deduped.groups.map((group) => {
+    const event = mergeGroup(group.copies);
     const calendar = byKey.get(event.calendarKey)!;
-    const owners = [...new Set(group.flatMap((copy) => byKey.get(copy.calendarKey)!.owners))]
+    const owners = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey)!.owners))]
       .filter((id) => names.has(id))
       .sort((a, b) => order.get(a)! - order.get(b)!)
       .map((id) => names.get(id)!);

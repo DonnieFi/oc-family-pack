@@ -25,6 +25,8 @@ export type ReminderEvent = {
   /** Latest Google updated time across merged copies, or "" when none of them have one. */
   updated: string;
   owners: { profileId: string; displayName: string }[];
+  /** Wire ids this household event used before the current one. A sent reminder for any of them is not sent again. */
+  legacyIds?: readonly string[];
 };
 
 export type DueReminder = {

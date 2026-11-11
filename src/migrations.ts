@@ -92,4 +92,32 @@ BEGIN SELECT RAISE(ABORT, 'oc_family_pack_reminder_mode is append-only'); END;`,
     // Older rows have no kind; member ids and channel keys shared one namespace.
     sql: `ALTER TABLE oc_family_pack_delivery_log ADD COLUMN target_kind TEXT`,
   },
+  {
+    id: "0007-event-identity",
+    // Durable household event identity. Source rows are the current mapping and
+    // may be updated. Override and legacy rows record a manual choice or a wire
+    // id a reminder already used. fp_id is never sent to Google as an event id.
+    sql: `CREATE TABLE oc_family_pack_fp_source (
+  calendar_key TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  fp_id TEXT NOT NULL,
+  ical_uid TEXT,
+  series_id TEXT,
+  occurrence TEXT,
+  PRIMARY KEY (calendar_key, event_id),
+  CHECK (length(fp_id) = 35 AND substr(fp_id, 1, 3) = 'fp_')
+) STRICT;
+CREATE INDEX oc_family_pack_fp_source_fp ON oc_family_pack_fp_source (fp_id);
+CREATE TABLE oc_family_pack_fp_override (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('merge', 'split')),
+  sources_json TEXT NOT NULL,
+  at INTEGER NOT NULL
+) STRICT;
+CREATE TABLE oc_family_pack_fp_legacy (
+  fp_id TEXT NOT NULL,
+  ref TEXT NOT NULL,
+  PRIMARY KEY (fp_id, ref)
+) STRICT;`,
+  },
 ];

@@ -219,6 +219,20 @@ async function openSession(options) {
             await ensureOpen();
             return (await post("home.claim", {}));
         },
+        async identityBook() {
+            await ensureOpen();
+            return readIdentityBook(await post("identity.book", {}));
+        },
+        async rememberIdentity(patch) {
+            await ensureOpen();
+            if (!patch.dirty)
+                return;
+            await post("identity.remember", { sources: patch.sources, legacy: patch.legacy, dropLegacy: patch.dropLegacy });
+        },
+        async recordIdentityOverride(kind, sources) {
+            await ensureOpen();
+            await post("identity.override", { kind, sources });
+        },
         stop() {
             if (stopPromise)
                 return stopPromise;
@@ -258,6 +272,64 @@ async function openSession(options) {
     };
     await ensureOpen();
     return api;
+}
+function optionalText(value) {
+    return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+function readIdentityBook(value) {
+    const empty = { sources: [], overrides: [], legacy: [] };
+    if (!value || typeof value !== "object")
+        return empty;
+    const record = value;
+    const sources = Array.isArray(record.sources)
+        ? record.sources.flatMap((entry) => {
+            if (!entry || typeof entry !== "object")
+                return [];
+            const row = entry;
+            if (typeof row.calendarKey !== "string" || typeof row.eventId !== "string" || typeof row.fpId !== "string")
+                return [];
+            const iCalUid = optionalText(row.iCalUid);
+            const seriesId = optionalText(row.seriesId);
+            const occurrence = optionalText(row.occurrence);
+            return [{
+                    calendarKey: row.calendarKey,
+                    eventId: row.eventId,
+                    fpId: row.fpId,
+                    ...(iCalUid ? { iCalUid } : {}),
+                    ...(seriesId ? { seriesId } : {}),
+                    ...(occurrence ? { occurrence } : {}),
+                }];
+        })
+        : [];
+    const overrides = Array.isArray(record.overrides)
+        ? record.overrides.flatMap((entry) => {
+            if (!entry || typeof entry !== "object")
+                return [];
+            const row = entry;
+            if ((row.kind !== "merge" && row.kind !== "split") || !Array.isArray(row.sources))
+                return [];
+            const sources = row.sources.flatMap((source) => {
+                if (!source || typeof source !== "object")
+                    return [];
+                const item = source;
+                if (typeof item.calendarKey !== "string" || typeof item.eventId !== "string" || item.calendarKey === "" || item.eventId === "")
+                    return [];
+                return [{ calendarKey: item.calendarKey, eventId: item.eventId }];
+            });
+            return sources.length >= 2 ? [{ kind: row.kind, sources }] : [];
+        })
+        : [];
+    const legacy = Array.isArray(record.legacy)
+        ? record.legacy.flatMap((entry) => {
+            if (!entry || typeof entry !== "object")
+                return [];
+            const row = entry;
+            if (typeof row.fpId !== "string" || typeof row.ref !== "string" || row.fpId === "" || row.ref === "")
+                return [];
+            return [{ fpId: row.fpId, ref: row.ref }];
+        })
+        : [];
+    return { sources, overrides, legacy };
 }
 function readLatestDelivery(value) {
     if (!value || typeof value !== "object")
