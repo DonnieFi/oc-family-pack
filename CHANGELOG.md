@@ -4,7 +4,7 @@
 
 - Start calendar change polling with a seven-day window so Google does not reject the initial 30-day request.
 
-- The Family week separates uniforms, day information and collapsible homework. Person chips filter to one person and include their classes; important school notices remain in day information. Display ownership follows configured calendars rather than guessing a student from feed volume.
+- The Family week separates uniforms, day information and collapsible homework. Person chips filter to one person and include their classes; important school notices remain in day information. Display ownership follows configured calendars rather than guessing a student from feed volume. Uniform notes stay visible on a narrow week and name the child. A day that only has homework does not say nothing is planned. A notice such as "PE exam" stays on the day.
 
 - Legacy devices with repeated labels now load and materialize collision-free ids. Unique label-based ids and all explicit ids are preserved. Migration is deterministic across roster/device ordering, and freezes ids before later renames.
 - Device reservations now accept only IPv4 literals. IPv6 (including previously accepted malformed literals) is refused with an explicit IPv4 error; remove or replace existing IPv6 reservations before upgrading.

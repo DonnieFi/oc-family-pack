@@ -492,8 +492,9 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     const layerOf = (event: FamilyEvent): "uniform" | "homework" | "course" | "family" => {
       const sources = schoolSources(event);
       if (!sources) return "family";
-      if (DEFAULT_VOCABULARY.uniform.test(event.title) && event.allDay) return "uniform";
+      // A notice such as "PE exam" also matches the uniform words. It stays on the day.
       if (DEFAULT_VOCABULARY.alwaysSignal.test(event.title)) return "family";
+      if (DEFAULT_VOCABULARY.uniform.test(event.title) && event.allDay) return "uniform";
       if (!event.allDay) return "course";
       return "homework";
     };
@@ -667,6 +668,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
         const uniforms: FamilyEvent[] = [];
         const homework: FamilyEvent[] = [];
         const cards: HTMLElement[] = [];
+        let coursesAwaitingPerson = false;
         for (const id of day.eventIds) {
           const event = events.get(id);
           if (!event) continue;
@@ -674,7 +676,8 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
           if (!inView(event, layer)) continue;
           if (layer === "uniform") uniforms.push(event);
           else if (layer === "homework") homework.push(event);
-          else if (layer !== "course" || showCourse(event)) cards.push(eventCard(event, day.date));
+          else if (layer === "course" && !showCourse(event) && viewedId === undefined) coursesAwaitingPerson = true;
+          else cards.push(eventCard(event, day.date));
         }
         const uniformRow = uniforms.length
           ? h(
@@ -682,7 +685,10 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
               { class: "ocfp-uniform" },
               h("span", { class: "ocfp-layer-label" }, "Uniform"),
               " ",
-              uniforms.map((event) => event.title).join(" · "),
+              ...uniforms.flatMap((event, index) => {
+                const owner = ownerLabel(event);
+                return [index > 0 ? " · " : "", event.title, owner ? h("span", { class: "ocfp-owner-name" }, ` ${owner}`) : ""];
+              }),
             )
           : null;
         const homeworkRow = homework.length
@@ -713,9 +719,23 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
             { class: "ocfp-day-head" },
             h("span", { class: "ocfp-day-weekday" }, fmt.weekday.format(date), day.isToday ? h("span", { class: "ocfp-today-badge" }, "Today") : null),
             h("span", { class: "ocfp-day-number" }, fmt.day.format(date)),
-            uniformRow,
           ),
-          h("div", { class: "ocfp-day-events" }, ...(cards.length ? cards : [week.calendar.status === "ok" ? h("p", { class: "ocfp-day-empty" }, "Nothing planned") : null])),
+          uniformRow,
+          h(
+            "div",
+            { class: "ocfp-day-events" },
+            ...(cards.length
+              ? cards
+              : [
+                  week.calendar.status === "ok" && uniforms.length === 0 && homework.length === 0
+                    ? h(
+                        "p",
+                        { class: "ocfp-day-empty" },
+                        coursesAwaitingPerson ? "Classes are under each person's chip" : "Nothing planned",
+                      )
+                    : null,
+                ]),
+          ),
           homeworkRow,
         );
       }),

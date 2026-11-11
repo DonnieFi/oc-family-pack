@@ -586,7 +586,8 @@
 }
 
 .ocfp-uniform {
-  margin: 8px 0 0;
+  margin: 0;
+  padding: 0 12px 8px;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
@@ -1056,6 +1057,10 @@
 
   .ocfp-day-head {
     display: none;
+  }
+
+  .ocfp-uniform {
+    padding: 12px 12px 0;
   }
 
   .ocfp-day-events {

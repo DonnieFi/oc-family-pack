@@ -378,6 +378,58 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(page.container.querySelector("#ocfp-day-2026-09-30 .ocfp-day-events")?.textContent?.includes("Math"), true);
   });
 
+  test("uniform notes stay visible, name the child, and leave notices on the day", async () => {
+    const base = week();
+    const page = mountPage({
+      result: {
+        ...base,
+        viewer: { role: "parent", memberId: "alex" },
+        members: [...base.members, { memberId: "riley", displayName: "Riley", role: "kid" as const, color: "oklch(0.7 0.1 300)" }],
+        calendars: [...base.calendars, { key: "cschool", label: "School", kind: "school", ownerIds: ["riley"] }],
+        days: base.days.map((day) => {
+          if (day.date === "2026-09-30") return { ...day, eventIds: ["e-exam", "e-uniform", "e-dress"] };
+          if (day.date === "2026-10-01") return { ...day, eventIds: ["e-hw"] };
+          if (day.date === "2026-10-02") return { ...day, eventIds: ["e-class"] };
+          return { ...day, eventIds: [] };
+        }),
+        calendar: {
+          status: "ok",
+          warnings: [],
+          data: [
+            { id: "e-exam", title: "PE exam", start: "2026-09-30", end: "2026-10-01", allDay: true, calendarKey: "cschool" },
+            { id: "e-uniform", title: "PE uniform", start: "2026-09-30", end: "2026-10-01", allDay: true, calendarKey: "cschool" },
+            { id: "e-dress", title: "Red Dress Day", start: "2026-09-30", end: "2026-10-01", allDay: true, calendarKey: "cschool" },
+            { id: "e-hw", title: "Math worksheet", start: "2026-10-01", end: "2026-10-02", allDay: true, calendarKey: "cschool" },
+            {
+              id: "e-class",
+              title: "Math",
+              start: "2026-10-02T12:00:00.000Z",
+              end: "2026-10-02T13:00:00.000Z",
+              allDay: false,
+              calendarKey: "cschool",
+            },
+          ],
+        },
+      },
+    });
+    await flush();
+    const wednesday = page.container.querySelector("#ocfp-day-2026-09-30");
+    const uniform = wednesday?.querySelector(".ocfp-uniform");
+    assert.equal(uniform?.parentElement, wednesday);
+    assert.equal(wednesday?.querySelector(".ocfp-day-head .ocfp-uniform"), null);
+    assert.equal(uniform?.textContent?.includes("PE uniform"), true);
+    assert.equal(uniform?.textContent?.includes("Riley"), true);
+    assert.equal(uniform?.textContent?.includes("Red Dress Day"), true);
+    assert.equal(uniform?.textContent?.includes("PE exam"), false);
+    assert.equal(wednesday?.querySelector(".ocfp-day-events")?.textContent?.includes("PE exam"), true);
+    assert.equal(wednesday?.textContent?.includes("Nothing planned"), false);
+    const thursday = page.container.querySelector("#ocfp-day-2026-10-01");
+    assert.equal(thursday?.textContent?.includes("Math worksheet"), true);
+    assert.equal(thursday?.textContent?.includes("Nothing planned"), false);
+    assert.equal(page.container.querySelector("#ocfp-day-2026-10-02 .ocfp-day-empty")?.textContent, "Classes are under each person's chip");
+    assert.equal(page.container.querySelector("#ocfp-day-2026-10-03 .ocfp-day-empty")?.textContent, "Nothing planned");
+  });
+
   test("phone today tab says Today and marks the date", async () => {
     const page = mountPage({});
     await flush();
