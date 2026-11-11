@@ -1,7 +1,7 @@
 export const POLL_MS = 3 * 60_000;
 export const MAX_WAIT_MS = 30 * 60_000;
-/** gog's own default window for `calendar changed`, used until a calendar has a baseline. */
-const FIRST_SINCE = "720h";
+/** Google Calendar can reject a 30-day updatedMin; start within the verified seven-day window. */
+const FIRST_SINCE = "168h";
 /** The live timer never keeps the Gateway process alive on its own. */
 export const unrefSchedule = (run, ms) => {
     const timer = setTimeout(run, ms);

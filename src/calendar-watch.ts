@@ -6,8 +6,8 @@ import type { CalendarConfig, Config } from "./types.ts";
 
 export const POLL_MS = 3 * 60_000;
 export const MAX_WAIT_MS = 30 * 60_000;
-/** gog's own default window for `calendar changed`, used until a calendar has a baseline. */
-const FIRST_SINCE = "720h";
+/** Google Calendar can reject a 30-day updatedMin; start within the verified seven-day window. */
+const FIRST_SINCE = "168h";
 
 /** Runs `run` after `ms`; the returned function cancels it. */
 export type Schedule = (run: () => void, ms: number) => () => void;

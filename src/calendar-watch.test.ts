@@ -78,7 +78,7 @@ test("the start-up read records a baseline without awaiting, emits nothing, and 
   const stop = h.start();
   assert.equal(typeof stop, "function");
   await h.settle();
-  assert.deepEqual(h.calls, [["calendar", "changed", "--since", "720h", "--max", "1", "--json", "--no-input", "--", "cal-a"]]);
+  assert.deepEqual(h.calls, [["calendar", "changed", "--since", "168h", "--max", "1", "--json", "--no-input", "--", "cal-a"]]);
   assert.deepEqual(h.emitted, []);
   assert.equal(h.timers.at(-1)?.ms, POLL_MS);
   assert.equal(POLL_MS, 3 * 60_000);
@@ -248,7 +248,7 @@ test("each poll re-reads gog's grant: read-only sets it, read-write clears it, a
   h.queue(AUTH_LIST, READ_ONLY_ACCOUNT, READ_WRITE_ACCOUNT, new Error("gog timed out"), JSON.stringify({ accounts: [] }), READ_ONLY_ACCOUNT);
   h.start();
   await h.settle();
-  assert.deepEqual(h.calls[0], ["calendar", "changed", "--since", "720h", "--max", "1", "--json", "--no-input", "--", "cal-a"]);
+  assert.deepEqual(h.calls[0], ["calendar", "changed", "--since", "168h", "--max", "1", "--json", "--no-input", "--", "cal-a"]);
   assert.deepEqual(h.calls[1], ["auth", "list", "--json", "--no-input"]);
   assert.equal(grant.get(), "read-only");
   await h.tick();

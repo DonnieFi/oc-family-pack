@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Start calendar change polling with a seven-day window so Google does not reject the initial 30-day request.
+
 - The Family week separates uniforms, day information and collapsible homework. Person chips filter to one person and include their classes; important school notices remain in day information. Display ownership follows configured calendars rather than guessing a student from feed volume.
 
 - Legacy devices with repeated labels now load and materialize collision-free ids. Unique label-based ids and all explicit ids are preserved. Migration is deterministic across roster/device ordering, and freezes ids before later renames.
