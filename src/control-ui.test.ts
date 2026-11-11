@@ -350,6 +350,16 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(rileyDay.includes("Elementary"), false);
   });
 
+  test("a multi-day homework item appears only on its due day", async () => {
+    const base = week();
+    const event = { id: "e-homework-span", title: "Worksheet", start: "2026-09-28", end: "2026-10-01", allDay: true, calendarKey: "cschool" };
+    const page = mountPage({ result: { ...base, viewer: { role: "parent", memberId: "alex" }, calendars: [...base.calendars, { key: "cschool", label: "School", kind: "school", ownerIds: ["riley"] }], days: base.days.map((day) => ({ ...day, eventIds: day.date >= "2026-09-28" && day.date <= "2026-09-30" ? [event.id] : [] })), calendar: { status: "ok", warnings: [], data: [event] } } });
+    await flush();
+    assert.equal(page.container.querySelector("#ocfp-day-2026-09-28")?.textContent?.includes("Worksheet"), false);
+    assert.equal(page.container.querySelector("#ocfp-day-2026-09-29")?.textContent?.includes("Worksheet"), false);
+    assert.equal(page.container.querySelector("#ocfp-day-2026-09-30")?.textContent?.includes("Worksheet"), true);
+  });
+
   test("a kid still sees classes on a school calendar they own", async () => {
     const base = week();
     const page = mountPage({
