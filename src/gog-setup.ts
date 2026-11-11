@@ -335,8 +335,8 @@ export function registerFamilyCli(
     .option("--discord <name=id...>", "Discord user IDs, like alex=123456789012345678")
     .option("--email <name=address...>", "Email addresses, like riley=riley@example.com")
     .option("--materialize-ids", "Print a patch that writes the member and device ids this config already uses")
-    .option("--guide", "Ask each remaining step and remember the answers")
-    .option("--dry-run", "With --guide, show the result and do not apply it")
+    .option("--guide", "Plan remaining steps and remember answers; does not apply config")
+    .option("--dry-run", "With --guide, preview without saving answers")
     .option("--noninteractive", "With --guide, print the checklist instead of asking")
     .option("--answer <choice...>", "Answers for --guide, in order: yes, no, back, skip, or cancel")
     .action(async (opts: AccessOptions & { discord?: string[]; email?: string[]; materializeIds?: boolean; guide?: boolean; dryRun?: boolean; noninteractive?: boolean; answer?: string[] }) => {
@@ -388,7 +388,7 @@ export function registerFamilyCli(
           settled: result,
         });
         let text = guided.text;
-        if (guided.save) {
+        if (guided.save && opts.dryRun !== true) {
           const save = saver ?? (opened ? (value: GuideCheckpoint) => opened!.saveGuideCheckpoint(JSON.stringify(value)) : undefined);
           if (save) {
             try {

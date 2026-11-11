@@ -150,3 +150,12 @@ test("all-day copies share a date and do not merge with a timed event", () => {
   const grouped = reconcile([day("a", "c0", "2026-09-30"), day("b", "c1", "2026-09-30"), day("c", "c2", "2026-10-01"), event("d", "c3", "PD day", at)]);
   assert.deepEqual(grouped.groups.map((group) => group.copies.map((copy) => copy.id)), [["c0/a", "c1/b"], ["c2/c"], ["c3/d"]]);
 });
+
+test("an imported copy merges on either side of its provider copy's start", () => {
+  for (const offset of [-5, 5]) {
+    assert.equal(reconcile([
+      event("import", "c0", "Math", later(offset)),
+      event("provider", "c1", "Math", at, { iCalUID: "math-uid" }),
+    ]).groups.length, 1);
+  }
+});

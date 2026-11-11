@@ -157,11 +157,13 @@ export function reconcile(events, book = EMPTY_BOOK) {
     const timedOrder = (left, right) => (Number.isFinite(left.startMs) ? left.startMs : Number.POSITIVE_INFINITY) - (Number.isFinite(right.startMs) ? right.startMs : Number.POSITIVE_INFINITY) ||
         left.event.calendarKey.localeCompare(right.event.calendarKey) ||
         left.event.id.localeCompare(right.event.id);
-    for (const copy of [...copies].sort(timedOrder)) {
+    for (const copy of [...copies].sort((a, b) => Number(Boolean(b.providerKey)) - Number(Boolean(a.providerKey)) || timedOrder(a, b))) {
         const root = find(copy.index);
         const existing = opens.find((open) => find(open.anchor) === root);
         if (existing) {
             existing.calendarKeys.add(copy.event.calendarKey);
+            existing.earliestStart = Math.min(existing.earliestStart, copy.startMs);
+            existing.latestStart = Math.max(existing.latestStart, copy.startMs);
             continue;
         }
         const within = (open) => {
@@ -171,7 +173,7 @@ export function reconcile(events, book = EMPTY_BOOK) {
                 return copy.event.start === open.earliestDate;
             if (!Number.isFinite(open.earliestStart) || !Number.isFinite(copy.startMs))
                 return false;
-            return copy.startMs >= open.earliestStart && copy.startMs - open.earliestStart <= MERGE_WINDOW_MS;
+            return Math.max(copy.startMs, open.latestStart) - Math.min(copy.startMs, open.earliestStart) <= MERGE_WINDOW_MS;
         };
         // A copy that already has provider identity was matched above. Similarity
         // only attaches an imported copy that has none, and only to one candidate.
@@ -182,11 +184,14 @@ export function reconcile(events, book = EMPTY_BOOK) {
             const open = matches[0];
             union(open.anchor, copy.index);
             open.calendarKeys.add(copy.event.calendarKey);
+            open.earliestStart = Math.min(open.earliestStart, copy.startMs);
+            open.latestStart = Math.max(open.latestStart, copy.startMs);
             continue;
         }
         opens.push({
             anchor: copy.index,
             earliestStart: copy.startMs,
+            latestStart: copy.startMs,
             earliestDate: copy.event.start,
             allDay: copy.event.allDay,
             titleKey: copy.titleKey,

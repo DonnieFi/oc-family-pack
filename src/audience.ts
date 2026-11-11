@@ -42,7 +42,7 @@ export function narrowedAudience(
 
 /** True when an earlier rule would match every title the later rule was written for. */
 export function ruleShadows(earlier: Pick<AudienceRule, "title" | "calendar">, later: Pick<AudienceRule, "title" | "calendar">): boolean {
-  const overlap = earlier.calendar === undefined || later.calendar === undefined || earlier.calendar === later.calendar;
+  const overlap = earlier.calendar === undefined || earlier.calendar === later.calendar;
   return overlap && hasName(later.title, earlier.title);
 }
 

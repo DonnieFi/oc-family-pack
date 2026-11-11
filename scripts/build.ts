@@ -1,13 +1,15 @@
 // Build a complete candidate without deleting the assets used by a running Gateway.
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { acquireBuildLock } from "./build-lock.ts";
 const root = resolve(import.meta.dirname, "..");
 const lock = join(root, ".family-build-lock");
-mkdirSync(lock);
-const stage = mkdtempSync(join(tmpdir(), "ocfp-build-"));
+const release = acquireBuildLock(lock);
+let stage: string | undefined;
 try {
+  stage = mkdtempSync(join(tmpdir(), "ocfp-build-"));
   for (const name of ["src", "scripts", "package.json", "openclaw.plugin.json", "tsconfig.json", "tsconfig.build.json"]) cpSync(join(root, name), join(stage, name), { recursive: true });
   execFileSync("tsc", ["-p", join(root, "tsconfig.build.json"), "--outDir", join(stage, "dist")], { stdio: "inherit" });
   // The candidate uses the existing pinned toolchain, not a new installation.
@@ -20,6 +22,6 @@ try {
   writeFileSync(`${target}.next`, readFileSync(join(stage, "openclaw.plugin.json")));
   renameSync(`${target}.next`, target);
 } finally {
-  rmSync(stage, { recursive: true, force: true });
-  rmSync(lock, { recursive: true, force: true });
+  if (stage) rmSync(stage, { recursive: true, force: true });
+  release();
 }

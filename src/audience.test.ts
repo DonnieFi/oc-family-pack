@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { narrowedAudience } from "./audience.ts";
+import { narrowedAudience, ruleShadows } from "./audience.ts";
 import { ConfigError, parseConfig } from "./config.ts";
 import { buildWeekPayload } from "./payload.ts";
 import { buildSchedule } from "./schedule.ts";
@@ -126,4 +126,9 @@ test("two students on one school calendar see different classes", async () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+ test("a scoped exception does not shadow a global fallback", () => {
+  assert.equal(ruleShadows({ title: "Choir", calendar: "cjunior" }, { title: "Choir" }), false);
+  assert.equal(ruleShadows({ title: "Choir" }, { title: "Choir", calendar: "cjunior" }), true);
 });

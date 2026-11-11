@@ -114,7 +114,7 @@ Setup checks the shape and does not repeat a bad address. The checklist and the 
 
 10. **Garbage calendar.** Optional. Done when `garbageIcsUrl` is an http or https `.ics` link. A `webcal://` link has to be written as `https://`.
 
-These five are listed as To do until they are set. They do not change the exit code, and they do not replace "Everything is set up." `openclaw family setup --guide` asks each one. skip leaves that one off.
+These five are listed as To do until they are set. They do not change the exit code, and they do not replace "Everything is set up." `openclaw family setup --guide` prints each question; supply choices with `--answer yes`, `--answer no`, or `--answer skip` on subsequent invocations. This is a saved planning checklist, not an interactive apply wizard. Apply the suggested commands separately and rerun setup to verify the configuration. A dry run does not save answers.
 
 After members exist, a checklist run may also print an optional Discord command, with `DISCORD_ID_alex` as a placeholder:
 
