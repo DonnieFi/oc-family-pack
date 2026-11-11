@@ -244,6 +244,7 @@ describe("family page", { concurrency: 1 }, () => {
               end: "2026-09-30T13:00:00.000Z",
               allDay: false,
               calendarKey: "cschool",
+              calendarKeys: ["cschool", "c0"],
             },
             {
               id: "e-hw",
@@ -693,7 +694,7 @@ describe("family page", { concurrency: 1 }, () => {
     assert.ok(page.container.querySelector("[data-event-id='e-family']"));
   });
 
-  test("a merged event is one card with every owner's dot, a neutral stripe, and any owner's chip keeps it lit", async () => {
+  test("a merged event is one card with every owner's dot, a neutral stripe, and any owner's chip keeps it shown", async () => {
     const payload = week();
     payload.calendars.push({ key: "c1", label: "Sam", kind: "personal", ownerIds: ["sam"] });
     const alexEvent = payload.calendar.status === "ok" ? payload.calendar.data[0] : undefined;
@@ -709,7 +710,7 @@ describe("family page", { concurrency: 1 }, () => {
     assert.match(card?.getAttribute("aria-label") ?? "", /Alex, Sam$/);
     const sam = [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-chip")].find((chip) => chip.textContent?.startsWith("Sam"));
     sam?.click();
-    assert.equal(page.container.querySelector("[data-event-id='e-alex']")?.classList.contains("is-dimmed"), false);
+    assert.ok(page.container.querySelector("[data-event-id='e-alex']"));
     page.container.querySelector<HTMLElement>("[data-event-id='e-alex']")?.click();
     const dialog = page.dialogs[0]?.content;
     assert.deepEqual([...(dialog?.querySelectorAll<HTMLElement>(".ocfp-owner-dot") ?? [])].map((dot) => dot.style.getPropertyValue("--ocfp-dot")), [

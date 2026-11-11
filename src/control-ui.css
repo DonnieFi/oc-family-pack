@@ -653,21 +653,6 @@
   background: color-mix(in oklab, var(--ocfp-event) 18%, var(--card));
 }
 
-.ocfp-event.is-dimmed {
-  border-color: var(--border);
-  background:
-    linear-gradient(90deg, var(--family-neutral) 0 3px, transparent 3px),
-    var(--card);
-  color: var(--muted);
-}
-
-.ocfp-event.is-dimmed .ocfp-event-title,
-.ocfp-event.is-dimmed .ocfp-event-meta,
-.ocfp-event.is-dimmed .ocfp-event-location,
-.ocfp-event.is-dimmed .ocfp-chip-role {
-  color: var(--muted);
-}
-
 .ocfp-event-meta {
   display: flex;
   align-items: center;

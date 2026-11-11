@@ -55,12 +55,8 @@ function readCalendar(config, shown, week) {
 /** Display identity for the week page. It does not change which calendars were read. */
 function pageViewer(members, viewer) {
     const member = memberForViewer({ members }, viewer);
-    if (viewer.kind === "owner" || member?.role === "parent") {
-        return member ? { role: "parent", memberId: member.id } : { role: "parent" };
-    }
-    if (member?.role === "kid")
-        return { role: "kid", memberId: member.id };
-    return member ? { role: "guest", memberId: member.id } : { role: "guest" };
+    const role = viewer.kind === "owner" || member?.role === "parent" ? "parent" : member?.role === "kid" ? "kid" : "guest";
+    return member ? { role, memberId: member.id } : { role };
 }
 function calendarRef({ key, label, kind, owners }) {
     return { key, label, kind, ownerIds: owners };

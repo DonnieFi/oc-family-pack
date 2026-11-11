@@ -63,11 +63,8 @@ function readCalendar(config: Config, shown: CalendarConfig[], week: Week): Prom
 /** Display identity for the week page. It does not change which calendars were read. */
 function pageViewer(members: Config["members"], viewer: Viewer): NonNullable<WeekPayload["viewer"]> {
   const member = memberForViewer({ members }, viewer);
-  if (viewer.kind === "owner" || member?.role === "parent") {
-    return member ? { role: "parent", memberId: member.id } : { role: "parent" };
-  }
-  if (member?.role === "kid") return { role: "kid", memberId: member.id };
-  return member ? { role: "guest", memberId: member.id } : { role: "guest" };
+  const role = viewer.kind === "owner" || member?.role === "parent" ? "parent" : member?.role === "kid" ? "kid" : "guest";
+  return member ? { role, memberId: member.id } : { role };
 }
 
 function calendarRef({ key, label, kind, owners }: CalendarConfig): CalendarRef {
