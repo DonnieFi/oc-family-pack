@@ -40,18 +40,20 @@ It is built for the questions a household actually asks:
 
 Daily and weekly briefs stay short. Routine items fold into a single line so the unusual things stand out.
 
-The pictures below are the demo week (Alex, Sam, Riley, and Jordan). Demo mode does not read a real calendar.
+The pictures below are the demo week (Alex, Sam, Riley, and Jordan). Demo mode does not read a real calendar. The dark picture is Everyone, the parent view. The light picture and the phone have Riley's chip selected, so other people's events leave the week. Riley's events stay, and so do family events and Riley's school items. The chip filters that view. It is not who is signed in.
+
+A signed-in kid already sees their own classes without pressing a chip. The Gateway matches their sign-in to `profileId`, and `family.week` names that kid as the viewer. A parent on Everyone does not see those classes until they pick that child. The demo week has no class times, so these pictures do not show a class list.
 
 <p align="center">
-  <img src="docs/readme/family-dark.png" alt="Family week in dark mode. Monday through Sunday, weather for Home, and a color for each person." width="920">
+  <img src="docs/readme/family-dark.png" alt="Family week in dark mode, Everyone selected. Wednesday, September 30 is today. Weather for Home, and a color for each person." width="920">
 </p>
 
 <p align="center">
-  <img src="docs/readme/family-light.png" alt="The same Family week in light mode." width="920">
+  <img src="docs/readme/family-light.png" alt="The same Family week in light mode, with Riley's chip selected." width="920">
 </p>
 
 <p align="center">
-  <img src="docs/readme/family-phone.png" alt="The Family page on a phone, with Sunday selected." width="280">
+  <img src="docs/readme/family-phone.png" alt="The Family page on a phone, with Riley selected and Wednesday showing." width="280">
   <img src="docs/readme/today.png" alt="The Today widget: Grocery run in 60 min." width="340">
 </p>
 
@@ -59,7 +61,7 @@ The pictures below are the demo week (Alex, Sam, Riley, and Jordan). Demo mode d
 
 | Feature | What you get | Status |
 | --- | --- | --- |
-| Family page | Monday–Sunday week, a color per person, person chips that filter the week, Environment Canada weather, and a chat strip | Available |
+| Family page | Monday–Sunday week, a color per person, person chips that filter the week and include that person's classes, Environment Canada weather, and a chat strip | Available |
 | Today widget | Up to three highlight lines on the Control UI dashboard for the shared owner and roster parents. A fresh Home gets the card once. If you remove it, the Family page offers to pin it again | Available |
 | Calendar changes | One write path from the page and from chat. A parent approves anything a kid cannot change alone. No undo | Available |
 | Daily and weekly briefs | 07:00 daily and Sunday 20:00 weekly, posted to the Discord summary channel you configure | Available |
@@ -167,6 +169,8 @@ A calendar `key` is optional. Set one (`c` plus up to seven letters or digits) b
 
 The week runs Monday through Sunday, in the household time zone. Each person has a color. The person chips filter the week in the view. They do not decide who you are, and they do not hide a calendar you are allowed to see.
 
+A school notice stays on the day. A uniform note stays on the day too, names the child, and stays visible on a phone. Homework is collapsed under the day. Classes stay off Everyone until that person is selected. A signed-in kid already sees classes on school calendars they own: the page uses the viewer from `family.week`, and that viewer is the roster person whose `profileId` matches the Gateway sign-in. A parent on Everyone does not see those classes until they pick that child. Pressing a chip filters the view. It does not change which calendars the Gateway sends.
+
 The weather card shows current conditions, today's high and low, and the next forecast periods. It only works in Canada. Elsewhere the card says so.
 
 The chat strip is labeled "Chat with". It opens any agent that signed-in person can already open. It does not grant a new agent.
@@ -249,7 +253,7 @@ Everything runs on your own OpenClaw Gateway. `gog` runs locally. This plugin st
 
 A weather request sends a search box around the coordinates in your config to Environment Canada. It does not send a street address. If you set `garbageIcsUrl`, the plugin fetches that collection calendar. Those are the outside reads. Briefs and reminders go out through the Discord bot OpenClaw already runs.
 
-The Gateway decides who sees which calendar before the week is sent to the page. Parents see every calendar. So does the shared-token owner, except in LAN mode, where a paired device token is a guest. Everyone sees shared calendars. A school or personal calendar also goes to its owners when that person is a member, not a guest. Guests, and anyone signed in who is not on the roster, see shared calendars only. The chips only dim events.
+The Gateway decides who sees which calendar before the week is sent to the page. Parents see every calendar. So does the shared-token owner, except in LAN mode, where a paired device token is a guest. Everyone sees shared calendars. A school or personal calendar also goes to its owners when that person is a member, not a guest. Guests, and anyone signed in who is not on the roster, see shared calendars only. The chips filter the week in the view. They are not a privacy control.
 
 Calendar write tool descriptions list the configured calendar labels so the agent knows where it can write. That metadata can name a calendar the person cannot read, though no event or contact detail from it is returned. If the labels themselves are sensitive, give each person their own agent instead of sharing one.
 

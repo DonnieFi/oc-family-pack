@@ -108,8 +108,9 @@ calendars. A school or personal calendar also goes to its owners when that
 person is a member and not a guest. Guests, and people who are not on the
 roster, see shared calendars only.
 
-The member chips dim events. They are not a privacy control. A calendar that
-even parents should not see does not belong in the config.
+The member chips filter the week in the view. They are not a privacy control. A calendar that
+even parents should not see does not belong in the config. A kid who is signed in sees
+classes on school calendars they own. Pressing a chip does not grant that.
 
 The Chat with strip uses that person's own agent list, so it only shows agents
 they can already open.
@@ -164,7 +165,7 @@ Authelia.
 
 A member is the household's record of a person, in `plugins.entries.oc-family-pack.config.members`. Only `name` is required. `id` is the household person id: an explicit `id`, otherwise the login, otherwise a lower-case slug of the name. Write the id down with `openclaw family setup --materialize-ids` before renaming someone or changing their login. `role` is `parent`, `kid`, or `guest`, and defaults to guest. Optional fields are `profileId` (or `login`), `gatewayProfileId`, `aliases`, `email`, `phone`, `color`, `discordId`, `reminders` (`dm`, `channel`, or `off`), and `devices`. `displayName` is the older spelling of `name` and still loads.
 
-`profileId` and `login` are the sign-in username, lower case, matched exactly to the trusted-proxy user. They are not the Gateway's internal profile id, and the login is never made up from the name. `gatewayProfileId` is that internal id, matched only when the host attests it on the connection. Someone with no login is not that person on the Family page unless a host-attested profile id matches; they still count in chat when their `discordId` matches. Setup's Members step stays To do until there is a parent. The chips on the Family page only dim events. They do not add a person, and they are not identity. The fields and the steps are in [SETUP.md](SETUP.md).
+`profileId` and `login` are the sign-in username, lower case, matched exactly to the trusted-proxy user. They are not the Gateway's internal profile id, and the login is never made up from the name. `gatewayProfileId` is that internal id, matched only when the host attests it on the connection. Someone with no login is not that person on the Family page unless a host-attested profile id matches; they still count in chat when their `discordId` matches. Setup's Members step stays To do until there is a parent. The chips on the Family page filter the week in the view. They do not add a person, and they are not identity. A kid sees their own classes because sign-in matches `profileId`. The fields and the steps are in [SETUP.md](SETUP.md).
 
 ## How do I add someone?
 
