@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { contactAuthority, familyContact } from "./contact.ts";
 import { parseConfig } from "./config.ts";
 import { planDirectoryEdit, planMaterialize } from "./directory.ts";
+import { applyLobsterChoices } from "./lobsters.ts";
 import { directoryMethod, directoryPreviewMethod } from "./directory-method.ts";
 import { PATCH_INTRO, planSetup } from "./setup.ts";
 import { visibleCalendarIds } from "./visibility.ts";
@@ -391,4 +392,16 @@ test("lobster preferences survive profile edits and can be cleared", () => {
   const cleared = planDirectoryEdit(changed.members, [{ id: "riley", lobsterPreferences: [] }]);
   assert.equal(cleared.ok, true);
   if (cleared.ok) assert.equal("lobsterPreferences" in (cleared.members[0] as object), false);
+});
+
+test("a kid's saved lobster choices apply to Lobsterdex artwork", () => {
+  const result = planDirectoryEdit([{ id: "riley", name: "Riley", role: "kid" }], [{ id: "riley", lobsterPreferences: ["balloon", "bee", "balloon", "not-a-lobster"] }]);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.members[0]?.lobsterPreferences, ["balloon", "bee", "not-a-lobster"]);
+  const config = parseConfig({ timezone: "UTC", members: result.members });
+  const applied = applyLobsterChoices(config.members[0]?.lobsterPreferences);
+  assert.deepEqual(applied.map((lobster) => lobster.id), ["balloon", "bee"]);
+  assert.deepEqual(applied.map((lobster) => lobster.name), ["Squeaky", "Buzz"]);
+  assert.equal(applied[0]?.shell, "#ff5c8a");
 });

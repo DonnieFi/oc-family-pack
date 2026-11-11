@@ -1134,7 +1134,8 @@
   font-size: 12px;
 }
 
-.ocfp-field input {
+.ocfp-field input,
+.ocfp-field select {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg);
@@ -1189,4 +1190,92 @@
 .ocfp-people-group h3, .ocfp-people-devices-title { color: var(--text-strong); font: 20px var(--family-display); margin: 0; }
 .ocfp-people-wide, .ocfp-people-devices-title { grid-column: 1 / -1; }
 .ocfp-people-back { align-self: flex-start; }
-@container ocfp (max-width: 760px) { .ocfp-people-form { grid-template-columns: 1fr; } }
+
+.ocfp-profile-banner {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--ocfp-person-color, var(--family-warm)) 14%, var(--card));
+}
+
+.ocfp-profile-banner-art {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 72px;
+  min-height: 64px;
+}
+
+.ocfp-profile-banner .ocfp-lobster-art {
+  width: 72px;
+  height: 64px;
+}
+
+.ocfp-people-avatar {
+  position: relative;
+}
+
+.ocfp-people-avatar .ocfp-lobster-art {
+  position: absolute;
+  right: -6px;
+  bottom: -8px;
+  width: 36px;
+  height: 32px;
+}
+
+.ocfp-lobster-picker {
+  grid-column: 1 / -1;
+}
+
+.ocfp-lobster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.ocfp-lobster {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 8px 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--card) 80%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ocfp-lobster .ocfp-lobster-art {
+  width: 64px;
+  height: 56px;
+}
+
+.ocfp-lobster[aria-pressed="true"] {
+  border-color: color-mix(in oklab, var(--ocfp-lobster) 70%, var(--border));
+  background: color-mix(in oklab, var(--ocfp-lobster) 16%, var(--card));
+  color: var(--text-strong);
+}
+
+.ocfp-lobster:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.ocfp-lobster:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@container ocfp (max-width: 760px) {
+  .ocfp-people-form { grid-template-columns: 1fr; }
+  .ocfp-profile-banner { flex-direction: column; align-items: flex-start; padding: 14px; }
+  .ocfp-lobster-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

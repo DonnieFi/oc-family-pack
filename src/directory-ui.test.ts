@@ -113,3 +113,37 @@ test("a parent edits the sample login and previews a patch that keeps the member
   assert.match(page.container.querySelector(".ocfp-patch")?.textContent ?? "", /person-riley/);
   assert.match(page.container.querySelector(".ocfp-patch")?.textContent ?? "", /riley-home/);
 });
+
+test("a parent pins Lobsterdex companions on a kid and the patch keeps them", async () => {
+  const page = mount(true, async (method) => {
+    if (method === DIRECTORY_METHOD) {
+      return {
+        persistence: "This preview does not write the Gateway config.",
+        delivery: "This version sends reminders and briefs through Discord.",
+        reservation: "A reserved address is stored on the device. Saving it does not change the router.",
+        members: [{ ...RILEY, lobsterPreferences: ["bee", "not-a-lobster"] }],
+      };
+    }
+    if (method === DIRECTORY_PREVIEW_METHOD) return { ok: true, changed: true, note: "This preview does not write the Gateway config.", patch: "{}" };
+    throw new Error(method);
+  });
+  await flush();
+  page.container.querySelector<HTMLButtonElement>(".ocfp-person")?.click();
+  const banner = page.container.querySelector(".ocfp-profile-banner");
+  assert.match(banner?.textContent ?? "", /Riley’s space/);
+  assert.match(banner?.textContent ?? "", /Buzz/);
+  assert.equal(page.container.querySelector('input[aria-label="Lobster preferences"]'), null);
+  const buzz = page.container.querySelector<HTMLButtonElement>('[data-lobster="bee"]');
+  const squeaky = page.container.querySelector<HTMLButtonElement>('[data-lobster="balloon"]');
+  assert.equal(buzz?.getAttribute("aria-pressed"), "true");
+  assert.equal(squeaky?.getAttribute("aria-pressed"), "false");
+  assert.match(buzz?.innerHTML ?? "", /#f4c531/);
+  assert.match(squeaky?.innerHTML ?? "", /#ff5c8a/);
+  squeaky?.click();
+  const preview = [...page.container.querySelectorAll("button")].find((button) => button.textContent === "Preview patch");
+  preview?.click();
+  await flush();
+  const sent = page.calls.find((call) => call[0] === DIRECTORY_PREVIEW_METHOD)?.[1] as { edits: { lobsterPreferences: string[] }[] };
+  assert.deepEqual(sent.edits[0]?.lobsterPreferences, ["bee", "not-a-lobster", "balloon"]);
+  assert.equal(page.container.querySelector('[data-lobster="balloon"]')?.getAttribute("aria-pressed"), "true");
+});

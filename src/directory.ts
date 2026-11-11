@@ -181,7 +181,8 @@ export function planDirectoryEdit(
       else next.aliases = aliases;
     }
     if (edit.lobsterPreferences !== undefined) {
-      if (edit.lobsterPreferences.length) next.lobsterPreferences = edit.lobsterPreferences;
+      const unique = [...new Set(edit.lobsterPreferences.map((item) => item.trim()).filter((item) => item !== ""))];
+      if (unique.length) next.lobsterPreferences = unique;
       else delete next.lobsterPreferences;
     }
     if (edit.role !== undefined) next.role = edit.role;

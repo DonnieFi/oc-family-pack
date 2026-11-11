@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The People page opens a profile banner and the Lobsterdex. A parent picks up to eight companions. The choice is stored on that person's card and applied with the config patch. The page stays parent-only.
+
 - Start calendar change polling with a seven-day window so Google does not reject the initial 30-day request.
 
 - The Family week separates uniforms, day information and collapsible homework. Person chips filter to one person and include their classes; important school notices remain in day information. Display ownership follows configured calendars rather than guessing a student from feed volume. Uniform notes stay visible on a narrow week and name the child. A day that only has homework does not say nothing is planned. A notice such as "PE exam" stays on the day.

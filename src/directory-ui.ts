@@ -3,6 +3,7 @@
 import type { ControlUiHost, ControlUiViewContext } from "openclaw/plugin-sdk/control-ui";
 import { DELIVERY_NOTE, DIRECTORY_METHOD, DIRECTORY_PREVIEW_METHOD, DIRECTORY_PERSISTENCE, RESERVATION_NOTE } from "./directory-contract.ts";
 import type { DirectoryDevice, DirectoryMember } from "./directory.ts";
+import { applyLobsterChoices, LOBSTER_LIMIT, LOBSTERS, lobsterArt } from "./lobsters.ts";
 
 type Child = Node | string | null | undefined | false;
 
@@ -170,10 +171,6 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
           member.role = value as DirectoryMember["role"];
           edited.add(selected);
         }),
-        field("Lobster preferences", (member.lobsterPreferences ?? []).join(", "), (value) => {
-          member.lobsterPreferences = value.split(",").map((part) => part.trim()).filter(Boolean);
-          edited.add(selected);
-        }),
         field("Color", member.color ?? "", (value) => {
           if (value === "") delete member.color;
           else member.color = value;
@@ -211,7 +208,69 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
         const key = label.querySelector("input, select")?.getAttribute("aria-label");
         (key === "Email" || key === "Phone" ? contact : key === "Login" || key === "Discord id" || key === "Reminders" ? signIn : identity).append(label);
       }
-      form.append(identity, signIn, contact, h("h3", { class: "ocfp-people-devices-title" }, "Network devices"), h("p", { class: "ocfp-people-note ocfp-people-wide" }, reservation));
+      const chosen = applyLobsterChoices(member.lobsterPreferences);
+      const unknown = (member.lobsterPreferences ?? []).filter((id, index, all) => !LOBSTERS.some((lobster) => lobster.id === id) && all.indexOf(id) === index);
+      const bannerArt = h("div", { class: "ocfp-profile-banner-art" });
+      for (const lobster of chosen.slice(0, 3)) bannerArt.append(lobsterArt(lobster));
+      const banner = h(
+        "div",
+        { class: "ocfp-profile-banner" },
+        bannerArt,
+        h(
+          "div",
+          {},
+          h("p", { class: "ocfp-kicker" }, `Profile · ${member.role}`),
+          h("h2", { class: "ocfp-people-title" }, `${member.displayName}’s space`),
+          h("p", { class: "ocfp-people-note" }, chosen.length > 0 ? `${chosen.map((lobster) => lobster.name).join(", ")} · lobster companion${chosen.length === 1 ? "" : "s"}` : "No lobster chosen yet."),
+        ),
+      );
+      if (member.color) banner.style.setProperty("--ocfp-person-color", member.color);
+      const picker = h("div", { class: "ocfp-lobster-grid", role: "group", "aria-label": "Lobster companions" });
+      const saved = new Set(member.lobsterPreferences ?? []);
+      const full = (member.lobsterPreferences ?? []).length >= LOBSTER_LIMIT;
+      for (const lobster of LOBSTERS) {
+        const pressed = saved.has(lobster.id);
+        const button = h(
+          "button",
+          {
+            type: "button",
+            class: "ocfp-lobster",
+            "data-lobster": lobster.id,
+            "aria-pressed": pressed ? "true" : "false",
+            "aria-label": lobster.name,
+            ...(full && !pressed ? { disabled: true } : {}),
+          },
+          lobsterArt(lobster),
+          h("span", {}, lobster.name),
+        );
+        button.style.setProperty("--ocfp-lobster", lobster.shell);
+        button.addEventListener("click", () => {
+          const current = member.lobsterPreferences ?? [];
+          const next = current.includes(lobster.id)
+            ? current.filter((id) => id !== lobster.id)
+            : current.length >= LOBSTER_LIMIT
+              ? current
+              : [...current, lobster.id];
+          if (next.length === 0) delete member.lobsterPreferences;
+          else member.lobsterPreferences = next;
+          edited.add(selected);
+          const focus = lobster.id;
+          paintForm();
+          paintList();
+          form.querySelector<HTMLButtonElement>(`[data-lobster="${focus}"]`)?.focus();
+        });
+        picker.append(button);
+      }
+      const lobsters = h(
+        "section",
+        { class: "ocfp-people-group ocfp-lobster-picker" },
+        h("h3", {}, "Lobster companion"),
+        h("p", { class: "ocfp-people-note" }, `Choose up to ${LOBSTER_LIMIT}. The choice is saved on this person's card when the config patch is applied.`),
+        picker,
+        unknown.length > 0 ? h("p", { class: "ocfp-people-note" }, `Saved, and not in this Lobsterdex: ${unknown.join(", ")}.`) : null,
+      );
+      form.prepend(banner);
+      form.append(identity, signIn, contact, lobsters, h("h3", { class: "ocfp-people-devices-title" }, "Network devices"), h("p", { class: "ocfp-people-note ocfp-people-wide" }, reservation));
       for (const device of member.devices) {
         const touch = () => edited.add(selected);
         form.append(
@@ -249,10 +308,13 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
     const paintList = () => {
       list.replaceChildren(
         ...members.map((member, index) => {
+          const companion = applyLobsterChoices(member.lobsterPreferences)[0];
+          const avatar = h("span", { class: "ocfp-people-avatar", "aria-hidden": "true" }, member.displayName.slice(0, 1).toUpperCase());
+          if (companion) avatar.append(lobsterArt(companion));
           const button = h("button", { type: "button", class: "ocfp-person", "aria-label": `Open ${member.displayName}'s profile` },
-            h("span", { class: "ocfp-people-avatar", "aria-hidden": "true" }, member.displayName.slice(0, 1).toUpperCase()),
+            avatar,
             h("strong", {}, member.displayName), h("span", { class: "ocfp-people-role" }, member.role),
-            h("span", { class: "ocfp-people-note" }, (member.aliases ?? []).join(", ") || "No aliases"),
+            h("span", { class: "ocfp-people-note" }, companion ? companion.name : (member.aliases ?? []).join(", ") || "No aliases"),
             h("span", { class: "ocfp-people-status" }, member.login ? "Sign-in ready" : "Sign-in needed", " · ", member.discordId ? "Discord linked" : "No Discord", ` · ${member.devices.length} devices`),
             ...(edited.has(index) ? [h("span", { class: "ocfp-people-dirty" }, "Edited")] : []));
           if (member.color) button.style.setProperty("--ocfp-person-color", member.color);
@@ -269,15 +331,12 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
     };
     const back = h("button", { type: "button", class: "ocfp-btn ocfp-people-back" }, "← Everyone");
     back.addEventListener("click", () => { profileOpen = false; paintList(); syncView(); list.querySelector<HTMLButtonElement>("button")?.focus(); });
-    const profileTitle = h("h2", { class: "ocfp-people-title" });
     const actions = h("div", { class: "ocfp-people-actions" });
     const syncView = () => {
       list.hidden = profileOpen;
       form.hidden = !profileOpen;
       back.hidden = !profileOpen;
-      profileTitle.hidden = !profileOpen;
       actions.hidden = !profileOpen;
-      if (profileOpen) profileTitle.textContent = `${members[selected]?.displayName ?? ""}’s profile`;
     };
     const preview = h("button", { type: "button" }, "Preview patch");
     preview.addEventListener("click", () => {
@@ -331,7 +390,6 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
       ...(demo ? [h("p", { class: "ocfp-people-note" }, "Demo mode shows the sample family. Turn demo off before previewing a roster patch.")] : []),
       list,
       back,
-      profileTitle,
       form,
       actions,
       result,
