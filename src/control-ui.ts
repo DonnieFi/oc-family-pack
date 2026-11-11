@@ -485,7 +485,6 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       anyShared(event) || ownerIds(event).length > 1
         ? "var(--family-neutral)"
         : accentOnCard(members.get(ownerIds(event)[0] ?? "")?.color ?? "var(--family-neutral)");
-    const UNIFORM = DEFAULT_VOCABULARY.uniform;
     const schoolSources = (event: FamilyEvent) => {
       const sources = sourcesOf(event);
       return sources.length > 0 && sources.every((calendar) => calendar.kind === "school") ? sources : undefined;
@@ -493,19 +492,16 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     const layerOf = (event: FamilyEvent): "uniform" | "homework" | "course" | "family" => {
       const sources = schoolSources(event);
       if (!sources) return "family";
-      if (UNIFORM.test(event.title) && event.allDay) return "uniform";
+      if (DEFAULT_VOCABULARY.uniform.test(event.title) && event.allDay) return "uniform";
       if (DEFAULT_VOCABULARY.alwaysSignal.test(event.title)) return "family";
       if (!event.allDay) return "course";
-      return UNIFORM.test(event.title) ? "uniform" : "homework";
+      return "homework";
     };
     const schoolOwners = (event: FamilyEvent) => [
       ...new Set(sourcesOf(event).filter((calendar) => calendar.kind === "school").flatMap((calendar) => calendar.ownerIds)),
     ];
     // A selected person sees that child's school items. A shared school calendar can still carry a notice for every child.
-    const kidSeesSchool = (event: FamilyEvent, id: string) => {
-      const owners = schoolOwners(event);
-      return owners.includes(id);
-    };
+    const kidSeesSchool = (event: FamilyEvent, id: string) => schoolOwners(event).includes(id);
     const viewedId = person ?? (week.viewer?.role === "kid" ? week.viewer.memberId : undefined);
     const showCourse = (event: FamilyEvent) => viewedId !== undefined && kidSeesSchool(event, viewedId);
     const inView = (event: FamilyEvent) => {

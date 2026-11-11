@@ -620,10 +620,6 @@
   margin-top: 6px;
 }
 
-.ocfp-homework-item.is-dimmed {
-  opacity: 0.35;
-}
-
 .ocfp-event {
   --ocfp-event: var(--family-neutral);
   display: flex;
