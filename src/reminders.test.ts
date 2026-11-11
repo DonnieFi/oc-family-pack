@@ -180,6 +180,7 @@ test("a reminder mode that cannot deliver is refused instead of confirmed", asyn
 test("a reminder already sent under an older wire id is not sent again after the copies merge", async () => {
   const store = await freshStore();
   const updated = EVENT.google!.updated;
+  assert.ok(updated);
   const later: ReadEvent = { ...EVENT, id: "c1/evt-later", calendarKey: "c1", google: { eventId: "evt-later", updated } };
   const earlier: ReadEvent = { ...EVENT, id: "c0/evt-earlier", calendarKey: "c0", google: { eventId: "evt-earlier", updated } };
   const config: Config = {
