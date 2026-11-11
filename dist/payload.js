@@ -100,11 +100,18 @@ export async function buildWeekPayload(config, requestedStart, now, readWeather,
         const publicCopies = group.copies.filter((copy) => visibleKeys.has(copy.calendarKey));
         const copies = publicCopies.length > 0 ? publicCopies : group.copies;
         const event = toWire(mergeGroup(copies));
+        const audienceIds = narrowedAudience(event, calendarsByKey, members, config.audienceRules);
+        if (publicCopies.length === 0) {
+            event.id = group.fpId;
+            event.calendarKey = "";
+            delete event.calendarKeys;
+            delete event.htmlLink;
+        }
         const ownerIds = [...new Set(copies.flatMap((copy) => calendars.find((calendar) => calendar.key === copy.calendarKey)?.owners ?? []))];
         const participantIds = extraParticipantIds(group.copies, ownerIds, members, config.participantOverrides);
-        const audienceIds = narrowedAudience(event, calendarsByKey, members, config.audienceRules);
         return {
             ...event,
+            fpId: group.fpId,
             ...(participantIds.length > 0 ? { participantIds } : {}),
             ...(audienceIds !== undefined ? { audienceIds } : {}),
         };

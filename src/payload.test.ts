@@ -9,6 +9,16 @@ import { WeekPayloadSchema } from "./contract.ts";
 import { buildWeekPayload, fitWeek, jsonNodeCount } from "./payload.ts";
 import type { FamilyEvent, WeekPayload } from "./types.ts";
 
+// Preserve the literal legacy contract while checking the additive household ID.
+function legacyRead(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value, (key, entry) => {
+    if (entry && typeof entry === "object" && "id" in entry && "title" in entry) {
+      assert.match(entry.fpId, /^fp_[0-9a-f]{32}$/);
+    }
+    return key === "fpId" ? undefined : entry;
+  }));
+}
+
 const noWeather = async () => ({ status: "unconfigured" as const, hint: "no weather" });
 const OWNER = { kind: "owner" } as const;
 const NOW = Date.parse("2026-09-30T16:00:00Z");
@@ -99,7 +109,7 @@ test("demo mode renders a synthetic week with a roster, calendars, colors, and d
       ["2026-10-04", false, ["demo/a2", "demo/t11", "demo/t12"]],
     ],
   );
-  assert.deepEqual(payload.calendar.status === "ok" && payload.calendar.data.find((event) => event.id === "demo/t0"), {
+  assert.deepEqual(legacyRead(payload.calendar.status === "ok" && payload.calendar.data.find((event) => event.id === "demo/t0")), {
     id: "demo/t0",
     title: "School drop-off",
     start: "2026-09-28T12:15:00.000Z",
@@ -271,7 +281,7 @@ test("copies merge after the visibility filter, so a kid never sees a hidden cal
   }
 });
 
-test("family.week is byte-identical to the 00a3483 build, plus viewer identity and the two write flags, for a week with a merged copy and Google fields", async () => {
+test("family.week is byte-identical to the 00a3483 build, plus viewer identity, write flags and household IDs, for a week with a merged copy and Google fields", async () => {
   const dir = mkdtempSync(join(tmpdir(), "ocfp-golden-"));
   const gogPath = join(dir, "gog");
   const fixtures = join(import.meta.dirname, "fixtures");
@@ -309,7 +319,7 @@ test("family.week is byte-identical to the 00a3483 build, plus viewer identity a
     const golden = readFileSync(join(fixtures, "week-00a3483.json"), "utf8")
       .replaceAll('"profileId":', '"memberId":')
       .replace(/}$/, ',"viewer":{"role":"parent"},"canEdit":false,"calendarsReadOnly":false}');
-    assert.equal(JSON.stringify(payload), golden);
+    assert.equal(JSON.stringify(legacyRead(payload)), golden);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

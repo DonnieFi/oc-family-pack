@@ -10,6 +10,16 @@ import { fitsHostLimits, jsonNodeCount } from "./payload.ts";
 import { buildSchedule, ME_UNKNOWN, NO_MATCH, NOTHING_ON, scheduleCaller, type ScheduleCaller } from "./schedule.ts";
 import type { ScheduleOutput } from "./types.ts";
 
+// Preserve the literal legacy contract while checking the additive household ID.
+function legacyRead(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value, (key, entry) => {
+    if (entry && typeof entry === "object" && "id" in entry && "title" in entry) {
+      assert.match(entry.fpId, /^fp_[0-9a-f]{32}$/);
+    }
+    return key === "fpId" ? undefined : entry;
+  }));
+}
+
 const TZ = "America/Toronto";
 /** Friday Oct 9, 2026, mid-afternoon in Toronto. */
 const NOW = Date.parse("2026-10-09T18:00:00Z");
@@ -118,14 +128,14 @@ const FRIDAY: ScheduleOutput = {
 
 test("a day reads as not the usual, homework, uniforms, classes, then the usual line", async () => {
   const { output } = await schedule({ start: "2026-10-09" });
-  assert.deepEqual(output, FRIDAY);
+  assert.deepEqual(legacyRead(output), FRIDAY);
 });
 
 test("start defaults to today in the family's timezone, not UTC", async () => {
   const { config, runGog } = household();
   // 11:30 PM Friday in Toronto is already Saturday in UTC.
   const output = await buildSchedule(config, {}, OWNER, Date.parse("2026-10-10T03:30:00Z"), runGog);
-  assert.deepEqual(output, FRIDAY);
+  assert.deepEqual(legacyRead(output), FRIDAY);
 });
 
 test("each event appears once, even when copies sit on two calendars", async () => {
@@ -152,7 +162,7 @@ test("a merged event takes the earliest section in precedence: homework, uniform
     family: [allDay("p1", "Science project", "2026-10-09", "2026-10-10")],
     "school-calla": [allDay("p2", "Science project", "2026-10-09", "2026-10-10")],
   });
-  assert.deepEqual(homework.output, {
+  assert.deepEqual(legacyRead(homework.output), {
     sections: [{ name: "homework", items: [{ id: "c2/p1", title: "Science project", allDay: true, due: "Fri Oct 9", owners: ["Donnie", "Britta", "Calla", "Penny"] }] }],
   });
 });
@@ -230,12 +240,12 @@ test("a query with no days looks 90 days ahead, and an explicit days still wins"
 test("a query that normalizes to empty is no query and keeps the week cap", async () => {
   assert.ok("error" in (await schedule({ start: "2026-10-09", days: 8, query: "   " })).output);
   assert.ok("error" in (await schedule({ start: "2026-10-09", days: 8, query: " - " })).output);
-  assert.deepEqual((await schedule({ start: "2026-10-09", query: "   " })).output, FRIDAY);
+  assert.deepEqual(legacyRead((await schedule({ start: "2026-10-09", query: "   " })).output), FRIDAY);
 });
 
 test("a query lists whole-word title matches in one section sorted by start", async () => {
   const { output } = await schedule({ start: "2026-10-09", days: 2, query: "  SWIM " });
-  assert.deepEqual(output, {
+  assert.deepEqual(legacyRead(output), {
     sections: [
       {
         name: "matches",

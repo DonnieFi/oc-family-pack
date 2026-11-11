@@ -121,13 +121,14 @@ export async function buildToday(config: Config, caller: ScheduleCaller, now: nu
       .sort((a, b) => (rosterOrder.get(a) ?? 0) - (rosterOrder.get(b) ?? 0));
     const participantIds = extraParticipantIds(group.copies, ownerIdsForGroup, members, config.participantOverrides);
     exceptions.push({
-      id: event.id,
+      id: publicCopies.length === 0 ? group.fpId : event.id,
+      fpId: group.fpId,
       title: event.title,
       start: event.start,
       end: event.end,
       allDay: event.allDay,
       ...(event.location === undefined ? {} : { location: event.location }),
-      calendarKey: event.calendarKey,
+      calendarKey: publicCopies.length === 0 ? "" : event.calendarKey,
       ownerIds: ownerIdsForGroup,
       ...(participantIds.length > 0 ? { participantIds } : {}),
     });

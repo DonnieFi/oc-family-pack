@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Week, Today, and Schedule expose a durable household `fpId` while retaining visible-source `id` write references. Participant-only hidden-calendar events redact provider IDs, source calendar keys, and Google links.
+
 - An appointment that names someone, such as "Riley dentist" on Alex's calendar, shows in that person's week and answers. It is not copied and nobody is invited. A name shared by two people is left unset until the household confirms one. The rest of a hidden calendar stays hidden.
 - `openclaw family setup --guide` asks the remaining steps, remembers the answers, and can resume. cancel does not report success. `--noninteractive` prints the checklist. `--dry-run` says nothing was applied. The guide does not write Gateway config.
 - Setup lists the Discord alerts channel, the morning, after-school, and weekend-preview briefs, and the garbage calendar. A channel, clock time, or `.ics` link already in the config is Done. One Discord channel already on the Gateway is the id the alerts step prints. These five are optional and do not block "Everything is set up."

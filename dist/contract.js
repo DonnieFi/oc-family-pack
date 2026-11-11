@@ -49,6 +49,8 @@ export const CalendarRefSchema = Type.Object({
 /** Timed events carry ISO instants; all-day events carry YYYY-MM-DD dates with an exclusive end. */
 export const FamilyEventSchema = Type.Object({
     id: Text(EVENT_ID_MAX),
+    /** Durable household identity; id remains the provider write reference when visible. */
+    fpId: Type.Optional(Text(35)),
     title: Text(TITLE_MAX),
     start: Text(32),
     end: Text(32),
@@ -162,6 +164,7 @@ export const TodayPayloadSchema = Type.Object({
     highlights: Type.Array(Text(MESSAGE_MAX), { maxItems: MAX_HIGHLIGHTS }),
     exceptions: Type.Array(Type.Object({
         id: Text(EVENT_ID_MAX),
+        fpId: Type.Optional(Text(35)),
         title: Text(TITLE_MAX),
         start: Text(32),
         end: Text(32),
@@ -252,6 +255,7 @@ export const ScheduleInputSchema = Type.Object({
 const ScheduleItemSchema = Type.Object({
     /** The wire id (`c0/...`) the calendar write tools take. A merged event's is its first copy's. */
     id: Text(EVENT_ID_MAX),
+    fpId: Type.Optional(Text(35)),
     title: Text(TITLE_MAX),
     /** "8:05 AM" for a timed event; all-day events carry `allDay` instead. */
     time: Type.Optional(Text(16)),

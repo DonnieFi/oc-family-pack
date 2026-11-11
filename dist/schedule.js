@@ -173,7 +173,8 @@ export async function buildSchedule(config, input, caller, now, runGog, identity
         const ownerIds = [...new Set(used.flatMap((copy) => byKey.get(copy.calendarKey)?.owners ?? []))];
         const participantIds = extraParticipantIds(group.copies, ownerIds, members, config.participantOverrides);
         return [{
-                event,
+                event: publicCopies.length === 0 ? { ...event, id: group.fpId } : event,
+                fpId: group.fpId,
                 section: best.section,
                 due: best.due,
                 input: best.input,
@@ -185,8 +186,9 @@ export async function buildSchedule(config, input, caller, now, runGog, identity
             }];
     })
         .sort((a, b) => (sortKey(a.event) < sortKey(b.event) ? -1 : sortKey(a.event) > sortKey(b.event) ? 1 : a.event.title.localeCompare(b.event.title)));
-    const item = ({ event, due, owners, participants }) => ({
+    const item = ({ event, fpId, due, owners, participants }) => ({
         id: event.id,
+        fpId,
         title: event.title,
         ...(event.allDay ? { allDay: true } : { time: clockTime(event.start, timezone) }),
         ...(days > 1 ? { date: dayLabel(dayOf(event)) } : {}),

@@ -9,6 +9,16 @@ import { GARBAGE_TOMORROW, QUIET_DAY } from "./highlights.ts";
 import { familyHandlers } from "./handlers.ts";
 import type { TodayPayload } from "./types.ts";
 
+// Preserve the literal legacy contract while checking the additive household ID.
+function legacyRead(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value, (key, entry) => {
+    if (entry && typeof entry === "object" && "id" in entry && "title" in entry) {
+      assert.match(entry.fpId, /^fp_[0-9a-f]{32}$/);
+    }
+    return key === "fpId" ? undefined : entry;
+  }));
+}
+
 const TZ = "America/Toronto";
 /** Tuesday Sept 29, 2026, 8:00 AM in Toronto. Dentist is 9:30 AM on the demo week. */
 const NOW = Date.parse("2026-09-29T12:00:00.000Z");
@@ -44,7 +54,7 @@ test("demo mode highlights come from the demo week, and a guest does not see som
       },
     ],
   };
-  assert.deepEqual(owner, expected);
+  assert.deepEqual(legacyRead(owner), expected);
   assert.equal(Value.Check(TodayPayloadSchema, owner), true);
   assert.deepEqual(await handlers["family.today"]({}, tool({ messageChannel: "discord", requesterSenderId: "200000000000000099" })), {
     date: "2026-09-29",
@@ -93,7 +103,7 @@ test("a live read scores the school class separately and stays inside the calend
   const handlers = familyHandlers(config, { now: () => now, runGog });
   const owner = await handlers["family.today"]({}, tool({ senderIsOwner: true }));
   assert.deepEqual(owner.highlights, ["⏰ Dentist in 90 min", "🏫 Math · 8:30 AM"]);
-  assert.deepEqual(owner.exceptions, [
+  assert.deepEqual(legacyRead(owner.exceptions), [
     {
       id: "c0/dentist",
       title: "Dentist",

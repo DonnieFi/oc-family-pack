@@ -7,6 +7,7 @@ import type { RunGog } from "./calendar-gog.ts";
 import { ConfigError, parseConfig } from "./config.ts";
 import { buildWeekPayload } from "./payload.ts";
 import { eventParticipants, hasName } from "./participants.ts";
+import { buildToday } from "./today.ts";
 import { buildSchedule } from "./schedule.ts";
 import type { Config, MemberConfig } from "./types.ts";
 
@@ -85,7 +86,7 @@ function live(overrides?: Config["participantOverrides"]) {
   const calls: string[][] = [];
   const events: Record<string, unknown[]> = {
     "demo-alex": [
-      { id: "dentist", summary: "Riley dentist", start: { dateTime: "2026-10-14T13:00:00Z" }, end: { dateTime: "2026-10-14T14:00:00Z" } },
+      { id: "dentist", summary: "Riley dentist", htmlLink: "https://calendar.google.com/calendar/event?eid=synthetic", start: { dateTime: "2026-10-14T13:00:00Z" }, end: { dateTime: "2026-10-14T14:00:00Z" } },
       { id: "grocery", summary: "Grocery", start: { dateTime: "2026-10-14T15:00:00Z" }, end: { dateTime: "2026-10-14T16:00:00Z" } },
       { id: "gone", summary: "Riley dentist", status: "cancelled", start: { dateTime: "2026-10-14T17:00:00Z" }, end: { dateTime: "2026-10-14T18:00:00Z" } },
     ],
@@ -106,8 +107,14 @@ test("Riley sees the named appointment, Jordan does not, and nothing is copied",
   assert.ok("sections" in riley);
   const items = riley.sections.flatMap((section) => section.items);
   assert.deepEqual(items.map((item) => item.title), ["Riley dentist"]);
+  assert.match(items[0]!.fpId!, /^fp_[0-9a-f]{32}$/);
+  assert.equal(items[0]!.id, items[0]!.fpId);
   assert.deepEqual(items[0]?.owners, ["Alex"]);
   assert.deepEqual(items[0]?.participants, ["Riley"]);
+  const today = await buildToday(config, { viewer: { kind: "member", id: "riley" }, me: "riley" }, NOW, { runGog });
+  assert.equal(today.exceptions[0]?.id, items[0]!.fpId);
+  assert.equal(today.exceptions[0]?.fpId, items[0]!.fpId);
+  assert.equal(today.exceptions[0]?.calendarKey, "");
   const jordan = await buildSchedule(config, { start: "2026-10-14" }, { viewer: { kind: "member", id: "jordan" }, me: "jordan" }, NOW, runGog);
   assert.equal(JSON.stringify(jordan).includes("Riley dentist"), false);
   assert.equal(JSON.stringify(jordan).includes("Grocery"), false);
@@ -118,7 +125,7 @@ test("a kid's week keeps the named event and leaves the hidden calendar off the 
   const dir = mkdtempSync(join(tmpdir(), "ocfp-named-"));
   const gogPath = join(dir, "gog");
   const alex = JSON.stringify([
-    { id: "dentist", summary: "Riley dentist", start: { dateTime: "2026-10-14T13:00:00Z" }, end: { dateTime: "2026-10-14T14:00:00Z" } },
+    { id: "dentist", summary: "Riley dentist", htmlLink: "https://calendar.google.com/calendar/event?eid=synthetic", start: { dateTime: "2026-10-14T13:00:00Z" }, end: { dateTime: "2026-10-14T14:00:00Z" } },
     { id: "grocery", summary: "Grocery", start: { dateTime: "2026-10-14T15:00:00Z" }, end: { dateTime: "2026-10-14T16:00:00Z" } },
   ]);
   writeFileSync(gogPath, `#!/bin/sh\nfor last; do :; done\ncase "$last" in\n  demo-alex) echo '${alex}' ;;\n  *) echo '[]' ;;\nesac\n`);
@@ -146,6 +153,13 @@ test("a kid's week keeps the named event and leaves the hidden calendar off the 
       riley.calendar.data.map((event) => [event.title, event.participantIds]),
       [["Riley dentist", ["riley"]]],
     );
+    const named = riley.calendar.data[0]!;
+    assert.match(named.fpId!, /^fp_[0-9a-f]{32}$/);
+    assert.equal(named.id, named.fpId);
+    assert.equal(named.calendarKey, "");
+    assert.equal(named.calendarKeys, undefined);
+    assert.equal(named.htmlLink, undefined);
+    assert.equal(JSON.stringify(riley).includes("c0/dentist"), false);
     assert.equal(JSON.stringify(riley).includes("demo-alex"), false);
     assert.equal(JSON.stringify(riley).includes("Grocery"), false);
     const jordan = await buildWeekPayload(config, "2026-10-12", NOW, weather, { kind: "person", username: "jordan" });
@@ -153,6 +167,10 @@ test("a kid's week keeps the named event and leaves the hidden calendar off the 
     const parent = await buildWeekPayload(config, "2026-10-12", NOW, weather, { kind: "owner" });
     assert.equal(parent.calendar.status, "ok");
     if (parent.calendar.status !== "ok") return;
+    const visible = parent.calendar.data.find((event) => event.title === "Riley dentist")!;
+    assert.equal(visible.id, "c0/dentist");
+    assert.equal(visible.htmlLink, "https://calendar.google.com/calendar/event?eid=synthetic");
+    assert.equal(visible.fpId, named.fpId);
     assert.deepEqual(parent.calendar.data.map((event) => event.title).sort(), ["Grocery", "Riley dentist"]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
