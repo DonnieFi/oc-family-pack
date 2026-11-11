@@ -22,7 +22,7 @@ function roster(config) {
     return config.demo ? DEMO_MEMBERS : config.members;
 }
 function modeOf(member, stored) {
-    return stored[member.id] ?? member.reminders ?? (member.discordId === undefined ? "off" : "dm");
+    return stored[member.id] ?? member.reminders ?? "off";
 }
 /** Timed events in the window, copies merged, owners in roster order. All-day events are not reminders. */
 async function reminderEvents(deps, now) {

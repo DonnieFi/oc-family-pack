@@ -205,11 +205,11 @@ The daily brief posts at 07:00 in the household time zone. The send window runs 
 
 Reminders use the lead times you set, 15 minutes if you set none. Quiet hours default to 22:00–07:00. A reminder that comes due during quiet hours waits, and is sent in the hour after quiet hours end. All-day events are not reminders.
 
-Each person has a mode: `dm`, `channel`, or `off`. Omitted means `off`, even when they have a `discordId`; DMs are opt-in. Ask on Discord with `set_reminder_mode`, or change it in People; the shared owner can change anyone's mode. `dm` is a Discord direct message. `channel` mentions them in the summary channel, so that channel has to be set. `off` sends nothing. A person can change their own mode; changing someone else's needs a parent.
+Each person has a mode: `dm`, `channel`, or `off`. Omitted means `off`, even when they have a `discordId`; DMs are opt-in. Ask on Discord with `set_reminder_mode`, or preview a config patch in People and apply it; the shared owner can change anyone's mode. `dm` is a Discord direct message. `channel` mentions them in the summary channel, so that channel has to be set. `off` sends nothing. A person can change their own mode; changing someone else's needs a parent.
 
 Household briefs are separate, and each one runs only when its clock time is set:
 
-- `morningTime` — weekday morning direct message to parents
+- `morningTime` — weekday morning direct message to parents with a Discord ID and configured `reminders: "dm"` or `"channel"`; chat-set reminder overrides do not change morning brief eligibility
 - `afterSchoolTime` — weekday after-school post to the summary channel
 - `weekendPreviewTime` — weekend preview to the summary channel, on Friday unless you set `weekendPreviewWeekday`
 
