@@ -1,6 +1,7 @@
 import { Type } from "typebox";
 import { LINK_MAX, MAX_CALENDARS, MAX_MEMBERS } from "./contract.ts";
-import type { CalendarConfig, CalendarKind, Config, DeviceReservation, Location, MemberConfig, MemberDevice, MemberRole, ParticipantOverride, ReminderMode, WriteMode } from "./types.ts";
+import { ruleShadows } from "./audience.ts";
+import type { AudienceRule, CalendarConfig, CalendarKind, Config, DeviceReservation, Location, MemberConfig, MemberDevice, MemberRole, ParticipantOverride, ReminderMode, WriteMode } from "./types.ts";
 
 const ROLES: readonly MemberRole[] = ["parent", "kid", "guest"];
 const KINDS: readonly CalendarKind[] = ["personal", "shared", "school"];
@@ -79,6 +80,7 @@ export const ConfigSchema = Type.Object(
             name: Type.Optional(Name),
             displayName: Type.Optional(Name),
             aliases: Type.Optional(Type.Array(Name, { maxItems: MAX_ALIASES })),
+            cohorts: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: 8 })),
             lobsterPreferences: Type.Optional(Type.Array(Name, { maxItems: 8 })),
             profileId: Type.Optional(Name),
             login: Type.Optional(Name),
@@ -150,6 +152,24 @@ export const ConfigSchema = Type.Object(
           { additionalProperties: false },
         ),
         { maxItems: 64 },
+      ),
+    ),
+    audienceRules: Type.Optional(
+      Type.Array(
+        Type.Object(
+          {
+            title: Type.String({ minLength: 1, maxLength: 200 }),
+            audience: Type.Union([Type.Literal("school"), Type.Literal("cohort"), Type.Literal("student")]),
+            cohort: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+            students: Type.Optional(Type.Array(Name, { maxItems: MAX_MEMBERS })),
+            calendar: Type.Optional(Type.String({ pattern: "^c[0-9a-z]{1,7}$" })),
+          },
+          { additionalProperties: false },
+        ),
+        {
+          maxItems: 64,
+          description: "The first matching title wins. Put a narrower rule before a broader one. A rule only keeps people who already own that school calendar.",
+        },
       ),
     ),
   },
@@ -392,6 +412,9 @@ function member(value: unknown, index: number): MemberConfig {
     seenAliases.add(alias);
   }
   if (aliases.length > 0) parsed.aliases = aliases;
+  const cohorts = atMost(list(value.cohorts, `${field}.cohorts`), `${field}.cohorts`, 8).map((entry, cohortIndex) => cohortName(entry, `${field}.cohorts[${cohortIndex}]`));
+  if (new Set(cohorts).size !== cohorts.length) throw new MemberError(`${displayName} lists the same cohort twice.`);
+  if (cohorts.length > 0) parsed.cohorts = cohorts;
   const lobsterPreferences = atMost(list(value.lobsterPreferences, `${field}.lobsterPreferences`), `${field}.lobsterPreferences`, 8).map((item, i) => text(item, `${field}.lobsterPreferences[${i}]`));
   if (lobsterPreferences.length > 0) parsed.lobsterPreferences = lobsterPreferences;
   if (value.email !== undefined) {
@@ -476,6 +499,70 @@ function participantOverrideList(
     return { calendarKey, eventId, memberId, decision };
   });
   return participantOverrides.length > 0 ? { participantOverrides } : {};
+}
+
+function cohortName(value: unknown, field: string): string {
+  const name = text(value, field).toLowerCase();
+  if ([...name].length > 64 || /[\u0000-\u001f]/.test(name)) throw new ConfigError(field, "must be a short cohort name");
+  return name;
+}
+
+function audienceRuleList(
+  value: unknown,
+  calendars: readonly CalendarConfig[],
+  memberIds: ReadonlySet<string>,
+): { audienceRules: AudienceRule[] } | Record<string, never> {
+  if (value === undefined) return {};
+  const rows = atMost(list(value, "audienceRules"), "audienceRules", 64);
+  const audienceRules: AudienceRule[] = [];
+  for (const [index, row] of rows.entries()) {
+    const field = `audienceRules[${index}]`;
+    if (!isRecord(row)) throw new ConfigError(field, "must be an object");
+    const title = text(row.title, `${field}.title`);
+    if ([...title].length > 200 || /[\u0000-\u001f]/.test(title)) throw new ConfigError(`${field}.title`, "must be a short title phrase");
+    const audience = oneOf(row.audience, `${field}.audience`, ["school", "cohort", "student"] as const);
+    if (audience === "cohort" && row.cohort === undefined) throw new ConfigError(`${field}.cohort`, "is required when audience is cohort");
+    if (audience !== "cohort" && row.cohort !== undefined) throw new ConfigError(`${field}.cohort`, "is only used when audience is cohort");
+    if (audience === "student" && row.students === undefined) throw new ConfigError(`${field}.students`, "is required when audience is student");
+    if (audience !== "student" && row.students !== undefined) throw new ConfigError(`${field}.students`, "is only used when audience is student");
+    const cohort = audience === "cohort" ? cohortName(row.cohort, `${field}.cohort`) : undefined;
+    const students =
+      audience === "student"
+        ? atMost(list(row.students, `${field}.students`), `${field}.students`, 32).map((id, studentIndex) => {
+            const memberId = profileId(id, `${field}.students[${studentIndex}]`);
+            if (!memberIds.has(memberId)) throw new ConfigError(`${field}.students[${studentIndex}]`, `"${memberId}" does not match any members[].id`);
+            return memberId;
+          })
+        : undefined;
+    if (students !== undefined && new Set(students).size !== students.length) throw new ConfigError(`${field}.students`, "names someone twice");
+    let calendarKey: string | undefined;
+    if (row.calendar !== undefined) {
+      calendarKey = text(row.calendar, `${field}.calendar`);
+      const calendar = calendars.find((entry) => entry.key === calendarKey);
+      if (!/^c[0-9a-z]{1,7}$/.test(calendarKey) || calendar === undefined) {
+        throw new ConfigError(`${field}.calendar`, "must be a calendar key from this household");
+      }
+      if (calendar.kind !== "school") throw new ConfigError(`${field}.calendar`, "must be a school calendar");
+      for (const id of students ?? []) {
+        if (!calendar.owners.includes(id)) {
+          throw new ConfigError(`${field}.students`, `"${id}" does not own that school calendar. A rule cannot widen who can see it.`);
+        }
+      }
+    }
+    const rule: AudienceRule = {
+      title,
+      audience,
+      ...(cohort !== undefined ? { cohort } : {}),
+      ...(students !== undefined ? { students } : {}),
+      ...(calendarKey !== undefined ? { calendar: calendarKey } : {}),
+    };
+    const earlier = audienceRules.find((candidate) => ruleShadows(candidate, rule));
+    if (earlier) {
+      throw new ConfigError(field, `never runs. "${earlier.title}" already matches that title, and the first matching rule wins. Put the narrower rule first.`);
+    }
+    audienceRules.push(rule);
+  }
+  return audienceRules.length > 0 ? { audienceRules } : {};
 }
 
 function feedUrl(value: unknown, field: string): string {
@@ -750,6 +837,7 @@ export function parseConfig(raw: unknown): Config {
     members,
     calendars,
     ...participantOverrideList(value.participantOverrides, calendars, profileIds),
+    ...audienceRuleList(value.audienceRules, calendars, profileIds),
   };
   const parsedLocation = location(value.location);
   if (parsedLocation) {

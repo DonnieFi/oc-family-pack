@@ -1,3 +1,4 @@
+import { narrowedAudience } from "./audience.ts";
 import { readGogCalendars, type GoogleEventFields } from "./calendar-gog.ts";
 import { ConfigError } from "./config.ts";
 import { MAX_WEEK_EVENTS } from "./contract.ts";
@@ -111,6 +112,7 @@ export async function buildWeekPayload(
         )
       : [];
   const visibleKeys = new Set(shown.map((entry) => entry.key));
+  const calendarsByKey = new Map(calendars.map((calendar) => [calendar.key, calendar]));
   const merged =
     read.status === "ok" || namedHidden.length > 0
       ? await dedupEvents([...(read.status === "ok" ? read.data : []), ...namedHidden], memoryOf(identity?.()))
@@ -121,13 +123,19 @@ export async function buildWeekPayload(
     const event = toWire(mergeGroup(copies));
     const ownerIds = [...new Set(copies.flatMap((copy) => calendars.find((calendar) => calendar.key === copy.calendarKey)?.owners ?? []))];
     const participantIds = extraParticipantIds(group.copies, ownerIds, members, config.participantOverrides);
-    return participantIds.length > 0 ? { ...event, participantIds } : event;
+    const audienceIds = narrowedAudience(event, calendarsByKey, members, config.audienceRules);
+    return {
+      ...event,
+      ...(participantIds.length > 0 ? { participantIds } : {}),
+      ...(audienceIds !== undefined ? { audienceIds } : {}),
+    };
   };
+  const keep = (event: FamilyEvent) => kid === undefined || event.audienceIds === undefined || event.audienceIds.includes(kid.id);
   const calendar: CalendarState =
     read.status === "ok" && merged
-      ? { ...read, data: merged.groups.map(project) }
+      ? { ...read, data: merged.groups.map(project).filter(keep) }
       : namedHidden.length > 0 && merged
-        ? { status: "ok", data: merged.groups.map(project), warnings: [] }
+        ? { status: "ok", data: merged.groups.map(project).filter(keep), warnings: [] }
         : read;
   return fitWeek({
     mode: config.demo ? "demo" : "live",

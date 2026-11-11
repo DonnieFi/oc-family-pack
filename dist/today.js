@@ -1,3 +1,4 @@
+import { narrowedAudience } from "./audience.js";
 import { classifyEvent } from "./classify.js";
 import { MAX_WEEK_EVENTS } from "./contract.js";
 import { DEMO_CALENDARS, DEMO_MEMBERS, demoEvents } from "./demo.js";
@@ -88,6 +89,9 @@ export async function buildToday(config, caller, now, deps = {}) {
         const publicCopies = group.copies.filter((copy) => visibleKeys.has(copy.calendarKey));
         const used = publicCopies.length > 0 ? publicCopies : group.copies;
         const event = mergeGroup(used);
+        const audienceIds = narrowedAudience(event, byKey, members, config.audienceRules);
+        if (viewerMember?.role === "kid" && caller.viewer.kind !== "owner" && audienceIds !== undefined && !audienceIds.includes(viewerMember.id))
+            continue;
         const calendar = byKey.get(event.calendarKey);
         if (!calendar)
             continue;

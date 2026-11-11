@@ -3,6 +3,7 @@
 ## Unreleased
 
 - An appointment that names someone, such as "Riley dentist" on Alex's calendar, shows in that person's week and answers. It is not copied and nobody is invited. A name shared by two people is left unset until the household confirms one. The rest of a hidden calendar stays hidden.
+- A shared school calendar can name who a title is for. `audienceRules` match a title phrase, first rule wins, and keep only people who already own that calendar. `school` is every owner, `cohort` is owners in that cohort, and `student` is the named owners. Put the narrower rule first. When no rule matches, the owners are unchanged.
 - The People page opens a profile banner and the Lobsterdex. A parent picks up to eight companions. The choice is stored on that person's card and applied with the config patch. The page stays parent-only.
 - An all-day uniform or homework note whose calendar end is the same day still shows on that day.
 - Shared copies of one event keep a durable id. A title or time edit does not change it, and two appointments on one calendar stay separate. A write still changes one authorized calendar event.

@@ -1,4 +1,5 @@
 import { Type } from "typebox";
+import { narrowedAudience } from "./audience.js";
 import { DEMO_CALENDARS, DEMO_MEMBERS } from "./demo.js";
 import {} from "./discord-delivery.js";
 import { dedupEvents, memoryOf } from "./identity.js";
@@ -43,8 +44,10 @@ async function reminderEvents(deps, now) {
         const ownerIds = [...new Set(group.copies.flatMap((copy) => byKey.get(copy.calendarKey).owners))]
             .filter((id) => names.has(id))
             .sort((a, b) => order.get(a) - order.get(b));
+        const audienceIds = narrowedAudience(event, byKey, members, config.audienceRules);
+        const reminded = audienceIds === undefined ? ownerIds : ownerIds.filter((id) => audienceIds.includes(id));
         const participantIds = extraParticipantIds(group.copies, ownerIds, members, config.participantOverrides).filter((id) => names.has(id));
-        const owners = [...ownerIds, ...participantIds].map((id) => ({ profileId: id, displayName: names.get(id) }));
+        const owners = [...reminded, ...participantIds].map((id) => ({ profileId: id, displayName: names.get(id) }));
         const updated = group.copies.map((copy) => copy.google?.updated).filter((value) => value !== undefined).sort().at(-1) ?? "";
         const legacyIds = group.legacyIds.filter((id) => id !== event.id);
         return {

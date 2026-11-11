@@ -1,4 +1,5 @@
 import type { FeatureInvocationContext } from "openclaw/plugin-sdk/feature-plugin";
+import { narrowedAudience } from "./audience.ts";
 import { readGogCalendars, type GoogleEventFields, type RunGog } from "./calendar-gog.ts";
 import { classifyEvent, clockTime, usualLine, type ClassifyInput } from "./classify.ts";
 import { CLASSES_LINE_MAX, LOOKUP_DAYS_MAX, SCHEDULE_DAYS_MAX, SCHEDULE_ITEMS_MAX, SCHEDULE_SECTIONS, USUAL_MAX } from "./contract.ts";
@@ -184,15 +185,18 @@ export async function buildSchedule(
   const sortKey = (event: FamilyEvent) => (event.allDay ? `${event.start}T00` : new Date(Date.parse(event.start)).toISOString());
 
   const deduped = await dedupEvents(copies, memoryOf(identity?.()));
+  const audienceTarget = member ?? (!seesAll && viewerMember?.role === "kid" ? viewerMember.id : undefined);
   const merged = deduped.groups
-    .map((group) => {
+    .flatMap((group) => {
       const publicCopies = group.copies.filter((copy) => visibleKeys.has(copy.calendarKey));
       const used = publicCopies.length > 0 ? publicCopies : group.copies;
       const best = used.reduce((a, b) => (PRECEDENCE.indexOf(b.section) < PRECEDENCE.indexOf(a.section) ? b : a));
       const event = mergeGroup(used);
+      const audienceIds = narrowedAudience(event, byKey, members, config.audienceRules);
+      if (audienceTarget !== undefined && audienceIds !== undefined && !audienceIds.includes(audienceTarget)) return [];
       const ownerIds = [...new Set(used.flatMap((copy) => byKey.get(copy.calendarKey)?.owners ?? []))];
       const participantIds = extraParticipantIds(group.copies, ownerIds, members, config.participantOverrides);
-      return {
+      return [{
         event,
         section: best.section,
         due: best.due,
@@ -202,7 +206,7 @@ export async function buildSchedule(
           const name = names.get(id);
           return name ? [name] : [];
         }),
-      };
+      }];
     })
     .sort((a, b) => (sortKey(a.event) < sortKey(b.event) ? -1 : sortKey(a.event) > sortKey(b.event) ? 1 : a.event.title.localeCompare(b.event.title)));
 

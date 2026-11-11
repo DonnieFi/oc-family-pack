@@ -387,6 +387,67 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(rileyDay.includes("Elementary"), false);
   });
 
+  test("a shared school calendar keeps each class on the student the rule names", async () => {
+    const base = week();
+    const sharedSchool = { key: "cboth", label: "School", kind: "school" as const, ownerIds: ["riley", "jordan"] };
+    const result = {
+      ...base,
+      viewer: { role: "parent" as const, memberId: "alex" },
+      members: [
+        ...base.members.filter((member) => !["riley", "jordan"].includes(member.memberId)),
+        { memberId: "riley", displayName: "Riley", role: "kid" as const, color: "oklch(0.7 0.1 300)" },
+        { memberId: "jordan", displayName: "Jordan", role: "kid" as const, color: "oklch(0.7 0.1 140)" },
+      ],
+      calendars: [...base.calendars, sharedSchool],
+      days: base.days.map((day) => (day.date === "2026-09-30" ? { ...day, eventIds: ["e-math", "e-choir", "e-closed"] } : { ...day, eventIds: [] })),
+      calendar: {
+        status: "ok" as const,
+        warnings: [],
+        data: [
+          {
+            id: "e-math",
+            title: "Mathematics 10",
+            start: "2026-09-30T13:00:00.000Z",
+            end: "2026-09-30T14:00:00.000Z",
+            allDay: false,
+            calendarKey: "cboth",
+            audienceIds: ["riley"],
+          },
+          {
+            id: "e-choir",
+            title: "Choir rehearsal",
+            start: "2026-09-30T20:00:00.000Z",
+            end: "2026-09-30T21:00:00.000Z",
+            allDay: false,
+            calendarKey: "cboth",
+            audienceIds: ["jordan"],
+          },
+          {
+            id: "e-closed",
+            title: "No school",
+            start: "2026-09-30",
+            end: "2026-10-01",
+            allDay: true,
+            calendarKey: "cboth",
+          },
+        ],
+      },
+    };
+    const page = mountPage({ result });
+    await flush();
+    const day = () => page.container.querySelector("#ocfp-day-2026-09-30")?.textContent ?? "";
+    assert.equal(day().includes("No school"), true);
+    const chip = (name: string) => [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-chip")].find((button) => button.textContent?.startsWith(name));
+    chip("Jordan")?.click();
+    assert.equal(day().includes("Mathematics 10"), false);
+    assert.equal(day().includes("Choir"), true);
+    assert.equal(day().includes("No school"), true);
+    chip("Riley")?.click();
+    assert.equal(day().includes("Mathematics 10"), true);
+    assert.equal(day().includes("Choir"), false);
+    assert.equal(day().includes("No school"), true);
+  });
+
   test("a multi-day homework item appears only on its due day", async () => {
     const base = week();
     const event = { id: "e-homework-span", title: "Worksheet", start: "2026-09-28", end: "2026-10-01", allDay: true, calendarKey: "cschool" };

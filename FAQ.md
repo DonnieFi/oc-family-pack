@@ -117,6 +117,11 @@ when the title or an attendee names them. The calendar itself stays hidden,
 and the event is not copied or turned into an invitation. A name that matches
 two people is left unset until the config confirms one of them.
 
+A shared school calendar can still mix a notice for every owner with a class
+for one student. `audienceRules` picks the title. The first match wins, so the
+narrower rule goes first. A rule only keeps people who already own that
+calendar. Everyone else on the roster does not gain the event.
+
 The Chat with strip uses that person's own agent list, so it only shows agents
 they can already open.
 

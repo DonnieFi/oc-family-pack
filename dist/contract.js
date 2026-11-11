@@ -59,6 +59,8 @@ export const FamilyEventSchema = Type.Object({
     calendarKeys: Type.Optional(Type.Array(Text(8), { minItems: 2, maxItems: MAX_CALENDARS })),
     /** Household members named by this event who do not already own its visible calendars. */
     participantIds: Type.Optional(Type.Array(Text(LABEL_MAX), { minItems: 1, maxItems: MAX_MEMBERS })),
+    /** Set only when a household rule narrows a school event below its calendar owners. Empty means the rule matched nobody. */
+    audienceIds: Type.Optional(Type.Array(Text(LABEL_MAX), { minItems: 0, maxItems: MAX_MEMBERS })),
     htmlLink: Type.Optional(Text(LINK_MAX)),
 });
 /** Bernie's weather cache (weather_cache_ttl_s, 1800 s): one Environment Canada read is reused for 30 minutes. Not configurable. */

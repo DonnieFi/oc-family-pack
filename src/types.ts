@@ -74,6 +74,8 @@ export type MemberConfig = {
    * a page viewer.
    */
   aliases?: string[];
+  /** Groups this person belongs to, such as a grade. Matching only; never a name. */
+  cohorts?: string[];
   lobsterPreferences?: string[];
   /** Stored on the card only. Nothing in the plugin sends email or shows it on the week. */
   email?: string;
@@ -87,6 +89,18 @@ export type MemberConfig = {
   reminders?: ReminderMode;
   /** Normalized at parse. Stays in config; never copied onto the week payload. */
   devices: MemberDevice[];
+};
+
+/**
+ * A household rule for one school title. The first match wins, and the result
+ * is only people who already own that calendar.
+ */
+export type AudienceRule = {
+  title: string;
+  audience: "school" | "cohort" | "student";
+  cohort?: string;
+  students?: string[];
+  calendar?: string;
 };
 
 /** A stored choice for one provider event. It does not copy the event or invite anyone. */
@@ -144,6 +158,8 @@ export type Config = {
   calendars: CalendarConfig[];
   /** Manual confirm or reject for a named participant. Title matches still apply to every other event. */
   participantOverrides?: ParticipantOverride[];
+  /** School-title audiences. The first matching rule wins. Absent rules leave calendar owners as they are. */
+  audienceRules?: AudienceRule[];
 };
 
 export type SourceState<T> =

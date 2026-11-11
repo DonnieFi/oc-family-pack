@@ -257,6 +257,8 @@ The Gateway decides who sees which calendar before the week is sent to the page.
 
 A title or an attendee can name another member on an appointment they do not own. That one event is shown to them. The calendar, its other events, and its label stay hidden. Nothing is copied and nobody is invited. `participantOverrides` can confirm or reject one person on one event. A name shared by two people confirms nobody until then. Guests are not named this way.
 
+`audienceRules` can narrow a school title below the calendar's owners. The first matching phrase wins, so a narrower rule goes first. A rule never adds someone who does not already own that calendar. `members[].cohorts` names the groups a cohort rule uses. With no matching rule, every owner still sees the event.
+
 Calendar write tool descriptions list the configured calendar labels so the agent knows where it can write. That metadata can name a calendar the person cannot read, though no event or contact detail from it is returned. If the labels themselves are sensitive, give each person their own agent instead of sharing one.
 
 The plugin keeps a SQLite file on the Gateway host:

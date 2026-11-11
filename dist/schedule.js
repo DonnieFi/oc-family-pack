@@ -1,3 +1,4 @@
+import { narrowedAudience } from "./audience.js";
 import { readGogCalendars } from "./calendar-gog.js";
 import { classifyEvent, clockTime, usualLine } from "./classify.js";
 import { CLASSES_LINE_MAX, LOOKUP_DAYS_MAX, SCHEDULE_DAYS_MAX, SCHEDULE_ITEMS_MAX, SCHEDULE_SECTIONS, USUAL_MAX } from "./contract.js";
@@ -159,25 +160,29 @@ export async function buildSchedule(config, input, caller, now, runGog, identity
         .map((id) => names.get(id) ?? id);
     const sortKey = (event) => (event.allDay ? `${event.start}T00` : new Date(Date.parse(event.start)).toISOString());
     const deduped = await dedupEvents(copies, memoryOf(identity?.()));
+    const audienceTarget = member ?? (!seesAll && viewerMember?.role === "kid" ? viewerMember.id : undefined);
     const merged = deduped.groups
-        .map((group) => {
+        .flatMap((group) => {
         const publicCopies = group.copies.filter((copy) => visibleKeys.has(copy.calendarKey));
         const used = publicCopies.length > 0 ? publicCopies : group.copies;
         const best = used.reduce((a, b) => (PRECEDENCE.indexOf(b.section) < PRECEDENCE.indexOf(a.section) ? b : a));
         const event = mergeGroup(used);
+        const audienceIds = narrowedAudience(event, byKey, members, config.audienceRules);
+        if (audienceTarget !== undefined && audienceIds !== undefined && !audienceIds.includes(audienceTarget))
+            return [];
         const ownerIds = [...new Set(used.flatMap((copy) => byKey.get(copy.calendarKey)?.owners ?? []))];
         const participantIds = extraParticipantIds(group.copies, ownerIds, members, config.participantOverrides);
-        return {
-            event,
-            section: best.section,
-            due: best.due,
-            input: best.input,
-            owners: ownersOf(used),
-            participants: participantIds.flatMap((id) => {
-                const name = names.get(id);
-                return name ? [name] : [];
-            }),
-        };
+        return [{
+                event,
+                section: best.section,
+                due: best.due,
+                input: best.input,
+                owners: ownersOf(used),
+                participants: participantIds.flatMap((id) => {
+                    const name = names.get(id);
+                    return name ? [name] : [];
+                }),
+            }];
     })
         .sort((a, b) => (sortKey(a.event) < sortKey(b.event) ? -1 : sortKey(a.event) > sortKey(b.event) ? 1 : a.event.title.localeCompare(b.event.title)));
     const item = ({ event, due, owners, participants }) => ({

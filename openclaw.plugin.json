@@ -342,6 +342,15 @@
               },
               "maxItems": 8
             },
+            "cohorts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "maxItems": 8
+            },
             "lobsterPreferences": {
               "type": "array",
               "items": {
@@ -603,14 +612,68 @@
           "additionalProperties": false
         },
         "maxItems": 64
+      },
+      "audienceRules": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "title",
+            "audience"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "audience": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "school"
+                },
+                {
+                  "type": "string",
+                  "const": "cohort"
+                },
+                {
+                  "type": "string",
+                  "const": "student"
+                }
+              ]
+            },
+            "cohort": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "students": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "maxItems": 32
+            },
+            "calendar": {
+              "type": "string",
+              "pattern": "^c[0-9a-z]{1,7}$"
+            }
+          },
+          "additionalProperties": false
+        },
+        "maxItems": 64,
+        "description": "The first matching title wins. Put a narrower rule before a broader one. A rule only keeps people who already own that school calendar."
       }
     },
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/8ad49ca27bd8e61473fb0dff42e5dd55440cac0e774deec4705ba6d359aa52cd/index.js",
+    "entry": "dist/control-ui/5451f2eaa6abff817da0559cd06a3b539d8f14837b7c93af410488f348142e5f/index.js",
     "styles": [
-      "dist/control-ui/8ad49ca27bd8e61473fb0dff42e5dd55440cac0e774deec4705ba6d359aa52cd/index.css"
+      "dist/control-ui/5451f2eaa6abff817da0559cd06a3b539d8f14837b7c93af410488f348142e5f/index.css"
     ]
   },
   "contracts": {
