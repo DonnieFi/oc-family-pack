@@ -1503,7 +1503,7 @@ async function calendarWatch(env: NodeJS.ProcessEnv, configPath: string, port: n
   if (JSON.stringify(got.get(checkedEvent)) !== "{}") fail(step, `calendar-checked carried ${JSON.stringify(got.get(checkedEvent))}, expected {}`);
   const [first, second] = readCalls();
   const expected = (since: string) => `calendar changed --since ${since} --max 1 --json --no-input -- ${calendarId}`;
-  if (first !== expected("720h") || second !== expected("2026-10-03T12:00:00.000Z")) {
+  if (first !== expected("168h") || second !== expected("2026-10-03T12:00:00.000Z")) {
     fail(step, `gog was called as ${JSON.stringify([first, second])}`);
   }
   note(`a signed-in page got calendar-changed and calendar-checked ${Math.round((Date.now() - started) / 1000)}s after start; the second poll asked gog for edits since the baseline`, step);
