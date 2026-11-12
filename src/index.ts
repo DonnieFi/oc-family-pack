@@ -29,6 +29,7 @@ import { startHouseholds } from "./households.ts";
 import { DEMO_MEMBERS } from "./demo.ts";
 import { createGarbageFeed } from "./garbage.ts";
 import { readEcWeather } from "./weather-ec.ts";
+import { resolveBriefAgentName } from "./agent-name.ts";
 
 function configuredGogPath(raw: unknown): string {
   try {
@@ -121,8 +122,7 @@ const plugin = defineFeaturePlugin({
             store: () => store,
             deliver: (target, messages, key) => deliver(sendDurableMessageBatch, ctx.config, directory, target, messages, key),
             agentName: async () => {
-              const id = resolveDefaultAgentId(ctx.config);
-              return resolveAgentIdentity(ctx.config, id)?.name?.trim() || id;
+              return resolveBriefAgentName(ctx.config, resolveDefaultAgentId, resolveAgentIdentity);
             },
             readWeather: async () => {
               const state = await readEcWeather(config.location, undefined, Date.now(), { timezone: config.timezone });
