@@ -42,6 +42,8 @@ Save the printed Caddyfile. Replace `LAN_ADDRESS` with this machine's address on
 caddy reload --config ./Caddyfile
 ```
 
+On Windows, install Caddy separately using its [official installation guide](https://caddyserver.com/docs/install). Family Pack prints this configuration but does not install Caddy, create a Windows service, or open a firewall port. `caddy reload` requires a running Caddy instance; for an initial foreground test in PowerShell, use `caddy run --config .\Caddyfile`, then run reload from another terminal if needed. A foreground process is not a persistent service.
+
 Anything else running on this machine can sign in as any family member. Run only the proxy and the Gateway here.
 
 ## 5. Config
@@ -69,6 +71,8 @@ sudo cp /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt ./caddy
 ```
 
 Send `caddy-root.crt` to each device and install it as a trusted certificate.
+
+On a typical Windows user installation, Caddy's data folder is `%AppData%\Caddy`; confirm its actual storage location before copying the **public** `pki\authorities\local\root.crt`. Never distribute the CA private key. Each client must trust the certificate separately.
 
 ## 8. First sign-in
 

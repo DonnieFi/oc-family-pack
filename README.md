@@ -103,6 +103,12 @@ To try the page before you connect a calendar, set `demo: true` (see below). Add
 openclaw plugins enable oc-family-pack
 ```
 
+### Windows notes
+
+- Family Pack does not itself require Docker or WSL. Its LAN setup prints a proxy and Gateway configuration; it does not install or start Caddy or create family logins. See [HOUSEHOLD-LAN.md](HOUSEHOLD-LAN.md) before switching authentication.
+- The generated kid role requires an OpenClaw sandbox for kid chat. For a Docker-based Linux sandbox on Windows, Docker Desktop needs a working supported backend and hardware virtualization enabled in firmware. WSL 2 is its default backend. Follow [Docker's Windows installation requirements](https://docs.docker.com/desktop/setup/install/windows-install/) and [OpenClaw's sandbox setup](https://docs.openclaw.ai/gateway/sandboxing/images-and-setup); installing Docker alone does not prove the sandbox or kid chat works.
+- A Windows test using Docker Desktop and WSL verified that the sandbox image can start; end-to-end kid chat has not yet been verified. Calendar and People pages can be tried in demo mode without a real household calendar.
+
 Turn on native plugin pages in **Settings → Labs → Custom plugin UI**, or in config:
 
 ```json5
