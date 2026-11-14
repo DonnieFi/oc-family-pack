@@ -1,6 +1,9 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { request as httpsRequest } from "node:https";
 import { promisify } from "node:util";
 import { runAccess } from "./access.js";
+import { describeCaddy, installCaddy, probeCaddy, verifyProxy } from "./proxy-setup.js";
 import { readGuideCheckpoint, runGuide } from "./setup-guide.js";
 import { familyConfig, hostAgents, planSetup, setupSteps } from "./setup.js";
 import { openFamilyStore } from "./store.js";
@@ -238,6 +241,17 @@ export async function diagnoseGog(run, options = {}) {
 export function formatGogSetup(plan) {
     return `${plan.message}\nNext: ${plan.command}`;
 }
+/** One HTTPS request, without redirects or disabled certificate validation. */
+export const proxyHttpCheck = (url, ca, authorization) => new Promise((resolve, reject) => {
+    const req = httpsRequest(url, { method: "GET", ca, timeout: 5_000, headers: authorization ? { authorization } : {} }, (res) => {
+        const status = res.statusCode ?? 0;
+        res.resume();
+        resolve(status);
+    });
+    req.on("timeout", () => req.destroy(new Error("proxy timeout")));
+    req.on("error", reject);
+    req.end();
+});
 function gatewayPort(gateway) {
     const port = typeof gateway === "object" && gateway !== null ? gateway.port : undefined;
     return typeof port === "number" ? port : undefined;
@@ -326,7 +340,46 @@ export function registerFamilyCli(program, deps) {
         .option("--parent <name...>", "Parents: full access and every session")
         .option("--kid <name...>", "Kids: read, and write their own sessions")
         .option("--guest <name...>", "Guests: read only")
+        .option("--install-caddy", "Offer an explicitly confirmed Windows Caddy installation")
+        .option("--confirm-install", "Approve the Caddy installation with winget")
+        .option("--verify-proxy", "Check HTTPS and one proxy login without changing Gateway config")
+        .option("--proxy-url <url>", "HTTPS origin to verify")
+        .option("--proxy-user <username>", "Username to verify; password is read from OPENCLAW_FAMILY_PROXY_PASSWORD")
+        .option("--proxy-ca <path>", "Path to the proxy's public CA certificate")
         .action(async (mode, names, opts) => {
+        const proxyRun = deps.proxyRun ?? ((file, args) => execFileAsync(file, args, { timeout: file === "winget.exe" ? 180_000 : 5_000, maxBuffer: 1024 * 1024 }));
+        if (opts.verifyProxy) {
+            if (mode !== "lan" || opts.installCaddy || opts.confirmInstall || !opts.proxyUrl || !opts.proxyUser || !opts.proxyCa || !process.env.OPENCLAW_FAMILY_PROXY_PASSWORD) {
+                write("Use access lan --verify-proxy with --proxy-url, --proxy-user, --proxy-ca, and OPENCLAW_FAMILY_PROXY_PASSWORD; no configuration is changed.");
+                process.exitCode = 1;
+                return;
+            }
+            let ca;
+            try {
+                ca = await readFile(opts.proxyCa, "utf8");
+            }
+            catch {
+                write("Cannot read the public CA certificate. No request or configuration change was made.");
+                process.exitCode = 1;
+                return;
+            }
+            const check = await verifyProxy(deps.proxyHttpCheck ?? proxyHttpCheck, { url: opts.proxyUrl, username: opts.proxyUser, password: process.env.OPENCLAW_FAMILY_PROXY_PASSWORD, ca });
+            write(check.message);
+            process.exitCode = check.ok ? 0 : 1;
+            return;
+        }
+        if (opts.installCaddy || opts.confirmInstall) {
+            if (mode !== "lan" || !opts.installCaddy) {
+                write("Use --install-caddy only with access lan; --confirm-install alone changes nothing.");
+                process.exitCode = 1;
+                return;
+            }
+            const probe = await probeCaddy(proxyRun, deps.proxyPlatform);
+            const installed = await installCaddy(proxyRun, probe, opts.confirmInstall === true, deps.proxyPlatform);
+            write(installed.message);
+            process.exitCode = installed.ok ? 0 : 1;
+            return;
+        }
         const gateway = deps.gateway ?? (isRecord(deps.host) ? deps.host.gateway : undefined);
         const port = gatewayPort(gateway);
         const pluginCfg = familyConfig(deps.host);
@@ -349,7 +402,9 @@ export function registerFamilyCli(program, deps) {
             ...(householdAgentId !== undefined ? { householdAgentId } : {}),
             ...(deps.host !== undefined ? { sandboxConfigured: sandboxConfigured(deps.host, householdAgentId ?? agents?.defaultId) } : {}),
         });
-        write(result.text);
+        const caddy = mode === "lan" && result.ok ? await probeCaddy(proxyRun, deps.proxyPlatform) : undefined;
+        const gatewayAuth = isRecord(gateway) && isRecord(gateway.auth) ? gateway.auth : undefined;
+        write(result.text + (caddy ? `\n\nProxy availability: ${describeCaddy(caddy, deps.proxyPlatform, gatewayAuth?.mode === "trusted-proxy")}` : ""));
         process.exitCode = result.ok ? 0 : 1;
     });
     family

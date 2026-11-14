@@ -287,3 +287,27 @@ test("family setup --guide remembers answers and does not report success after c
   assert.match(lines[2] ?? "", /Dry run\. Nothing was applied\./);
   process.exitCode = previous;
 });
+
+test("LAN access detects a proxy without assuming it is configured; installation needs confirmation", async () => {
+  const lines: string[] = [];
+  const calls: string[] = [];
+  const { program, actions } = fakeProgram();
+  registerFamilyCli(program, {
+    run: async () => ({ stdout: "" }),
+    proxyPlatform: "win32",
+    proxyRun: async (file, args) => { calls.push(`${file} ${args.join(" ")}`); if (file === "winget.exe") return { stdout: "installed" }; throw Object.assign(new Error("missing"), { code: "ENOENT" }); },
+    write: (line) => lines.push(line),
+  });
+  const action = actions.get("access");
+  assert.ok(action);
+  const previous = process.exitCode;
+  await action("lan", [], { parent: ["alex"] });
+  assert.match(lines[0]!, /Caddy was not found/);
+  assert.match(lines[0]!, /not proof of a trusted, configured or running proxy/);
+  await action("lan", [], { installCaddy: true });
+  assert.match(lines[1]!, /No install attempted/);
+  assert.equal(calls.some((call) => call.startsWith("winget.exe")), false);
+  await action("solo", [], { installCaddy: true, confirmInstall: true });
+  assert.equal(calls.some((call) => call.startsWith("winget.exe")), false);
+  process.exitCode = previous;
+});
