@@ -446,6 +446,35 @@ test("every hop is checked: a public first hop that redirects to loopback is ref
   assert.deepEqual(new Set(lines), new Set(["oc-family-pack: the garbage calendar redirected to a local address; no garbage line until it answers"]));
 });
 
+test("a redirect to a hostname that resolves to a private or loopback IP via DNS is refused", async () => {
+  const start = at("2026-10-04T12:00:00-03:00");
+  const lines: string[] = [];
+  const fakeLookup = async (host: string) => {
+    if (host === "rebind-internal.example") return ["192.168.1.1"];
+    if (host === "rebind-loopback.example") return ["127.0.0.1"];
+    if (host === "rebind-v6.example") return ["::1"];
+    if (host === "rebind-cgnat.example") return ["100.64.0.1"];
+    if (host === "rebind-metadata.example") return ["169.254.169.254"];
+    return ["93.184.216.34"];
+  };
+  for (const host of [
+    "rebind-internal.example",
+    "rebind-loopback.example",
+    "rebind-v6.example",
+    "rebind-cgnat.example",
+    "rebind-metadata.example",
+  ]) {
+    const { fetcher, calls } = stub(redirect(`https://${host}/feed.ics`), ICS);
+    lines.length = 0;
+    const feed = createGarbageFeed(fetcher, { lookup: fakeLookup, log: (l) => lines.push(l) });
+    assert.equal(await feed.tomorrow(URL_, TZ, start), undefined, host);
+    assert.equal(calls.length, 1, host);
+    assert.deepEqual(lines, ["oc-family-pack: the garbage calendar redirected to a local address; no garbage line until it answers"], host);
+  }
+  const publicFeed = createGarbageFeed(stub(redirect("https://public-cdn.example/feed.ics"), ICS).fetcher, { lookup: fakeLookup });
+  assert.equal((await publicFeed.tomorrow(URL_, TZ, start))?.summary, "Green Bin and Recycling");
+});
+
 test("https never redirects down to http; http to http is followed", async () => {
   const start = at("2026-10-04T12:00:00-03:00");
   const lines: string[] = [];
@@ -532,4 +561,31 @@ test("the configured link is trusted even on the LAN; a redirect to a public hos
     assert.equal((await createGarbageFeed(fetcher).tomorrow(URL_, TZ, start))?.summary, "Green Bin and Recycling", location);
     assert.equal(calls.length, 2, location);
   }
+});
+
+test("unresolved redirect host must fail closed before requesting it", async () => {
+  const { fetcher, calls } = stub(redirect("https://unresolved.example/feed.ics"), ICS);
+  const lines: string[] = [];
+  const feed = createGarbageFeed(fetcher, { lookup: async () => [], log: (line) => lines.push(line) });
+  await feed.tomorrow(URL_, TZ, at("2026-10-04T12:00:00-03:00"));
+  assert.equal(calls.length, 1, "an unresolved redirect was fetched");
+});
+
+test("redirect DNS is revalidated at connection time against rebinding", async () => {
+  let contacted = 0;
+  const { server, base } = await listen((_req, res) => { contacted++; res.writeHead(302, { location: `http://rebind.example:${new URL(base).port}/evil.ics` }).end(); });
+  let lookups = 0;
+  try {
+    const feed = createGarbageFeed(fetch, { lookup: async () => ++lookups === 1 ? ["8.8.8.8"] : ["127.0.0.1"], timeoutMs: 3000 });
+    await feed.tomorrow(`${base}/start.ics`, TZ, at("2026-10-04T12:00:00-03:00"));
+    assert.equal(lookups, 2, "connection must validate its own DNS result");
+    assert.equal(contacted, 1, "redirect must not reach the local service");
+  } finally { server.closeAllConnections(); await new Promise((resolve) => server.close(resolve)); }
+});
+
+test("redirects reject mixed public and private DNS answers", async () => {
+  const { fetcher, calls } = stub(redirect("https://mixed.example/feed.ics"), ICS);
+  const feed = createGarbageFeed(fetcher, { lookup: async () => ["8.8.8.8", "10.0.0.9"] });
+  await feed.tomorrow(URL_, TZ, at("2026-10-04T12:00:00-03:00"));
+  assert.equal(calls.length, 1);
 });

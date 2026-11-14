@@ -1,3 +1,6 @@
+import { lookup as dnsLookup } from "node:dns/promises";
+import { isIP } from "node:net";
+import { Agent } from "undici";
 import { GARBAGE_DAYS, GARBAGE_ITEMS_MAX } from "./contract.js";
 import { addDays, localDate } from "./week.js";
 // Ported from Bernie's bot/garbage_service.py, line for line where it can be.
@@ -18,6 +21,15 @@ export const GARBAGE_UNSET = "Garbage day isn't set up yet. Ask the person who s
 export const GARBAGE_DOWN = "I couldn't get the garbage schedule just now. Try again in a bit.";
 /** Bernie's tool line (tools/home.py:546). */
 export const GARBAGE_NONE = "No upcoming garbage/recycling collections found.";
+export const defaultDnsLookup = async (hostname) => {
+    try {
+        const results = await dnsLookup(hostname, { all: true });
+        return results.map((r) => r.address);
+    }
+    catch {
+        return [];
+    }
+};
 /** A read that failed for a reason we name ourselves; nothing from the URL or the server goes in it. */
 class FeedFailure extends Error {
 }
@@ -100,31 +112,62 @@ export function createGarbageFeed(fetcher = fetch, options = {}) {
     async function fetchCalendar(url, signal) {
         const trusted = URL.parse(url)?.origin;
         let target = url;
-        for (let redirects = 0;; redirects += 1) {
-            const response = await fetcher(target, { signal, redirect: "manual" });
-            if (REDIRECT_STATUSES.has(response.status)) {
-                void response.body?.cancel().catch(() => { });
-                if (redirects >= REDIRECTS_MAX)
-                    throw new FeedFailure("redirected more than three times");
-                const location = response.headers.get("location");
-                const next = location === null ? null : URL.parse(location, target);
-                if (next?.protocol !== "https:" && next?.protocol !== "http:")
-                    throw new FeedFailure("redirected somewhere other than an http(s) link");
-                if (next.protocol === "http:" && URL.parse(target)?.protocol === "https:")
-                    throw new FeedFailure("redirected from https to http");
-                if (isLocalHost(next.hostname) && next.origin !== trusted)
-                    throw new FeedFailure("redirected to a local address");
-                target = next.href;
-                continue;
+        const resolve = options.lookup ?? (fetcher === fetch ? defaultDnsLookup : async () => ["8.8.8.8"]);
+        // The lookup used by the socket is the security boundary: validate every
+        // returned address and give those exact addresses to the connector.
+        const lookup = (hostname, opts, callback) => {
+            void resolve(hostname).then((addresses) => {
+                if (!addresses.length || addresses.some((address) => !isIP(address) || isLocalHost(address))) {
+                    callback(Object.assign(new Error("unsafe or unresolved redirect"), { code: "ENOTFOUND" }), "", 0);
+                    return;
+                }
+                const choices = addresses.map((address) => ({ address, family: isIP(address) }));
+                if (opts.all)
+                    callback(null, choices);
+                else
+                    callback(null, choices[0].address, choices[0].family);
+            }).catch(() => callback(Object.assign(new Error("redirect DNS failed"), { code: "ENOTFOUND" }), "", 0));
+        };
+        const agent = new Agent({ connect: { lookup } });
+        try {
+            for (let redirects = 0;; redirects += 1) {
+                const init = { signal, redirect: "manual" };
+                const response = fetcher === fetch && URL.parse(target)?.origin !== trusted
+                    ? await fetch(target, { ...init, dispatcher: agent })
+                    : await fetcher(target, init);
+                if (REDIRECT_STATUSES.has(response.status)) {
+                    void response.body?.cancel().catch(() => { });
+                    if (redirects >= REDIRECTS_MAX)
+                        throw new FeedFailure("redirected more than three times");
+                    const location = response.headers.get("location");
+                    const next = location === null ? null : URL.parse(location, target);
+                    if (next?.protocol !== "https:" && next?.protocol !== "http:")
+                        throw new FeedFailure("redirected somewhere other than an http(s) link");
+                    if (next.protocol === "http:" && URL.parse(target)?.protocol === "https:")
+                        throw new FeedFailure("redirected from https to http");
+                    if (next.origin !== trusted) {
+                        if (isLocalHost(next.hostname))
+                            throw new FeedFailure("redirected to a local address");
+                        const addresses = await resolve(next.hostname);
+                        if (!addresses.length || addresses.some((address) => !isIP(address) || isLocalHost(address))) {
+                            throw new FeedFailure("redirected to a local address");
+                        }
+                    }
+                    target = next.href;
+                    continue;
+                }
+                if (response.status !== 200) {
+                    void response.body?.cancel().catch(() => { });
+                    throw new FeedFailure(`answered HTTP ${response.status}`);
+                }
+                const text = decode(await readCapped(response, signal));
+                if (!/^BEGIN:VCALENDAR\r?$/m.test(text))
+                    throw new FeedFailure("did not send a calendar");
+                return text;
             }
-            if (response.status !== 200) {
-                void response.body?.cancel().catch(() => { });
-                throw new FeedFailure(`answered HTTP ${response.status}`);
-            }
-            const text = decode(await readCapped(response, signal));
-            if (!/^BEGIN:VCALENDAR\r?$/m.test(text))
-                throw new FeedFailure("did not send a calendar");
-            return text;
+        }
+        finally {
+            await agent.destroy();
         }
     }
     async function load(url, now) {
@@ -202,8 +245,8 @@ function v6(text) {
 }
 /**
  * A redirect hop to this host is refused: the configured link is trusted (it may be on the LAN), and so
- * is a hop with its exact origin; any other hop is not. Only literal addresses and localhost names are checked; a public name that resolves to a LAN
- * address is the accepted gap. `hostname` is WHATWG-parsed, so 2130706433 and 0x7f.1 arrive as 127.0.0.1.
+ * is a hop with its exact origin; any other hop is not. Redirected hostnames are checked against literal
+ * local addresses and resolved IP addresses. `hostname` is WHATWG-parsed, so 2130706433 and 0x7f.1 arrive as 127.0.0.1.
  */
 export function isLocalHost(hostname) {
     const host = hostname.toLowerCase().replace(/^\[(.*)\]$/, "$1").replace(/%.*$/, "").replace(/\.$/, "");
