@@ -223,6 +223,30 @@ function lanGateway(extra: Record<string, unknown> = {}) {
   return { ...lan, ...roles, controlUi: { ...(lan.controlUi as object), allowedOrigins: ["https://192.168.1.20"] }, auth, ...extra };
 }
 
+test("setup says why a configured morning brief stays quiet", () => {
+  const member = { ...ALEX, discordId: SNOWFLAKE };
+  const configured = { ...complete, members: [member], morningTime: "07:00" };
+  const hostWithApprovals = {
+    ...host(configured, lanGateway()),
+    approvals: { plugin: { enabled: true, mode: "targets", targets: [{ channel: "discord", to: `user:${SNOWFLAKE}` }] } },
+  };
+  const result = planSetup(hostWithApprovals, {}, READY, "UTC");
+  assert.match(result.text, /no parent with a Discord ID has `reminders` set to `dm` or `channel`/);
+  assert.equal(result.text.split("\n").at(-1), "The checklist is complete. The morning brief stays quiet until a parent sets `reminders`.");
+});
+
+test("an opted-in parent keeps the morning brief quiet warning away", () => {
+  const member = { ...ALEX, discordId: SNOWFLAKE, reminders: "dm" };
+  const configured = { ...complete, members: [member], morningTime: "07:00" };
+  const hostWithApprovals = {
+    ...host(configured, lanGateway()),
+    approvals: { plugin: { enabled: true, mode: "targets", targets: [{ channel: "discord", to: `user:${SNOWFLAKE}` }] } },
+  };
+  const result = planSetup(hostWithApprovals, {}, READY, "UTC");
+  assert.equal(result.text.includes("no parent with a Discord ID has `reminders` set"), false);
+  assert.match(result.text, /^Everything is set up\.$/m);
+});
+
 test("a Discord ID changes only that person's discordId and keeps everything else as written", () => {
   const result = planSetup(host(complete), { discord: [`alex=${SNOWFLAKE}`] }, READY, "UTC");
   const config = patchOf(result.text).plugins.entries["oc-family-pack"].config;

@@ -13,7 +13,7 @@ Each person is a member in `plugins.entries.oc-family-pack.config.members`.
 - **role** (optional). `parent`, `kid`, or `guest`. Omitted means `guest`. At least one parent is required before the Members step is done.
 - **color** (optional). A CSS color, such as `#3b82f6`. The page uses it. The setup command does not set it.
 - **discordId** (optional). 17 to 20 digits. It stays in config. The week payload never includes it.
-- **reminders** (optional). `dm`, `channel`, or `off`. Omitted means `dm` when the person has a `discordId`, and `off` when they do not. Change it later in chat with `set_reminder_mode`. The setup command does not set it.
+- **reminders** (optional). `dm`, `channel`, or `off`. Omitted means `off`, even when the person has a `discordId`; reminders are opt-in. Change it later in chat with `set_reminder_mode` or on the People page. The setup command does not set it.
 - **devices** (optional). `id`, `label`, `hostname`, `primaryMac`, `aliasMacs`, `source`, `sharedWith`, and `reservation`. A MAC is a device signal. It is normalized when config is parsed, and it stays off the week payload. An omitted device `id` keeps the label slug when unique. Repeated labels are disambiguated with the owner id and, when needed, a numeric suffix. Explicit ids never change. Run `--materialize-ids` and apply its patch before changing labels, MACs, logins, or roster membership; derived ids are only a legacy fallback. `sharedWith` lists other member ids on that one record. A second record with the same MAC is refused. `reservation` is an IPv4 address the operator wrote down (`address`, `source`, and an optional `network`). An observed address is not stored, and a reservation does not change the router. The setup command does not set devices.
 
 - **email** (optional). Trimmed and stored in lower case. It is only stored on the person's card. Nothing in this plugin sends email, and no output shows it. Two people may share one.
@@ -106,7 +106,7 @@ Setup checks the shape and does not repeat a bad address. The checklist and the 
 
 6. **Alerts.** Optional. Done when `summaryChannel` is a key in `channels` and that value is a Discord channel id. If `channels` already has one key, setup points `summaryChannel` at it. If the family config has no channel yet and the Gateway Discord config has one enabled channel, setup prints that channel id in the command. A channel OpenClaw only listens in is not a replacement for a summary channel that is already set. The plugin does not ask for a bot token. This version posts through Discord. skip leaves briefs and reminders off.
 
-7. **Morning brief.** Optional. Done when `morningTime` is `HH:MM`, for example `07:00`. A weekday morning direct message to parents. Leave it unset to keep it off.
+7. **Morning brief.** Optional. Done when `morningTime` is `HH:MM`, for example `07:00`. A weekday morning direct message to parents who set `reminders` to `dm` or `channel`; it stays quiet while every parent is `off`. Leave it unset to keep it off.
 
 8. **After-school brief.** Optional. Done when `afterSchoolTime` is set, for example `15:30`. A weekday post to the summary channel.
 

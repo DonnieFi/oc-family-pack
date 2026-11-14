@@ -22,6 +22,8 @@ export function familyConfig(host) {
 }
 /** Discord is the only delivery path. Email and phone are stored and do not make someone reachable. */
 export const NO_CHANNEL = (name) => `${name} has no Discord account, so this version can't send them reminders or briefs. Email and phone stay on the contact card and are not notification routes.`;
+/** Reminders are opt-in, so a morning brief time with no opted-in parent delivers nothing. */
+export const QUIET_MORNING = "A morning brief time is set, but no parent with a Discord ID has `reminders` set to `dm` or `channel`, so the daily brief stays quiet. Set it on each parent who should get it, in chat with `set_reminder_mode` or on the People page.";
 /** The member's Control UI login, if it has one. `login` and `profileId` are the same field. */
 function loginOf(member) {
     const entry = record(member);
@@ -55,6 +57,23 @@ function unreachable(host) {
     return (Array.isArray(members) ? members : [])
         .filter((member) => record(member).discordId === undefined)
         .map((member) => NO_CHANNEL(nameOf(member)));
+}
+/** True when the config asks for a morning brief that no reachable parent is opted in to receive. */
+function quietMorningBrief(host) {
+    const config = familyConfig(host);
+    const time = config.morningTime;
+    if (typeof time !== "string" || time.trim() === "")
+        return [];
+    const members = Array.isArray(config.members) ? config.members : [];
+    // A parent with no Discord id already gets the NO_CHANNEL warning; this one is for opted-out delivery.
+    const parents = members.filter((member) => rosterRole(member) === "parent" && record(member).discordId !== undefined);
+    if (parents.length === 0)
+        return [];
+    const reached = parents.some((member) => {
+        const mode = record(member).reminders;
+        return mode === "dm" || mode === "channel";
+    });
+    return reached ? [] : [QUIET_MORNING];
 }
 /** The key setup matches a member by: the login, else the id, else the slug of the name, as parseConfig derives it. */
 function profileId(member) {
@@ -300,7 +319,7 @@ export function setupSteps(host, gog, hostZone) {
             })(),
         },
         optionalPiece("Alerts", alertsDone(config), alertsNext(host, config)),
-        optionalPiece("Morning brief", clockDone(config.morningTime), clockNext("morningTime", "Weekday morning direct message to parents.", "07:00")),
+        optionalPiece("Morning brief", clockDone(config.morningTime), clockNext("morningTime", "Weekday morning direct message to parents who set `reminders` to `dm` or `channel`. It stays quiet while every parent is `off`.", "07:00")),
         optionalPiece("After-school brief", clockDone(config.afterSchoolTime), clockNext("afterSchoolTime", "Weekday after-school post to the summary channel. It stays quiet until `summaryChannel` is set.", "15:30")),
         optionalPiece("Weekend preview", clockDone(config.weekendPreviewTime), clockNext("weekendPreviewTime", "Weekend preview posted to the summary channel. It runs on Friday unless you set `weekendPreviewWeekday` (`0` is Sunday and `6` is Saturday).", "16:00")),
         optionalPiece("Garbage calendar", httpFeed(config.garbageIcsUrl), garbageNext()),
@@ -595,7 +614,8 @@ export function planSetup(host, input, gog, hostZone) {
     const optional = asked ? [] : discordHint(host);
     const next = list.find((step) => !step.done && step.optional !== true);
     const derived = derivedIds(host);
-    const warnings = [...derived, ...unreachable(host)];
+    const quiet = quietMorningBrief(host);
+    const warnings = [...derived, ...unreachable(host), ...quiet];
     const warned = warnings.length > 0 ? ["", ...warnings] : [];
     const approvals = approvalLines(host, new Map());
     if (!next) {
@@ -617,7 +637,9 @@ export function planSetup(host, input, gog, hostZone) {
                     ? "The config is complete. Apply the approval block, then run the pilot preflight."
                     : derived.length > 0
                         ? "The checklist is complete. Run `openclaw family setup --materialize-ids`, apply its patch, then run the pilot preflight."
-                        : "Everything is set up.",
+                        : quiet.length > 0
+                            ? "The checklist is complete. The morning brief stays quiet until a parent sets `reminders`."
+                            : "Everything is set up.",
             ].join("\n"),
         };
     }

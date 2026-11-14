@@ -121,7 +121,7 @@
     "morningTime": {
       "label": "Morning brief",
       "placeholder": "07:00",
-      "help": "Weekday time, 24-hour HH:MM, when parents get a direct message of today's and tomorrow's calendar items. Leave empty for no morning brief."
+      "help": "Weekday time, 24-hour HH:MM, when parents who set `reminders` to `dm` or `channel` get a direct message of today's and tomorrow's calendar items. It stays quiet while every parent is `off`. Leave empty for no morning brief."
     },
     "afterSchoolTime": {
       "label": "After-school brief",
