@@ -81,6 +81,8 @@ A signed-in kid already sees their own classes without pressing a chip. The Gate
 | **Custom plugin UI** lab enabled | Required for native pages from non-bundled plugins |
 | HTTPS or `127.0.0.1` | Native plugin pages need a secure origin |
 
+The peer range (`>=2026.11.3 <2026.12`) is install-admitting, not a tested claim: only `2026.11.3` is tested, and each later `2026.11` patch is unclaimed until `npm run smoke` passes on it.
+
 Weather uses Environment Canada's public API, so it needs no key and covers Canadian locations only.
 
 ## Install
