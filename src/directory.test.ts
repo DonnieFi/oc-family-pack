@@ -263,7 +263,7 @@ test("family_contact trusts senderIsOwner and ignores conversationReadOrigin", a
 
 test("the directory methods return the roster to a parent and a preview that does not write", async () => {
   const raw = {
-    members: [{ id: "person-riley", profileId: "riley-login", name: "Riley", role: "kid", email: "riley@example.com" }],
+    members: [{ id: "person-riley", profileId: "riley-login", name: "Riley", role: "kid", discordId: "555555555555555555", email: "riley@example.com" }],
     calendars: [{ id: "family", label: "Family", kind: "shared", owners: ["person-riley"] }],
   };
   const config = parseConfig(raw);
@@ -273,10 +273,11 @@ test("the directory methods return the roster to a parent and a preview that doe
     seen.push(ok ? payload : "bad");
   };
   await directoryMethod(() => config, () => raw)({ client: owner, respond });
-  const body = seen[0] as { members: { id: string; login?: string; email?: string }[]; persistence: string };
+  const body = seen[0] as { members: { id: string; login?: string; email?: string; reminders?: string }[]; persistence: string };
   assert.equal(body.members[0]?.id, "person-riley");
   assert.equal(body.members[0]?.login, "riley-login");
   assert.equal(body.members[0]?.email, "riley@example.com");
+  assert.equal(body.members[0]?.reminders, "off");
   assert.match(body.persistence, /does not write the Gateway config/);
 
   seen.length = 0;

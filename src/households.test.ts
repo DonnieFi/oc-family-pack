@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { parseConfig } from "./config.ts";
 import type { DeliveryOutcome, DeliveryTarget, DiscordMessage } from "./discord-delivery.ts";
 import type { Detail } from "./households.ts";
 import { householdTick } from "./households.ts";
@@ -104,6 +105,23 @@ test("morning posts once to each parent and a restart does not post again", asyn
   );
   assert.equal(calls[0]?.description, "Today 9:00 AM: Dentist (Alex)");
   assert.equal(calls.every((call) => "member" in call.target), true);
+});
+
+test("a parent with a Discord ID and omitted reminders receives no morning brief", async () => {
+  const store = await freshStore();
+  const optedOutConfig = parseConfig({
+    timezone: "America/Halifax",
+    summaryChannel: "family",
+    morningTime: "07:00",
+    channels: { family: "111111111111111111" },
+    members: [
+      { id: "alex", name: "Alex", role: "parent", discordId: "333333333333333333" },
+      { id: "sam", name: "Sam", role: "parent", discordId: "444444444444444444", reminders: "dm" },
+    ],
+  });
+  const { deps, calls } = rig(store, () => dentist, [dentistDetail], () => SENT, optedOutConfig);
+  await householdTick(deps, at(WED, 7, 5));
+  assert.deepEqual(calls.map((call) => call.key), [`household:morning:${WED}:sam`]);
 });
 
 test("an empty morning and a usual after-school day produce no post", async () => {

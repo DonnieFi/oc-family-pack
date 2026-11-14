@@ -37,7 +37,7 @@ export const NO_CHANNEL = (name: string) =>
 
 /** Reminders are opt-in, so a morning brief time with no opted-in parent delivers nothing. */
 export const QUIET_MORNING =
-  "A morning brief time is set, but no parent with a Discord ID has `reminders` set to `dm` or `channel`, so the daily brief stays quiet. Set it on each parent who should get it, in chat with `set_reminder_mode` or on the People page.";
+  "A morning brief time is set, but no parent with a Discord ID has `reminders` set to `dm` or `channel`, so the daily brief stays quiet. Set it on each parent who should get it, on the People page or in the plugin config.";
 
 /** The member's Control UI login, if it has one. `login` and `profileId` are the same field. */
 function loginOf(member: unknown): string | undefined {

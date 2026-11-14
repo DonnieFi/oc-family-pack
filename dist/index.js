@@ -30,6 +30,7 @@ import { DEMO_MEMBERS } from "./demo.js";
 import { createGarbageFeed } from "./garbage.js";
 import { readEcWeather } from "./weather-ec.js";
 import { resolveBriefAgentName } from "./agent-name.js";
+import { briefSenderAgentId } from "./brief-sender.js";
 function configuredGogPath(raw) {
     try {
         return parseConfig(raw).gogPath;
@@ -111,7 +112,7 @@ const plugin = defineFeaturePlugin({
                 id: "family-briefs",
                 async start(ctx) {
                     const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
-                    const { resolveAgentIdentity, resolveDefaultAgentId, listAgentIds } = await import("openclaw/plugin-sdk/agent-runtime");
+                    const { resolveAgentIdentity, listAgentIds } = await import("openclaw/plugin-sdk/agent-runtime");
                     const garbage = createGarbageFeed(fetch, { log: (line) => ctx.logger.warn(line) });
                     const directory = briefDirectory(config);
                     stopBriefs = startBriefs({
@@ -119,7 +120,7 @@ const plugin = defineFeaturePlugin({
                         store: () => store,
                         deliver: (target, messages, key) => deliver(sendDurableMessageBatch, ctx.config, directory, target, messages, key),
                         agentName: async () => {
-                            return resolveBriefAgentName(ctx.config, resolveDefaultAgentId, resolveAgentIdentity, listAgentIds);
+                            return resolveBriefAgentName(ctx.config, (cfg) => briefSenderAgentId(config, cfg), resolveAgentIdentity, listAgentIds);
                         },
                         readWeather: async () => {
                             const state = await readEcWeather(config.location, undefined, Date.now(), { timezone: config.timezone });

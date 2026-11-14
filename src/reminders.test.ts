@@ -217,7 +217,7 @@ test("a legacy email-login member keeps the reminder rows saved under that id", 
   const store = await freshStore();
   const config = parseConfig({
     timezone: "America/Halifax",
-    members: [{ name: "Alex", login: "alex@example.com", role: "parent", discordId: "333333333333333333" }],
+    members: [{ name: "Alex", login: "alex@example.com", role: "parent", discordId: "333333333333333333", reminders: "dm" }],
     calendars: [{ id: "alex@example.com", label: "Alex", kind: "personal", owners: ["alex@example.com"] }],
   });
   assert.equal(config.members[0]?.id, "alex@example.com");

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The daily and weekly brief footer now resolves the sender agent through `discordAccount` routing when set, and falls back to `main` (or the first configured agent) instead of failing when a multi-agent Gateway has no unique default agent.
 - Omitting a member's `reminders` now means `off`, even when they have a `discordId`. Event reminders and the weekday morning brief are opt-in: set `reminders: "dm"` or `"channel"` on each person who should get them. A config that relied on the old implicit direct message stops those sends after upgrading until a mode is set.
 
 - Week, Today, and Schedule expose a durable household `fpId` while retaining visible-source `id` write references. Participant-only hidden-calendar events redact provider IDs, source calendar keys, and Google links.
