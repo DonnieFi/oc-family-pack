@@ -1253,14 +1253,18 @@ async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port:
   const printed = planAccess(
     "lan",
     { parent: ["alex"], kid: ["riley"] },
-    { port, agentIds: ["main", "coding"], defaultAgentId: "main" },
+    { port, agentIds: ["main", "coding"], householdAgentId: "main" },
   ).text.replaceAll("LAN_ADDRESS", HOUSEHOLD_ADDRESS);
   const [access, roles] = [...printed.matchAll(/^\{\n[\s\S]*?^\}$/gm)].map(
     (match) => (JSON.parse(match[0]) as { gateway: Record<string, unknown> & { auth: Record<string, unknown> } }).gateway,
   );
   if (!access || !roles) fail(step, "access lan did not print the Gateway config and roles blocks");
   const config = JSON.parse(readFileSync(configPath, "utf8")) as { gateway: Record<string, unknown>; agents?: unknown };
-  config.agents = { list: [{ id: "main", default: true }, { id: "coding" }] };
+  config.agents = {
+    ownership: "explicit",
+    defaults: { systemAgent: { agentId: "main" } },
+    entries: { main: {}, coding: {} },
+  };
   config.gateway = {
     mode: "local",
     port,
@@ -1320,12 +1324,11 @@ async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port:
     note(`a proxied session with user header ${JSON.stringify(user)} is refused at connect: ${frames[0].error?.details?.code ?? frames[0].error?.message}`, step);
   }
 
-  // A paired device token with no X-Forwarded-User header carries a signed
-  // device identity, so it can connect, and the plugin scopes it as a guest
-  // (shared calendars only) rather than the shared owner.
-  const pairedLan = await session(
+  // A device token paired before switching to LAN mode has a stale shared-auth
+  // generation and is refused at connect with AUTH_DEVICE_TOKEN_MISMATCH.
+  const stalePairedLan = await session(
     port,
-    "paired device token in LAN mode",
+    "solo-paired device token in LAN mode",
     { origin: `https://${HOUSEHOLD_ADDRESS}`, "x-forwarded-for": HOUSEHOLD_CLIENT },
     (nonce) => ({
       minProtocol: 4,
@@ -1339,13 +1342,54 @@ async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port:
     }),
     [week],
   );
-  connected(pairedLan, "paired device token in LAN mode");
-  const pairedCalendars = (pairedLan[1]?.payload as { calendars?: { label: string }[] } | undefined)?.calendars;
-  const pairedSees = (pairedCalendars ?? []).map((calendar) => calendar.label).sort().join(", ");
-  if (!pairedLan[1]?.ok || pairedSees !== "Family") {
-    fail(step, `a paired device token in LAN mode with no user header should see shared calendars only (Family), got ${JSON.stringify(pairedLan[1]?.error ?? pairedSees)}`);
+  if (stalePairedLan[0]?.ok !== false || stalePairedLan[0]?.error?.details?.code !== "AUTH_DEVICE_TOKEN_MISMATCH") {
+    fail(step, `a solo-paired device token should be refused in LAN mode with AUTH_DEVICE_TOKEN_MISMATCH: ${JSON.stringify(stalePairedLan)}`);
   }
-  note("a paired device token in LAN mode with no user header connects and reads as a guest (Family only)", step);
+  note("a solo-paired device token is refused in LAN mode (AUTH_DEVICE_TOKEN_MISMATCH)", step);
+
+  // With gateway.roles configured, even a freshly paired LAN device token with
+  // no X-Forwarded-User header is refused at connect with AUTH_VERIFIED_USER_REQUIRED.
+  const lanDevice = deviceIdentity();
+  const lanPaired = await session(
+    port,
+    "LAN device pairing on loopback",
+    { origin: `http://127.0.0.1:${port}` },
+    (nonce) => ({
+      minProtocol: 4,
+      maxProtocol: 4,
+      client: { ...CONTROL_UI_CLIENT, buildId: pairedDevice.buildId },
+      role: "operator",
+      scopes: OPERATOR_SCOPES,
+      caps: [],
+      auth: { password: HOUSEHOLD_PASSWORD },
+      device: lanDevice.sign(nonce, ""),
+    }),
+    [],
+  );
+  const lanDeviceToken = (lanPaired[0]?.payload?.auth as { deviceToken?: string } | undefined)?.deviceToken;
+  if (!lanPaired[0]?.ok || !lanDeviceToken) {
+    fail(step, `could not issue a LAN device token on loopback: ${JSON.stringify(lanPaired[0]?.error ?? lanPaired)}`);
+  }
+  const pairedLan = await session(
+    port,
+    "paired device token in LAN mode",
+    { origin: `https://${HOUSEHOLD_ADDRESS}`, "x-forwarded-for": HOUSEHOLD_CLIENT },
+    (nonce) => ({
+      minProtocol: 4,
+      maxProtocol: 4,
+      client: { ...CONTROL_UI_CLIENT, buildId: pairedDevice.buildId },
+      role: "operator",
+      scopes: OPERATOR_SCOPES,
+      caps: [],
+      auth: { deviceToken: lanDeviceToken },
+      device: lanDevice.sign(nonce, lanDeviceToken),
+    }),
+    [week],
+  );
+  if (pairedLan[0]?.ok !== false || pairedLan[0]?.error?.details?.code !== "AUTH_VERIFIED_USER_REQUIRED") {
+    fail(step, `a paired device token in LAN mode with no user header should be refused with AUTH_VERIFIED_USER_REQUIRED: ${JSON.stringify(pairedLan)}`);
+  }
+  note("a paired device token in LAN mode with no user header is refused at connect (AUTH_VERIFIED_USER_REQUIRED)", step);
 
   const cli = async (method: string, params: unknown) =>
     parseHostJson(
