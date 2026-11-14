@@ -379,6 +379,8 @@ test("setup reports a Gateway scope that does not match the roster role", () => 
   const result = planSetup(host({ ...complete, members: [ALEX, riley] }, gateway), {}, READY, "UTC");
   assert.match(result.text, /^Members: To do$/m);
   assert.match(result.text, /scopes for Riley \(kid\) don't match/);
+  assert.match(result.text, /openclaw family access role riley-home=kid/);
+  assert.match(result.text, /`identityScopes`, `users\.setRole`, and `members\[\]\.role`/);
 });
 
 test("a complete LAN roster passes the preflight, including roles and allowUsers", () => {

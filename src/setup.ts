@@ -188,14 +188,17 @@ function membersStep(host: unknown, members: unknown[]): SetupStep {
       const login = loginOf(member);
       if (login === undefined) return [];
       const actual = Array.isArray(scopes[login]) ? scopes[login] : [];
-      return roleFromScopes(actual) === rosterRole(member) ? [] : [`${nameOf(member)} (${rosterRole(member)})`];
+      return roleFromScopes(actual) === rosterRole(member)
+        ? []
+        : [{ label: `${nameOf(member)} (${rosterRole(member)})`, pair: `${login}=${rosterRole(member)}` }];
     });
     if (mismatched.length > 0) {
-      const who = named(mismatched);
+      const who = named(mismatched.map((entry) => entry.label));
+      const pairs = mismatched.map((entry) => entry.pair).join(" ");
       return {
         name,
         done: false,
-        next: `The Gateway scopes for ${who} don't match the roster role. Re-run the access command to set \`identityScopes\`, then after each person signs in once run the printed \`users.setRole\` command.\n\`${accessCommand(gateway, members, allowed)}\``,
+        next: `The Gateway scopes for ${who} don't match the roster role. Run \`openclaw family access role ${pairs}\` to update \`identityScopes\`, \`users.setRole\`, and \`members[].role\` together, or re-run the access command to set \`identityScopes\` and then run the printed \`users.setRole\` command.\n\`${accessCommand(gateway, members, allowed)}\``,
       };
     }
   }

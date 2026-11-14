@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { runAccess } from "./access.js";
 import { readGuideCheckpoint, runGuide } from "./setup-guide.js";
-import { planSetup, setupSteps } from "./setup.js";
+import { familyConfig, planSetup, setupSteps } from "./setup.js";
 import { openFamilyStore } from "./store.js";
 const execFileAsync = promisify(execFile);
 export function execGogSetup(timeoutMs = 20_000) {
@@ -242,6 +242,29 @@ function gatewayPort(gateway) {
     const port = typeof gateway === "object" && gateway !== null ? gateway.port : undefined;
     return typeof port === "number" ? port : undefined;
 }
+async function readGatewayProfiles(run, port) {
+    try {
+        const args = ["gateway", "call", "users.list", ...(port !== undefined ? ["--port", String(port)] : []), "--json"];
+        const { stdout } = await run("openclaw", args);
+        const parsed = JSON.parse(stdout);
+        if (!isRecord(parsed) || !Array.isArray(parsed.profiles))
+            return undefined;
+        return parsed.profiles.flatMap((entry) => {
+            if (!isRecord(entry) || typeof entry.id !== "string" || entry.id.trim() === "")
+                return [];
+            const emails = Array.isArray(entry.emails) ? entry.emails.filter((e) => typeof e === "string") : undefined;
+            return [{
+                    id: entry.id.trim(),
+                    ...(typeof entry.displayName === "string" ? { displayName: entry.displayName } : {}),
+                    ...(emails ? { emails } : {}),
+                    ...(typeof entry.role === "string" ? { role: entry.role } : {}),
+                }];
+        });
+    }
+    catch {
+        return undefined;
+    }
+}
 /**
  * `openclaw family gog` prints the one command that moves gog setup forward.
  * `openclaw family access` reports the household sign-in mode, or prints the setup for one.
@@ -268,20 +291,28 @@ export function registerFamilyCli(program, deps) {
     });
     family
         .command("access")
-        .description("Report the household sign-in mode, or print the setup for one")
-        .argument("[mode]", "solo or lan")
-        .argument("[names...]", "People with no role flag, set up as guests")
+        .description("Report the household sign-in mode, check roles, or print the setup for one")
+        .argument("[mode]", "solo, lan, role, or check")
+        .argument("[names...]", "People with no role flag, or NAME=ROLE pairs for role")
         .option("--parent <name...>", "Parents: full access and every session")
         .option("--kid <name...>", "Kids: read, and write their own sessions")
         .option("--guest <name...>", "Guests: read only")
-        .action((mode, names, opts) => {
-        const port = gatewayPort(deps.gateway);
-        const result = runAccess(deps.gateway, mode, {
+        .action(async (mode, names, opts) => {
+        const gateway = deps.gateway ?? (isRecord(deps.host) ? deps.host.gateway : undefined);
+        const port = gatewayPort(gateway);
+        const rawMembers = familyConfig(deps.host).members;
+        const members = Array.isArray(rawMembers) ? rawMembers : undefined;
+        const profiles = deps.profiles ?? (mode === "role" || mode === "check" ? await readGatewayProfiles(deps.run, port) : undefined);
+        const result = runAccess(gateway, mode, {
             ...(opts.parent ? { parent: opts.parent } : {}),
             ...(opts.kid ? { kid: opts.kid } : {}),
             ...(opts.guest ? { guest: opts.guest } : {}),
             ...(names ? { names } : {}),
-        }, port !== undefined ? { port } : {});
+        }, {
+            ...(port !== undefined ? { port } : {}),
+            ...(members !== undefined ? { members } : {}),
+            ...(profiles !== undefined ? { profiles } : {}),
+        });
         write(result.text);
         process.exitCode = result.ok ? 0 : 1;
     });

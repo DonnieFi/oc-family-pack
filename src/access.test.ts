@@ -324,3 +324,80 @@ test("a trusted-proxy Gateway is LAN even before the plugin setting is added", (
   assert.equal(accessModeFor(gateway, "solo"), "solo");
   assert.equal(accessModeFor({ auth: { mode: "token" } }, undefined), undefined);
 });
+
+test("access role prints identityScopes, users.setRole with the real profile id, and the roster patch together", () => {
+  const gateway = {
+    auth: {
+      identityScopes: {
+        alex: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"],
+        riley: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"],
+      },
+    },
+  };
+  const members = [
+    { id: "alex", profileId: "alex", displayName: "Alex", role: "parent" },
+    { profileId: "riley", displayName: "Riley", role: "parent", email: "riley@example.com" },
+  ];
+  const profiles = [
+    { id: "prof-alex-1", displayName: "alex", role: "parent" },
+    { id: "prof-riley-2", displayName: "riley", role: "parent" },
+  ];
+  const result = runAccess(gateway, "role", { names: ["riley=kid"] }, { members, profiles });
+  assert.equal(result.ok, true);
+  assert.match(result.text, /"riley": \[\n\s+"operator\.read",\n\s+"operator\.sessions\.write"\n\s+\]/);
+  assert.match(result.text, /"alex": \[\n\s+"operator\.read",\n\s+"operator\.write"/);
+  assert.match(result.text, /openclaw gateway call users\.setRole --params '\{"profileId":"prof-riley-2","role":"kid"\}'/);
+  assert.equal(result.text.includes("PROFILE_riley"), false);
+  assert.match(result.text, /"id": "riley"/);
+  assert.match(result.text, /"role": "kid"/);
+  assert.match(result.text, /"email": "riley@example\.com"/);
+
+  const fallback = runAccess(gateway, "role", { names: ["riley=kid"] }, { members });
+  assert.equal(fallback.ok, true);
+  assert.match(fallback.text, /PROFILE_riley/);
+});
+
+test("access check compares roster, identityScopes, and Gateway users.list roles", () => {
+  const gateway = {
+    auth: {
+      identityScopes: {
+        alex: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"],
+        riley: ["operator.read", "operator.sessions.write"],
+      },
+    },
+  };
+  const members = [
+    { id: "alex", profileId: "alex", displayName: "Alex", role: "parent" },
+    { id: "riley", profileId: "riley", displayName: "Riley", role: "kid" },
+  ];
+  const drifted = runAccess(
+    gateway,
+    "check",
+    {},
+    {
+      members,
+      profiles: [
+        { id: "prof-alex", displayName: "alex", role: "parent" },
+        { id: "prof-riley", displayName: "riley", role: "parent" },
+      ],
+    },
+  );
+  assert.equal(drifted.ok, false);
+  assert.match(drifted.text, /Alex \(alex\): roster=parent, identityScopes=parent, Gateway role=parent \(ok\)/);
+  assert.match(drifted.text, /Riley \(riley\): roster=kid, identityScopes=kid, Gateway role=parent \(mismatch\)/);
+  assert.match(drifted.text, /Run: openclaw family access role riley=kid/);
+
+  const aligned = runAccess(
+    gateway,
+    "check",
+    {},
+    {
+      members,
+      profiles: [
+        { id: "prof-alex", displayName: "alex", role: "parent" },
+        { id: "prof-riley", displayName: "riley", role: "kid" },
+      ],
+    },
+  );
+  assert.equal(aligned.ok, true);
+});

@@ -150,7 +150,7 @@ When `gog` can list calendars, put them in config. Each one has an `id`, a `labe
 
 ## Sign-in
 
-You sign in as your `profileId`. Gateway roles and plugin roster roles are two separate settings: `openclaw family access lan` sets `identityScopes`, and `users.setRole` sets the host role. The plugin checks `members[].role` for page writes, People, and approvals; setup reports when the two disagree. Change both when someone changes role.
+You sign in as your `profileId`. Gateway roles and plugin roster roles are separate settings: `openclaw family access lan` sets `identityScopes`, and `users.setRole` sets the host role. The plugin checks `members[].role` for Discord calendar writes, page writes, People, and approvals. Setup reports when `identityScopes` and `members[].role` disagree, and `openclaw family access check` also checks `users.list`. Run `openclaw family access role NAME=ROLE` when someone changes role to print all three updates together.
 
 `openclaw family access` reports solo or LAN and changes nothing. In solo mode, everyone who opens the Control UI is the shared owner, and family members use Discord. In LAN mode, each person has their own sign-in, and every member is in `allowUsers`. A trusted-proxy Gateway is treated as LAN even before `accessMode` is set; setting `accessMode: "lan"` makes it explicit. A device token with no device identity is refused by the Gateway before the plugin runs. A paired token can connect, but the plugin has no household username for it, so it reads as a guest and sees shared calendars only. In solo mode it is the shared owner. The cutover is [HOUSEHOLD-LAN.md](HOUSEHOLD-LAN.md).
 

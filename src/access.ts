@@ -6,6 +6,12 @@ export type AccessMode = "solo" | "lan";
 export type AccessDetection = { mode: AccessMode; missing: string[] };
 export type AccessPeople = { parent?: string[]; kid?: string[]; guest?: string[]; names?: string[] };
 export type AccessResult = { ok: boolean; text: string };
+export type GatewayUserProfile = { id: string; displayName?: string; emails?: string[]; role?: string };
+export type AccessOptions = {
+  port?: number;
+  members?: unknown[];
+  profiles?: GatewayUserProfile[];
+};
 
 export const ROLES = ["parent", "kid", "guest"] as const;
 export type Role = (typeof ROLES)[number];
@@ -210,7 +216,7 @@ function caddyfile(list: Person[], port: number): string {
 export function planAccess(
   mode: string | undefined,
   input: AccessPeople,
-  opts: { port?: number },
+  opts: AccessOptions,
 ): AccessResult {
   if (mode === "solo") {
     const named = ROLES.some((role) => (input[role] ?? []).length > 0) || (input.names ?? []).length > 0;
@@ -271,13 +277,250 @@ export function planAccess(
   return { ok: false, text: "Pick a mode: `solo` or `lan`." };
 }
 
+function memberSlug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function memberLoginOf(member: unknown): string | undefined {
+  const entry = record(member);
+  for (const value of [entry.profileId, entry.login]) {
+    if (typeof value === "string" && value.trim() !== "") return value.trim().toLowerCase();
+  }
+  return undefined;
+}
+
+function memberNameOf(member: unknown): string {
+  const entry = record(member);
+  for (const value of [entry.name, entry.displayName, entry.id, entry.profileId, entry.login]) {
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
+  }
+  return "";
+}
+
+function memberIdOf(member: unknown): string {
+  const entry = record(member);
+  if (typeof entry.id === "string" && entry.id.trim() !== "") return entry.id.trim().toLowerCase();
+  const login = memberLoginOf(member);
+  if (login !== undefined) {
+    if (!login.includes("@")) return memberSlug(login) || login;
+    const rawName = typeof entry.name === "string" ? entry.name.trim() : typeof entry.displayName === "string" ? entry.displayName.trim() : "";
+    if (rawName === "" || rawName.toLowerCase() === login) return login;
+    const local = login.slice(0, login.indexOf("@"));
+    return memberSlug(local) || login;
+  }
+  return memberSlug(memberNameOf(member));
+}
+
+function memberRoleOf(member: unknown): Role {
+  const role = record(member).role;
+  return typeof role === "string" && (ROLES as readonly string[]).includes(role) ? (role as Role) : "guest";
+}
+
+function scopeRoleOf(scopes: unknown): Role {
+  const given = Array.isArray(scopes) ? scopes.map(String) : [];
+  if (given.includes("operator.write") || given.includes("operator.admin")) return "parent";
+  if (given.includes("operator.sessions.write")) return "kid";
+  return "guest";
+}
+
+function matchMemberIndex(members: readonly unknown[], token: string): { index: number } | { error: string } | undefined {
+  const needle = token.trim().toLowerCase();
+  const hits: number[] = [];
+  members.forEach((member, index) => {
+    const entry = record(member);
+    const aliases = Array.isArray(entry.aliases) ? entry.aliases.map((a) => String(a).trim().toLowerCase()) : [];
+    const candidates = [
+      memberIdOf(member),
+      memberLoginOf(member),
+      typeof entry.name === "string" ? entry.name.trim().toLowerCase() : undefined,
+      typeof entry.displayName === "string" ? entry.displayName.trim().toLowerCase() : undefined,
+      ...aliases,
+    ].filter((v): v is string => v !== undefined && v !== "");
+    if (candidates.includes(needle)) hits.push(index);
+  });
+  if (hits.length > 1) return { error: `More than one family member matches \`${token}\`. Use their member id instead.` };
+  return hits[0] === undefined ? undefined : { index: hits[0] };
+}
+
+function matchGatewayProfile(member: unknown, login: string, profiles: readonly GatewayUserProfile[] | undefined): GatewayUserProfile | undefined {
+  const entry = record(member);
+  const pinned = typeof entry.gatewayProfileId === "string" && entry.gatewayProfileId.trim() !== "" ? entry.gatewayProfileId.trim() : undefined;
+  if (!profiles) return pinned ? { id: pinned } : undefined;
+  if (pinned) {
+    const byId = profiles.find((profile) => profile.id === pinned);
+    if (byId) return byId;
+  }
+  const matches = profiles.filter((profile) => {
+    const display = profile.displayName?.trim().toLowerCase();
+    const email = profile.emails?.[0]?.trim().toLowerCase();
+    return display === login || email === login;
+  });
+  return matches.length === 1 ? matches[0] : pinned ? { id: pinned } : undefined;
+}
+
+/**
+ * `openclaw family access role NAME=ROLE ...`: print the `identityScopes` block,
+ * the `users.setRole` call (with the real profile id from `users.list` when
+ * available), and the `members[].role` config patch together.
+ */
+export function planAccessRole(
+  gateway: unknown,
+  input: AccessPeople,
+  opts: AccessOptions = {},
+): AccessResult {
+  const entries: [string, Role][] = [
+    ...ROLES.flatMap((role) => (input[role] ?? []).map((name): [string, Role] => [name.trim().toLowerCase(), role])),
+  ];
+  for (const raw of input.names ?? []) {
+    const at = raw.indexOf("=");
+    const name = raw.slice(0, at).trim().toLowerCase();
+    const role = raw.slice(at + 1).trim().toLowerCase();
+    if (at < 1 || name === "" || !(ROLES as readonly string[]).includes(role)) {
+      return {
+        ok: false,
+        text: "Pass each role change as `NAME=ROLE` (`parent`, `kid`, or `guest`), for example `openclaw family access role alex=parent`.",
+      };
+    }
+    entries.push([name, role as Role]);
+  }
+  if (entries.length === 0) {
+    return {
+      ok: false,
+      text: "Pass at least one `NAME=ROLE` pair, for example `openclaw family access role alex=parent`.",
+    };
+  }
+  const seen = new Set<string>();
+  const existingMembers = Array.isArray(opts.members) ? opts.members : [];
+  const nextMembers = existingMembers.map((member) => ({ ...record(member) }));
+  const resolved: { login: string; role: Role; profileId: string; placeholder: boolean }[] = [];
+
+  for (const [token, role] of entries) {
+    if (seen.has(token)) return { ok: false, text: `\`${token}\` is listed more than once. Give each person one role.` };
+    seen.add(token);
+    if (existingMembers.length > 0) {
+      const found = matchMemberIndex(existingMembers, token);
+      if (found === undefined) {
+        return { ok: false, text: `\`${token}\` isn't in the family roster yet. Add them with \`openclaw family setup --${role} ${token}\` first.` };
+      }
+      if ("error" in found) return { ok: false, text: found.error };
+      const target = nextMembers[found.index]!;
+      const login = memberLoginOf(target);
+      if (login === undefined) {
+        return { ok: false, text: `${memberNameOf(target)} has no Control UI login. Add \`login\` to that member first.` };
+      }
+      if (typeof target.id !== "string" || target.id.trim() === "") target.id = memberIdOf(target);
+      target.role = role;
+      const profile = matchGatewayProfile(target, login, opts.profiles);
+      resolved.push({
+        login,
+        role,
+        profileId: profile?.id ?? `PROFILE_${login}`,
+        placeholder: profile === undefined,
+      });
+    } else {
+      if (!USERNAME.test(token)) return { ok: false, text: BAD_USERNAME };
+      const profile = matchGatewayProfile({}, token, opts.profiles);
+      const local = token.includes("@") ? token.slice(0, token.indexOf("@")) : token;
+      const id = memberSlug(local) || token;
+      const displayName = (local[0]?.toUpperCase() ?? "") + local.slice(1);
+      nextMembers.push({ id, profileId: token, displayName, role });
+      resolved.push({
+        login: token,
+        role,
+        profileId: profile?.id ?? `PROFILE_${token}`,
+        placeholder: profile === undefined,
+      });
+    }
+  }
+
+  const existingScopes = record(record(record(gateway).auth).identityScopes);
+  const identityScopes: Record<string, unknown> = { ...existingScopes };
+  for (const item of resolved) identityScopes[item.login] = SCOPES[item.role];
+
+  const needPlaceholder = resolved.some((item) => item.placeholder);
+  const setRoleCommands = [
+    ...(needPlaceholder ? ["openclaw gateway call users.list --json"] : []),
+    ...resolved.map((item) => `openclaw gateway call users.setRole --params '${JSON.stringify({ profileId: item.profileId, role: item.role })}'`),
+    ...(needPlaceholder ? [PROFILE_STEP] : []),
+  ];
+
+  return {
+    ok: true,
+    text: [
+      "Apply all three so Gateway sign-in scopes, the Gateway host role, and the Family Pack roster stay in sync:",
+      "",
+      "1. Gateway identityScopes:",
+      json({ gateway: { auth: { identityScopes } } }),
+      "",
+      "2. Gateway role:",
+      ...setRoleCommands,
+      "",
+      "3. Family roster:",
+      json({ plugins: { entries: { "oc-family-pack": { config: { members: nextMembers } } } } }),
+    ].join("\n"),
+  };
+}
+
+/**
+ * `openclaw family access check`: compare `members[].role`,
+ * `gateway.auth.identityScopes`, and `users.list` profiles per person.
+ */
+export function formatAccessCheck(
+  gateway: unknown,
+  opts: AccessOptions = {},
+): AccessResult {
+  const members = Array.isArray(opts.members) ? opts.members : [];
+  if (members.length === 0) {
+    return { ok: false, text: "No family members are configured yet. Run `openclaw family setup --parent NAME` first." };
+  }
+  const scopes = record(record(record(gateway).auth).identityScopes);
+  const lines: string[] = [];
+  const fixes: string[] = [];
+  let allOk = true;
+  for (const member of members) {
+    const name = memberNameOf(member);
+    const roster = memberRoleOf(member);
+    const login = memberLoginOf(member);
+    if (login === undefined) {
+      allOk = false;
+      lines.push(`${name}: roster=${roster}, identityScopes=no login, Gateway role=no login (mismatch)`);
+      continue;
+    }
+    const hasScopes = Array.isArray(scopes[login]);
+    const scopeRole = hasScopes ? scopeRoleOf(scopes[login]) : "unset";
+    const profile = matchGatewayProfile(member, login, opts.profiles);
+    const hostRole =
+      opts.profiles === undefined
+        ? "unchecked"
+        : profile === undefined
+          ? "not signed in"
+          : typeof profile.role === "string" && profile.role.trim() !== ""
+            ? profile.role.trim()
+            : "guest";
+    const scopeOk = scopeRole === roster;
+    const hostOk = opts.profiles === undefined || hostRole === "not signed in" || hostRole === roster;
+    const ok = scopeOk && hostOk;
+    if (!ok) {
+      allOk = false;
+      fixes.push(`${login}=${roster}`);
+    }
+    lines.push(`${name} (${login}): roster=${roster}, identityScopes=${scopeRole}, Gateway role=${hostRole} (${ok ? "ok" : "mismatch"})`);
+  }
+  if (fixes.length > 0) {
+    lines.push("", `Run: openclaw family access role ${fixes.join(" ")}`);
+  }
+  return { ok: allOk, text: lines.join("\n") };
+}
+
 /** `openclaw family access [mode]`: report with no mode, otherwise print that mode's setup. */
 export function runAccess(
   gateway: unknown,
   mode: string | undefined,
   input: AccessPeople,
-  opts: { port?: number },
+  opts: AccessOptions,
 ): AccessResult {
   if (outsideSignIn(gateway)) return { ok: false, text: OUTSIDE };
+  if (mode === "role") return planAccessRole(gateway, input, opts);
+  if (mode === "check") return formatAccessCheck(gateway, opts);
   return mode === undefined ? formatDetection(detectAccess(gateway)) : planAccess(mode, input, opts);
 }

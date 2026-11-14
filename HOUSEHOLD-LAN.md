@@ -90,7 +90,7 @@ openclaw gateway call users.setRole --params '{"profileId":"PROFILE_alex","role"
 
 The person gets the new role the next time they load the page.
 
-A roster role and a Gateway role are separate. `openclaw family access lan` writes `identityScopes`, and `users.setRole` writes the host role. `members[].role` in the plugin config decides page writes, People, and approvals. Change all three when someone changes role; `openclaw family setup` reports a mismatch.
+A roster role and a Gateway role are separate. `openclaw family access lan` writes `identityScopes`, and `users.setRole` writes the host role. `members[].role` in the plugin config decides Discord calendar writes, page writes, People, and approvals. Run `openclaw family access role NAME=ROLE` when someone changes role to print all three updates together. `openclaw family setup` checks `identityScopes` against `members[].role`, and `openclaw family access check` compares `users.list`, `identityScopes`, and the roster.
 
 ## 10. Calendar approvals
 
