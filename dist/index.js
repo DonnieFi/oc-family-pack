@@ -111,7 +111,7 @@ const plugin = defineFeaturePlugin({
                 id: "family-briefs",
                 async start(ctx) {
                     const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
-                    const { resolveAgentIdentity, resolveDefaultAgentId } = await import("openclaw/plugin-sdk/agent-runtime");
+                    const { resolveAgentIdentity, resolveDefaultAgentId, listAgentIds } = await import("openclaw/plugin-sdk/agent-runtime");
                     const garbage = createGarbageFeed(fetch, { log: (line) => ctx.logger.warn(line) });
                     const directory = briefDirectory(config);
                     stopBriefs = startBriefs({
@@ -119,7 +119,7 @@ const plugin = defineFeaturePlugin({
                         store: () => store,
                         deliver: (target, messages, key) => deliver(sendDurableMessageBatch, ctx.config, directory, target, messages, key),
                         agentName: async () => {
-                            return resolveBriefAgentName(ctx.config, resolveDefaultAgentId, resolveAgentIdentity);
+                            return resolveBriefAgentName(ctx.config, resolveDefaultAgentId, resolveAgentIdentity, listAgentIds);
                         },
                         readWeather: async () => {
                             const state = await readEcWeather(config.location, undefined, Date.now(), { timezone: config.timezone });
