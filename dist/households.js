@@ -160,7 +160,7 @@ async function runJob(deps, store, job, now) {
     const message = householdMessage(TITLE[job.kind], lines);
     if (job.kind === "morning") {
         const members = deps.config.demo ? DEMO_MEMBERS : deps.config.members;
-        for (const parent of members.filter((member) => member.role === "parent" && member.discordId !== undefined && (member.reminders ?? "dm") !== "off")) {
+        for (const parent of members.filter((member) => member.role === "parent" && member.discordId !== undefined && (member.reminders ?? "off") !== "off")) {
             await sendOne(deps, store, job, { member: parent.id }, parent.id, message, undefined);
         }
         return;

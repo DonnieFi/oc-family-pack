@@ -80,6 +80,14 @@ function rig(store: FamilyStore, answer: (key: string) => DeliveryOutcome = () =
   return { deps, calls };
 }
 
+test("a member with no reminder mode does not receive a reminder", async () => {
+  const store = await freshStore();
+  const { deps, calls } = rig(store);
+  deps.config = { ...CONFIG, members: CONFIG.members.map(({ reminders: _reminders, ...member }) => member) };
+  await reminderTick(deps, at("2026-10-14", 9.75));
+  assert.deepEqual(calls, []);
+});
+
 test("one reminder per owner, and a restart does not send it again", async () => {
   const store = await freshStore();
   const first = rig(store);
@@ -209,7 +217,7 @@ test("a legacy email-login member keeps the reminder rows saved under that id", 
   const store = await freshStore();
   const config = parseConfig({
     timezone: "America/Halifax",
-    members: [{ name: "Alex", login: "alex@example.com", role: "parent", discordId: "333333333333333333" }],
+    members: [{ name: "Alex", login: "alex@example.com", role: "parent", discordId: "333333333333333333", reminders: "dm" }],
     calendars: [{ id: "alex@example.com", label: "Alex", kind: "personal", owners: ["alex@example.com"] }],
   });
   assert.equal(config.members[0]?.id, "alex@example.com");

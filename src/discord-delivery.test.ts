@@ -157,3 +157,10 @@ test("a configured family Discord account rides the outbound call", async () => 
   assert.equal(outcome.status, "sent");
   assert.equal((calls[0] as { accountId?: string }).accountId, "family");
 });
+
+test("a configured household agentId rides the outbound session", async () => {
+  const { send, calls } = fakeSend({ status: "sent", results: [], receipt: receipt(["900000000000000010"]) });
+  const outcome = await deliver(send, CFG, { ...DIRECTORY, agentId: "household" }, { channel: "smithy" }, [{ text: "hi" }], KEY);
+  assert.equal(outcome.status, "sent");
+  assert.deepEqual((calls[0] as { session?: unknown }).session, { agentId: "household" });
+});

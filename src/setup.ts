@@ -10,7 +10,7 @@ import { WEATHER_SETUP_HINT } from "./weather-ec.ts";
 
 export type SetupResult = { ok: boolean; text: string };
 /** `discord` holds `NAME=ID` pairs from `--discord`. `email` holds `NAME=address` pairs from `--email`. */
-export type SetupInput = AccessPeople & { discord?: string[]; email?: string[]; materializeIds?: boolean };
+export type SetupInput = AccessPeople & { discord?: string[]; email?: string[]; agent?: string; materializeIds?: boolean };
 export type SetupStep = { name: string; done: boolean; next: string; optional?: true };
 
 const CONFIG_PATH = "plugins.entries.oc-family-pack.config";
@@ -34,6 +34,10 @@ export function familyConfig(host: unknown): Record<string, unknown> {
 /** Discord is the only delivery path. Email and phone are stored and do not make someone reachable. */
 export const NO_CHANNEL = (name: string) =>
   `${name} has no Discord account, so this version can't send them reminders or briefs. Email and phone stay on the contact card and are not notification routes.`;
+
+/** Reminders are opt-in, so a morning brief time with no opted-in parent delivers nothing. */
+export const QUIET_MORNING =
+  "A morning brief time is set, but no parent with a Discord ID has `reminders` set to `dm` or `channel`, so the daily brief stays quiet. Set it on each parent who should get it, on the People page or in the plugin config.";
 
 /** The member's Control UI login, if it has one. `login` and `profileId` are the same field. */
 function loginOf(member: unknown): string | undefined {
@@ -68,6 +72,22 @@ function unreachable(host: unknown): string[] {
   return (Array.isArray(members) ? members : [])
     .filter((member) => record(member).discordId === undefined)
     .map((member) => NO_CHANNEL(nameOf(member)));
+}
+
+/** True when the config asks for a morning brief that no reachable parent is opted in to receive. */
+function quietMorningBrief(host: unknown): string[] {
+  const config = familyConfig(host);
+  const time = config.morningTime;
+  if (typeof time !== "string" || time.trim() === "") return [];
+  const members = Array.isArray(config.members) ? config.members : [];
+  // A parent with no Discord id already gets the NO_CHANNEL warning; this one is for opted-out delivery.
+  const parents = members.filter((member) => rosterRole(member) === "parent" && record(member).discordId !== undefined);
+  if (parents.length === 0) return [];
+  const reached = parents.some((member) => {
+    const mode = record(member).reminders;
+    return mode === "dm" || mode === "channel";
+  });
+  return reached ? [] : [QUIET_MORNING];
 }
 
 /** The key setup matches a member by: the login, else the id, else the slug of the name, as parseConfig derives it. */
@@ -168,14 +188,17 @@ function membersStep(host: unknown, members: unknown[]): SetupStep {
       const login = loginOf(member);
       if (login === undefined) return [];
       const actual = Array.isArray(scopes[login]) ? scopes[login] : [];
-      return roleFromScopes(actual) === rosterRole(member) ? [] : [`${nameOf(member)} (${rosterRole(member)})`];
+      return roleFromScopes(actual) === rosterRole(member)
+        ? []
+        : [{ label: `${nameOf(member)} (${rosterRole(member)})`, pair: `${login}=${rosterRole(member)}` }];
     });
     if (mismatched.length > 0) {
-      const who = named(mismatched);
+      const who = named(mismatched.map((entry) => entry.label));
+      const pairs = mismatched.map((entry) => entry.pair).join(" ");
       return {
         name,
         done: false,
-        next: `The Gateway scopes for ${who} don't match the roster role. Re-run the access command to set \`identityScopes\`, then after each person signs in once run the printed \`users.setRole\` command.\n\`${accessCommand(gateway, members, allowed)}\``,
+        next: `The Gateway scopes for ${who} don't match the roster role. Run \`openclaw family access role ${pairs}\` to update \`identityScopes\`, \`users.setRole\`, and \`members[].role\` together, or re-run the access command to set \`identityScopes\` and then run the printed \`users.setRole\` command.\n\`${accessCommand(gateway, members, allowed)}\``,
       };
     }
   }
@@ -272,6 +295,58 @@ function optionalPiece(name: string, done: boolean, next: string): SetupStep {
   return { name, done, next, optional: true };
 }
 
+/** Configured agent IDs on the Gateway and any single marked default. */
+export function hostAgents(host: unknown): { ids: string[]; defaultId?: string } {
+  const agents = record(record(host).agents);
+  const explicit = agents.ownership === "explicit";
+  if (Object.hasOwn(agents, "entries") && agents.entries !== undefined) {
+    const entries = record(agents.entries);
+    const ids: string[] = [];
+    const defaults: string[] = [];
+    for (const [rawId, rawEntry] of Object.entries(entries)) {
+      const id = rawId.trim().toLowerCase();
+      if (id === "") continue;
+      if (!ids.includes(id)) ids.push(id);
+      if (!explicit && record(rawEntry).default === true) defaults.push(id);
+    }
+    const defaultId = defaults.length === 1 ? defaults[0] : ids.length === 1 ? ids[0] : undefined;
+    return { ids, ...(defaultId !== undefined ? { defaultId } : {}) };
+  }
+  if (Object.hasOwn(agents, "list") && Array.isArray(agents.list)) {
+    const ids: string[] = [];
+    const defaults: string[] = [];
+    for (const rawEntry of agents.list) {
+      const entry = record(rawEntry);
+      const id = typeof entry.id === "string" ? entry.id.trim().toLowerCase() : "";
+      if (id === "") continue;
+      if (!ids.includes(id)) ids.push(id);
+      if (!explicit && entry.default === true) defaults.push(id);
+    }
+    const defaultId = defaults.length === 1 ? defaults[0] : ids.length === 1 ? ids[0] : undefined;
+    return { ids, ...(defaultId !== undefined ? { defaultId } : {}) };
+  }
+  return { ids: ["main"], defaultId: "main" };
+}
+
+function agentStep(host: unknown, config: Record<string, unknown>): SetupStep[] {
+  const agents = hostAgents(host);
+  const configured = typeof config.agentId === "string" && config.agentId.trim() !== "" ? config.agentId.trim().toLowerCase() : undefined;
+  if (agents.ids.length <= 1 && configured === undefined) return [];
+  const chosen = configured !== undefined ? agents.ids.includes(configured) : agents.defaultId !== undefined;
+  const suggestion = agents.ids.includes("main") ? "main" : (agents.ids[0] ?? "main");
+  const detail =
+    configured !== undefined && !agents.ids.includes(configured)
+      ? `\`agentId\` is set to \`${configured}\`, which is not one of the configured agents (${agents.ids.join(", ")}).`
+      : `OpenClaw has more than one agent (${agents.ids.join(", ")}). Pick the household agent for briefs and kid/guest chat:`;
+  return [
+    {
+      name: "Agent",
+      done: chosen,
+      next: `${detail}\n\`openclaw config set ${CONFIG_PATH}.agentId ${suggestion}\``,
+    },
+  ];
+}
+
 export function setupSteps(host: unknown, gog: GogSetupPlan, hostZone: string): SetupStep[] {
   const config = familyConfig(host);
   const location = record(config.location);
@@ -316,8 +391,9 @@ export function setupSteps(host: unknown, gog: GogSetupPlan, hostZone: string): 
           : "`openclaw family gog`";
       })(),
     },
+    ...agentStep(host, config),
     optionalPiece("Alerts", alertsDone(config), alertsNext(host, config)),
-    optionalPiece("Morning brief", clockDone(config.morningTime), clockNext("morningTime", "Weekday morning direct message to parents.", "07:00")),
+    optionalPiece("Morning brief", clockDone(config.morningTime), clockNext("morningTime", "Weekday morning direct message to parents who set `reminders` to `dm` or `channel`. It stays quiet while every parent is `off`.", "07:00")),
     optionalPiece("After-school brief", clockDone(config.afterSchoolTime), clockNext("afterSchoolTime", "Weekday after-school post to the summary channel. It stays quiet until `summaryChannel` is set.", "15:30")),
     optionalPiece("Weekend preview", clockDone(config.weekendPreviewTime), clockNext("weekendPreviewTime", "Weekend preview posted to the summary channel. It runs on Friday unless you set `weekendPreviewWeekday` (`0` is Sunday and `6` is Saturday).", "16:00")),
     optionalPiece("Garbage calendar", httpFeed(config.garbageIcsUrl), garbageNext()),
@@ -556,7 +632,7 @@ export function planSetup(host: unknown, input: SetupInput, gog: GogSetupPlan, h
   const checklist = list.map((step) => `${step.name}: ${step.done ? "Done" : "To do"}`);
   if (input.materializeIds) {
     const namedPeople = (input.parent ?? []).length + (input.kid ?? []).length + (input.guest ?? []).length > 0;
-    if (namedPeople || (input.discord ?? []).length > 0 || (input.email ?? []).length > 0) {
+    if (namedPeople || (input.discord ?? []).length > 0 || (input.email ?? []).length > 0 || input.agent !== undefined) {
       return { ok: false, text: "Run `--materialize-ids` on its own." };
     }
     const config = familyConfig(host);
@@ -567,8 +643,15 @@ export function planSetup(host: unknown, input: SetupInput, gog: GogSetupPlan, h
     if (!preview.changed) return { ok: true, text: "Every member and device already has an id. No changes to make." };
     return { ok: false, text: [MATERIALIZE_INTRO, "", PATCH_INTRO, `${preview.patch}\n`].join("\n") };
   }
+  const rawAgent = input.agent !== undefined ? input.agent.trim().toLowerCase() : undefined;
+  if (rawAgent !== undefined) {
+    const agents = hostAgents(host);
+    if (rawAgent === "" || (agents.ids.length > 0 && !agents.ids.includes(rawAgent))) {
+      return { ok: false, text: `\`${input.agent?.trim() ?? ""}\` is not one of the configured agents (${agents.ids.join(", ")}).` };
+    }
+  }
   const named = (input.parent ?? []).length + (input.kid ?? []).length + (input.guest ?? []).length > 0;
-  const asked = named || (input.discord ?? []).length > 0 || (input.email ?? []).length > 0;
+  const asked = named || (input.discord ?? []).length > 0 || (input.email ?? []).length > 0 || rawAgent !== undefined;
   if (asked) {
     const found = named ? people(input) : { list: [] };
     if ("error" in found) return { ok: false, text: found.error };
@@ -588,10 +671,34 @@ export function planSetup(host: unknown, input: SetupInput, gog: GogSetupPlan, h
       config.channels,
     );
     if (error) return { ok: false, text: error };
-    if (patch) {
+    const agentChanged = rawAgent !== undefined && config.agentId !== rawAgent;
+    const mergedPatch =
+      patch !== undefined && agentChanged
+        ? JSON.stringify(
+            {
+              plugins: {
+                entries: {
+                  "oc-family-pack": {
+                    config: {
+                      ...(JSON.parse(patch).plugins.entries["oc-family-pack"].config as Record<string, unknown>),
+                      agentId: rawAgent,
+                    },
+                  },
+                },
+              },
+            },
+            null,
+            2,
+          )
+        : patch !== undefined
+          ? patch
+          : agentChanged
+            ? JSON.stringify({ plugins: { entries: { "oc-family-pack": { config: { agentId: rawAgent } } } } }, null, 2)
+            : undefined;
+    if (mergedPatch) {
       return {
         ok: false,
-        text: [...skipped, PATCH_INTRO, patch, ...linkLines(host, parsed.ids), ...approvalLines(host, parsed.ids, found.list), "", ...checklist].join("\n"),
+        text: [...skipped, PATCH_INTRO, mergedPatch, ...linkLines(host, parsed.ids), ...approvalLines(host, parsed.ids, found.list), "", ...checklist].join("\n"),
       };
     }
     checklist.unshift(...skipped, "No changes to make.", "");
@@ -599,7 +706,8 @@ export function planSetup(host: unknown, input: SetupInput, gog: GogSetupPlan, h
   const optional = asked ? [] : discordHint(host);
   const next = list.find((step) => !step.done && step.optional !== true);
   const derived = derivedIds(host);
-  const warnings = [...derived, ...unreachable(host)];
+  const quiet = quietMorningBrief(host);
+  const warnings = [...derived, ...unreachable(host), ...quiet];
   const warned = warnings.length > 0 ? ["", ...warnings] : [];
   const approvals = approvalLines(host, new Map());
   if (!next) {
@@ -621,7 +729,9 @@ export function planSetup(host: unknown, input: SetupInput, gog: GogSetupPlan, h
           ? "The config is complete. Apply the approval block, then run the pilot preflight."
           : derived.length > 0
             ? "The checklist is complete. Run `openclaw family setup --materialize-ids`, apply its patch, then run the pilot preflight."
-            : "Everything is set up.",
+            : quiet.length > 0
+              ? "The checklist is complete. The morning brief stays quiet until a parent sets `reminders`."
+              : "Everything is set up.",
       ].join("\n"),
     };
   }

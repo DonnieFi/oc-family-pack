@@ -121,7 +121,7 @@
     "morningTime": {
       "label": "Morning brief",
       "placeholder": "07:00",
-      "help": "Weekday time, 24-hour HH:MM, when parents get a direct message of today's and tomorrow's calendar items. Leave empty for no morning brief."
+      "help": "Weekday time, 24-hour HH:MM, when parents who set `reminders` to `dm` or `channel` get a direct message of today's and tomorrow's calendar items. It stays quiet while every parent is `off`. Leave empty for no morning brief."
     },
     "afterSchoolTime": {
       "label": "After-school brief",
@@ -214,6 +214,11 @@
         "additionalProperties": false
       },
       "discordAccount": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "agentId": {
         "type": "string",
         "minLength": 1,
         "maxLength": 200
@@ -671,9 +676,9 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/07e809bbb816b0e4b130064a38dcf32d5d33370d551660ab81bcbdccc0d386a5/index.js",
+    "entry": "dist/control-ui/bf57603b4ef1eefd74711938fa45f5ce9f96115a99e4c4330304f9cc1ac0921f/index.js",
     "styles": [
-      "dist/control-ui/07e809bbb816b0e4b130064a38dcf32d5d33370d551660ab81bcbdccc0d386a5/index.css"
+      "dist/control-ui/bf57603b4ef1eefd74711938fa45f5ce9f96115a99e4c4330304f9cc1ac0921f/index.css"
     ]
   },
   "contracts": {

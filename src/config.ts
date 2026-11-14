@@ -53,6 +53,7 @@ export const ConfigSchema = Type.Object(
       }),
     ),
     discordAccount: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+    agentId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
     summaryChannel: Type.Optional(Type.String({ pattern: CHANNEL_KEY.source })),
     reminderLeadMinutes: Type.Optional(Type.Array(Type.Integer({ minimum: 0, maximum: MAX_LEAD_MINUTES }), { maxItems: MAX_LEADS, default: [15] })),
     quietHours: Type.Optional(
@@ -437,9 +438,7 @@ function member(value: unknown, index: number): MemberConfig {
   }
   parsed.reminders =
     value.reminders === undefined
-      ? parsed.discordId === undefined
-        ? "off"
-        : "dm"
+      ? "off"
       : oneOf(value.reminders, `${field}.reminders`, REMINDER_MODES);
   return parsed;
 }
@@ -857,6 +856,9 @@ export function parseConfig(raw: unknown): Config {
   }
   if (value.discordAccount !== undefined) {
     config.discordAccount = text(value.discordAccount, "discordAccount");
+  }
+  if (value.agentId !== undefined) {
+    config.agentId = text(value.agentId, "agentId");
   }
   if (value.summaryChannel !== undefined) {
     const key = text(value.summaryChannel, "summaryChannel");

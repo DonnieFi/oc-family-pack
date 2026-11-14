@@ -302,6 +302,10 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   };
   let agentHandles: ControlUiComponentHandle<{ agentId: string; label: string }>[] = [];
   let agentSignature = "";
+  let viewerRole: "parent" | "kid" | "guest" | undefined;
+  let householdAgentId: string | undefined;
+  const allowedHouseholdAgent = () => householdAgentId ?? host.agents?.defaultId ?? "main";
+  const restrictAgents = () => viewerRole === "kid" || viewerRole === "guest" || (viewerRole === undefined && !host.connection.canWrite);
   let disposed = false;
   const pageAbort = new AbortController();
   const lifetime = AbortSignal.any([initial.signal, pageAbort.signal]);
@@ -454,6 +458,9 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   }
 
   function renderWeek(week: WeekPayload) {
+    viewerRole = week.viewer?.role;
+    householdAgentId = week.householdAgentId;
+    renderAgents();
     if (syncAnchor(week.today)) {
       closeDialog();
       watchWeek();
@@ -993,9 +1000,13 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
 
   function renderAgents() {
     if (!alive()) return;
-    const agents = host.agents.rows.filter((agent: ControlUiAgent) => agent.kind !== "system");
+    const restricted = restrictAgents();
+    const allowedId = allowedHouseholdAgent();
+    const agents = host.agents.rows.filter(
+      (agent: ControlUiAgent) => agent.kind !== "system" && (!restricted || agent.id === allowedId),
+    );
     const name = (agent: ControlUiAgent) => agent.identity?.name?.trim() || agent.name?.trim() || agent.id;
-    const signature = agents.map((agent) => `${agent.id}\u0000${name(agent)}\u0000${agent.identity?.emoji ?? ""}`).join("\u0001");
+    const signature = `${restricted ? allowedId : "*"}\u0002${agents.map((agent) => `${agent.id}\u0000${name(agent)}\u0000${agent.identity?.emoji ?? ""}`).join("\u0001")}`;
     if (signature === agentSignature && chatStrip.hasChildNodes()) return;
     agentSignature = signature;
     for (const handle of agentHandles) handle.dispose();
@@ -1056,7 +1067,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   }
 
   async function openAgentChat(agentId: string, button: HTMLButtonElement) {
-    if (!alive()) return;
+    if (!alive() || (restrictAgents() && agentId !== allowedHouseholdAgent())) return;
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
     chatStrip.querySelector(".ocfp-chat-error")?.remove();

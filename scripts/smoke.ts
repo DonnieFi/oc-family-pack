@@ -1099,8 +1099,8 @@ async function main(): Promise<void> {
   if (!record.source) fail("update path", "the installed plugin has no recorded source, so updates cannot be resolved");
   note(`install source recorded as ${record.source}`, "update path");
 
-  await deviceTokenOwner(port, TOKEN);
-  await householdSignIn(env, configPath, port, logPath);
+  const pairedDevice = await deviceTokenOwner(port, TOKEN);
+  await householdSignIn(env, configPath, port, logPath, pairedDevice);
   const garbage = await garbageFeed();
   await calendarWatch(env, configPath, port, logPath, garbage.url);
   await scheduleTool(configPath, port);
@@ -1214,11 +1214,13 @@ function ownerBrowserSession(
   }), calls);
 }
 
+type PairedDevice = { device: ReturnType<typeof deviceIdentity>; deviceToken: string; buildId: string };
+
 /**
  * 10b. The token owner's browser gets a device token and, coming back on that
  * device token alone, still reads as the owner: family.week holds every calendar.
  */
-async function deviceTokenOwner(port: number, token: string): Promise<void> {
+async function deviceTokenOwner(port: number, token: string): Promise<PairedDevice> {
   const step: Step = "household sign-in";
   const device = deviceIdentity();
   // A same-origin Control UI must send the Gateway's build id, which the page it
@@ -1237,6 +1239,7 @@ async function deviceTokenOwner(port: number, token: string): Promise<void> {
     fail(step, `the owner on a device token should see every calendar, got ${JSON.stringify(back[1]?.error ?? sees)}`);
   }
   note("the token owner's browser, back on its device token alone, gets family.week with all six calendars", step);
+  return { device, deviceToken, buildId };
 }
 
 /**
@@ -1245,14 +1248,23 @@ async function deviceTokenOwner(port: number, token: string): Promise<void> {
  * process plays the proxy from loopback, which the printed config trusts.
  * Runs last because it switches the isolated Gateway off token auth.
  */
-async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port: number, logPath: string): Promise<void> {
+async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port: number, logPath: string, pairedDevice: PairedDevice): Promise<void> {
   const step: Step = "household sign-in";
-  const printed = planAccess("lan", { parent: ["alex"], kid: ["riley"] }, { port }).text.replaceAll("LAN_ADDRESS", HOUSEHOLD_ADDRESS);
+  const printed = planAccess(
+    "lan",
+    { parent: ["alex"], kid: ["riley"] },
+    { port, agentIds: ["main", "coding"], householdAgentId: "main" },
+  ).text.replaceAll("LAN_ADDRESS", HOUSEHOLD_ADDRESS);
   const [access, roles] = [...printed.matchAll(/^\{\n[\s\S]*?^\}$/gm)].map(
     (match) => (JSON.parse(match[0]) as { gateway: Record<string, unknown> & { auth: Record<string, unknown> } }).gateway,
   );
   if (!access || !roles) fail(step, "access lan did not print the Gateway config and roles blocks");
-  const config = JSON.parse(readFileSync(configPath, "utf8")) as { gateway: Record<string, unknown> };
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as { gateway: Record<string, unknown>; agents?: unknown };
+  config.agents = {
+    ownership: "explicit",
+    defaults: { systemAgent: { agentId: "main" } },
+    entries: { main: {}, coding: {} },
+  };
   config.gateway = {
     mode: "local",
     port,
@@ -1312,6 +1324,73 @@ async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port:
     note(`a proxied session with user header ${JSON.stringify(user)} is refused at connect: ${frames[0].error?.details?.code ?? frames[0].error?.message}`, step);
   }
 
+  // A device token paired before switching to LAN mode has a stale shared-auth
+  // generation and is refused at connect with AUTH_DEVICE_TOKEN_MISMATCH.
+  const stalePairedLan = await session(
+    port,
+    "solo-paired device token in LAN mode",
+    { origin: `https://${HOUSEHOLD_ADDRESS}`, "x-forwarded-for": HOUSEHOLD_CLIENT },
+    (nonce) => ({
+      minProtocol: 4,
+      maxProtocol: 4,
+      client: { ...CONTROL_UI_CLIENT, buildId: pairedDevice.buildId },
+      role: "operator",
+      scopes: OPERATOR_SCOPES,
+      caps: [],
+      auth: { deviceToken: pairedDevice.deviceToken },
+      device: pairedDevice.device.sign(nonce, pairedDevice.deviceToken),
+    }),
+    [week],
+  );
+  if (stalePairedLan[0]?.ok !== false || stalePairedLan[0]?.error?.details?.code !== "AUTH_DEVICE_TOKEN_MISMATCH") {
+    fail(step, `a solo-paired device token should be refused in LAN mode with AUTH_DEVICE_TOKEN_MISMATCH: ${JSON.stringify(stalePairedLan)}`);
+  }
+  note("a solo-paired device token is refused in LAN mode (AUTH_DEVICE_TOKEN_MISMATCH)", step);
+
+  // With gateway.roles configured, even a freshly paired LAN device token with
+  // no X-Forwarded-User header is refused at connect with AUTH_VERIFIED_USER_REQUIRED.
+  const lanDevice = deviceIdentity();
+  const lanPaired = await session(
+    port,
+    "LAN device pairing on loopback",
+    { origin: `http://127.0.0.1:${port}` },
+    (nonce) => ({
+      minProtocol: 4,
+      maxProtocol: 4,
+      client: { ...CONTROL_UI_CLIENT, buildId: pairedDevice.buildId },
+      role: "operator",
+      scopes: OPERATOR_SCOPES,
+      caps: [],
+      auth: { password: HOUSEHOLD_PASSWORD },
+      device: lanDevice.sign(nonce, ""),
+    }),
+    [],
+  );
+  const lanDeviceToken = (lanPaired[0]?.payload?.auth as { deviceToken?: string } | undefined)?.deviceToken;
+  if (!lanPaired[0]?.ok || !lanDeviceToken) {
+    fail(step, `could not issue a LAN device token on loopback: ${JSON.stringify(lanPaired[0]?.error ?? lanPaired)}`);
+  }
+  const pairedLan = await session(
+    port,
+    "paired device token in LAN mode",
+    { origin: `https://${HOUSEHOLD_ADDRESS}`, "x-forwarded-for": HOUSEHOLD_CLIENT },
+    (nonce) => ({
+      minProtocol: 4,
+      maxProtocol: 4,
+      client: { ...CONTROL_UI_CLIENT, buildId: pairedDevice.buildId },
+      role: "operator",
+      scopes: OPERATOR_SCOPES,
+      caps: [],
+      auth: { deviceToken: lanDeviceToken },
+      device: lanDevice.sign(nonce, lanDeviceToken),
+    }),
+    [week],
+  );
+  if (pairedLan[0]?.ok !== false || pairedLan[0]?.error?.details?.code !== "AUTH_VERIFIED_USER_REQUIRED") {
+    fail(step, `a paired device token in LAN mode with no user header should be refused with AUTH_VERIFIED_USER_REQUIRED: ${JSON.stringify(pairedLan)}`);
+  }
+  note("a paired device token in LAN mode with no user header is refused at connect (AUTH_VERIFIED_USER_REQUIRED)", step);
+
   const cli = async (method: string, params: unknown) =>
     parseHostJson(
       await oc(["gateway", "call", method, "--port", String(port), "--json", "--params", JSON.stringify(params)], env, step),
@@ -1360,6 +1439,20 @@ async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port:
     }
   }
   note("People directory and patch preview are denied to read-only Riley; parent Alex can view the demo directory, with real patch preview refused in demo mode", step);
+  const setRiley = await cli("users.setRole", { profileId: rileyId, role: "kid" });
+  if (setRiley.profile?.role !== "kid") fail(step, `users.setRole did not make riley a kid: ${JSON.stringify(setRiley)}`);
+  const rileyAgentFrames = await proxiedSession(port, "riley", [["agents.list", {}]]);
+  connected(rileyAgentFrames, "riley agents.list");
+  const rileyAgents = ((rileyAgentFrames[1]?.payload as { agents?: { id: string }[] } | undefined)?.agents ?? []).map((agent) => agent.id);
+  if (!rileyAgentFrames[1]?.ok || JSON.stringify(rileyAgents) !== JSON.stringify(["main"])) {
+    fail(step, `kid riley should see only the household agent main in agents.list, got ${JSON.stringify(rileyAgentFrames[1] ?? rileyAgents)}`);
+  }
+  const rileyCodingFrames = await proxiedSession(port, "riley", [["sessions.create", { agentId: "coding" }]]);
+  connected(rileyCodingFrames, "riley sessions.create coding");
+  if (rileyCodingFrames[1]?.ok !== false || !/cannot create sessions for agent "coding"|forbidden|allowed agent/i.test(rileyCodingFrames[1]?.error?.message ?? "")) {
+    fail(step, `kid riley should not be able to open a session for non-household agent coding: ${JSON.stringify(rileyCodingFrames[1])}`);
+  }
+  note("kid riley sees only the household agent (main) in agents.list and is denied sessions.create for coding", step);
   // alex now holds operator.write, so a refusal here can only mean the action is gone.
   const oldWeek = (await proxiedSession(port, "alex", [["plugins.sessionAction", { pluginId: PLUGIN_ID, actionId: "family.week", payload: {} }]]))[1];
   const oldResult = oldWeek?.payload as { ok?: boolean } | undefined;

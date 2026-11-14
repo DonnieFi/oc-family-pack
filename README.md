@@ -11,7 +11,7 @@ Version 0.2.0.
 [![Version](https://img.shields.io/github/package-json/v/DonnieFi/oc-family-pack?label=version&color=e08a3a)](package.json)
 [![Status](https://img.shields.io/badge/status-0.2.0-orange)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/github/license/DonnieFi/oc-family-pack?color=4ea674)](LICENSE)
-[![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%89%A5%202026.11.1-ff5c5c)](https://docs.openclaw.ai/plugins/feature-plugins)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%89%A5%202026.11.3-ff5c5c)](https://docs.openclaw.ai/plugins/feature-plugins)
 [![Plugin type](https://img.shields.io/badge/plugin-feature-14b8a6)](https://docs.openclaw.ai/plugins/feature-plugins)
 [![Node](https://img.shields.io/badge/node-%E2%89%A5%2024.16-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](tsconfig.json)
@@ -75,11 +75,13 @@ A signed-in kid already sees their own classes without pressing a chip. The Gate
 
 | Requirement | Why |
 | --- | --- |
-| OpenClaw `2026.11.1` or newer, before `2026.12` | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Tested on `2026.11.1`. npm `latest` at release time is `2026.11.2`, which the peer range admits. See [Development](#development) for the post-update smoke. |
+| OpenClaw `2026.11.3` or newer, before `2026.12` | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Tested on `2026.11.3`. See [Development](#development) for the post-update smoke. |
 | Node.js `>=24.16.0 <25` or `>=26.1.0` | Matches the OpenClaw runtime |
 | [`gog`](https://github.com/openclaw/gogcli) with Calendar access | Reads and writes Google Calendar using your default gog sign-in. `gog` runs on the Gateway host. The plugin does not switch between multiple Google accounts; use the default account for the family calendars |
 | **Custom plugin UI** lab enabled | Required for native pages from non-bundled plugins |
 | HTTPS or `127.0.0.1` | Native plugin pages need a secure origin |
+
+The peer range (`>=2026.11.3 <2026.12`) is install-admitting, not a tested claim: only `2026.11.3` is tested, and each later `2026.11` patch is unclaimed until `npm run smoke` passes on it.
 
 Weather uses Environment Canada's public API, so it needs no key and covers Canadian locations only.
 
@@ -155,9 +157,9 @@ Briefs and reminders use a channel you name. Each key in `channels` is a short n
 
 A calendar `key` is optional. Set one (`c` plus up to seven letters or digits) before you reorder the calendar list; the key is the wire id tools and pages use, so a pinned key survives reordering. Labels must be unique. `discordAccount` names the `channels.discord.accounts` entry the family uses; omit it for the host default.
 
-`accessMode` is `solo` (the default) or `lan`. When Gateway auth mode is `trusted-proxy`, the plugin uses `lan` even if this is unset, so a paired device token is a guest rather than the shared owner. Setting `accessMode: "lan"` explicitly is still recommended.
+`accessMode` is `solo` (the default) or `lan`. When Gateway auth mode is `trusted-proxy`, the plugin uses `lan` even if this is unset. A device token with no device identity is refused by the Gateway before the plugin runs. A paired token can connect, but the plugin has no household username for it, so it reads as a guest and sees shared calendars only. Setting `accessMode: "lan"` explicitly is still recommended.
 
-`reminders` omitted means a direct message when the person has a `discordId`, and `off` when they do not. Set `reminders: "off"` to stop event reminders for one person.
+`reminders` omitted means `off`. Set `reminders: "dm"` or `"channel"` to opt into event reminders for one person.
 
 `reminderLeadMinutes` defaults to `[15]`. `quietHours` defaults to 22:00–07:00 (`startHour` 22, `endHour` 7) in the household time zone.
 
@@ -205,11 +207,11 @@ The daily brief posts at 07:00 in the household time zone. The send window runs 
 
 Reminders use the lead times you set, 15 minutes if you set none. Quiet hours default to 22:00–07:00. A reminder that comes due during quiet hours waits, and is sent in the hour after quiet hours end. All-day events are not reminders.
 
-Each person has a mode: `dm`, `channel`, or `off`. Omitted means a direct message when they have a `discordId`, and `off` when they do not. Ask on Discord with `set_reminder_mode`; the shared owner can change anyone's mode. `dm` is a Discord direct message. `channel` mentions them in the summary channel, so that channel has to be set. `off` sends nothing. A person can change their own mode; changing someone else's needs a parent.
+Each person has a mode: `dm`, `channel`, or `off`. Omitted means `off`, even when they have a `discordId`; DMs are opt-in. Ask on Discord with `set_reminder_mode`, or preview a config patch in People and apply it; the shared owner can change anyone's mode. `dm` is a Discord direct message. `channel` mentions them in the summary channel, so that channel has to be set. `off` sends nothing. A person can change their own mode; changing someone else's needs a parent.
 
 Household briefs are separate, and each one runs only when its clock time is set:
 
-- `morningTime` — weekday morning direct message to parents
+- `morningTime` — weekday morning direct message to parents with a Discord ID and configured `reminders: "dm"` or `"channel"`; chat-set reminder overrides do not change morning brief eligibility
 - `afterSchoolTime` — weekday after-school post to the summary channel
 - `weekendPreviewTime` — weekend preview to the summary channel, on Friday unless you set `weekendPreviewWeekday`
 
@@ -243,7 +245,7 @@ Family Pack is local only. `openclaw family access` says which mode the Gateway 
 - **Solo.** Everyone who opens the Control UI is the owner. Family members use Discord, where the bot knows who's talking. Nothing extra to install.
 - **LAN.** Needs a proxy on the Gateway machine that serves HTTPS and signs each person in. Caddy is the worked example, and any proxy that follows the printed rules works. Each person signs in with their own username and password. `openclaw family access lan --parent alex --kid riley` prints the Caddyfile, the Gateway config, the roles and the `users.setRole` steps. Passwords are never asked for or stored. [HOUSEHOLD-LAN.md](HOUSEHOLD-LAN.md) walks through the switch in order, including how to undo it.
 
-In LAN mode there's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. A trusted-proxy Gateway is treated as LAN even if `accessMode` is unset; setting `accessMode: "lan"` makes it explicit. A paired device token is then a guest, not the shared owner. In solo mode, leave it `"solo"` or unset. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.
+In LAN mode there's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. A trusted-proxy Gateway is treated as LAN even if `accessMode` is unset; setting `accessMode: "lan"` makes it explicit. A device token with no device identity is refused by the Gateway before the plugin runs. A paired token can connect, but the plugin has no household username for it, so it reads as a guest and sees shared calendars only. In solo mode, leave it `"solo"` or unset. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.
 
 Calendar approvals go to a parent through OpenClaw's plugin approvals. The LAN role block now gives parents `operator.approvals`; in LAN mode, `openclaw family setup` also prints the `approvals.plugin` Discord targets for the roster parents. Apply both, enable writes for the proof window, prove a kid's shared-calendar change reaches a parent, then enable reminders and briefs.
 
@@ -253,7 +255,7 @@ Everything runs on your own OpenClaw Gateway. `gog` runs locally. This plugin st
 
 A weather request sends a search box around the coordinates in your config to Environment Canada. It does not send a street address. If you set `garbageIcsUrl`, the plugin fetches that collection calendar. Those are the outside reads. Briefs and reminders go out through the Discord bot OpenClaw already runs.
 
-The Gateway decides who sees which calendar before the week is sent to the page. Parents see every calendar. So does the shared-token owner, except in LAN mode, where a paired device token is a guest. Everyone sees shared calendars. A school or personal calendar also goes to its owners when that person is a member, not a guest. Guests, and anyone signed in who is not on the roster, see shared calendars only. The chips filter the week in the view. They are not a privacy control.
+The Gateway decides who sees which calendar before the week is sent to the page. Parents see every calendar. So does the shared-token owner in solo mode. In LAN mode, a device token with no device identity is refused by the Gateway before the plugin runs. A paired token can connect, but the plugin has no household username for it, so it reads as a guest and sees shared calendars only. Everyone sees shared calendars. A school or personal calendar also goes to its owners when that person is a member, not a guest. Guests, and anyone signed in who is not on the roster, see shared calendars only. The chips filter the week in the view. They are not a privacy control.
 
 A title or an attendee can name another member on an appointment they do not own. That one event is shown to them. The calendar, its other events, and its label stay hidden. Nothing is copied and nobody is invited. `participantOverrides` can confirm or reject one person on one event. A name shared by two people confirms nobody until then. Guests are not named this way. Participant-only events use an opaque household ID, an empty calendar key, and no source keys or Google link. Read results expose a durable household `fpId` alongside the legacy `id`; visible-source `id` values remain calendar-write references.
 
@@ -294,7 +296,7 @@ After browser-only changes, rebuild and use **Plugins → Advanced → Customize
 
 ### Preparing for the next host
 
-The plugin pins the exact host it was built and tested against: currently `2026.11.1`. A newer host is not claimed until the smoke passes on that binary. The peer range is `>=2026.11.1 <2026.12`, so a later 2026.11 patch is admitted by the range, but only `2026.11.1` is tested.
+The plugin pins the exact host it was built and tested against: currently `2026.11.3`. A newer host is not claimed until the smoke passes on that binary. The peer range is `>=2026.11.3 <2026.12`, so a later 2026.11 patch is admitted by the range, but only `2026.11.3` is tested.
 
 When a new host is published:
 
@@ -318,7 +320,7 @@ Before the first family day, run this on a test state directory or an isolated G
 
 Only then run the writes/delivery pass: enable writes, prove a kid's shared write is approved by a parent and not by the kid, then enable reminders and briefs for one controlled channel.
 
-OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Tested on OpenClaw `2026.11.1`.** After you run `openclaw update`, run the smoke to check this plugin against your new host:
+OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Tested on OpenClaw `2026.11.3`.** After you run `openclaw update`, run the smoke to check this plugin against your new host:
 
 ```bash
 npm run smoke

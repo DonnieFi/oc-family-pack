@@ -12,7 +12,7 @@ const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url),
   openclaw: { install: { minHostVersion: string }; compat: { pluginApi: string }; build: { openclawVersion: string } };
 };
 
-const HOST = "2026.11.1";
+const HOST = "2026.11.3";
 const PEER = `>=${HOST} <2026.12`;
 
 test("the pinned host is the tested stable, and the peer range admits this 2026.11 line only", () => {
@@ -22,7 +22,7 @@ test("the pinned host is the tested stable, and the peer range admits this 2026.
   assert.equal(pkg.openclaw.compat.pluginApi, `>=${HOST}`);
   assert.equal(pkg.peerDependencies.openclaw, PEER);
   assert.equal(satisfies(HOST, PEER), true);
-  assert.equal(satisfies("2026.11.2", PEER), true);
+  assert.equal(satisfies("2026.11.3", PEER), true);
   assert.equal(satisfies("2026.11.0", PEER), false);
   assert.equal(satisfies("2026.10.10", PEER), false);
   assert.equal(satisfies("2026.12.0", PEER), false);

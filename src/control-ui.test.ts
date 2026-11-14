@@ -96,6 +96,8 @@ function mountPage(options: {
   request?: (...args: unknown[]) => Promise<unknown>;
   observe?: (listener: Listen) => void;
   create?: () => Promise<string | null>;
+  agents?: { id: string; kind: string; name: string; identity?: { name: string } }[];
+  defaultAgentId?: string | null;
 }) {
   const { document, Event } = installDom(options.mode ?? "dark");
   const container = document.createElement("div");
@@ -167,9 +169,9 @@ function mountPage(options: {
       patch: async () => {},
     },
     agents: {
-      rows: [{ id: "guide", kind: "assistant", name: "Guide", identity: { name: "Guide" } }],
+      rows: options.agents ?? [{ id: "guide", kind: "assistant", name: "Guide", identity: { name: "Guide" } }],
       selectedId: null,
-      defaultId: null,
+      defaultId: options.defaultAgentId ?? null,
       scopeId: null,
       select: () => {},
       setScope: () => {},
@@ -982,6 +984,32 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(text.includes("Set up your family"), false);
     assert.equal(text.includes("Connect your family calendars"), true);
     assert.equal(text.includes("Weather is not set up."), true);
+  });
+
+  test("kid and guest viewers only see the household agent in the chat strip, while parents see every non-system agent", async () => {
+    const fleet = [
+      { id: "household", kind: "assistant", name: "Household", identity: { name: "Household" } },
+      { id: "coding", kind: "assistant", name: "Coding", identity: { name: "Coding" } },
+    ];
+    const kidPage = mountPage({
+      canWrite: false,
+      agents: fleet,
+      defaultAgentId: "household",
+      result: { ...week(), viewer: { role: "kid", memberId: "riley" }, householdAgentId: "household" },
+    });
+    await flush();
+    const kidButtons = [...kidPage.container.querySelectorAll<HTMLButtonElement>("button.ocfp-agent")].map((btn) => btn.textContent);
+    assert.deepEqual(kidButtons, ["Household"]);
+
+    const parentPage = mountPage({
+      canWrite: true,
+      agents: fleet,
+      defaultAgentId: "household",
+      result: { ...week(), viewer: { role: "parent", memberId: "alex" }, householdAgentId: "household" },
+    });
+    await flush();
+    const parentButtons = [...parentPage.container.querySelectorAll<HTMLButtonElement>("button.ocfp-agent")].map((btn) => btn.textContent);
+    assert.deepEqual(parentButtons, ["Household", "Coding"]);
   });
 });
 

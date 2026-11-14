@@ -220,6 +220,8 @@ export const WeekPayloadSchema = Type.Object({
     canEdit: Type.Boolean(),
     /** A viewer who may write, while the Google grant is read-only: the page says so instead. */
     calendarsReadOnly: Type.Boolean(),
+    /** Optional household agent id for kid and guest chat strip filtering. */
+    householdAgentId: Type.Optional(Text(LABEL_MAX)),
 });
 /**
  * Input to the `family.week` Gateway method. It is not a feature query: a

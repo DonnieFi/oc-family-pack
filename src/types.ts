@@ -85,7 +85,7 @@ export type MemberConfig = {
   role: MemberRole;
   /** Discord sender id. Stays in config; never copied onto the week payload. This version delivers through it. */
   discordId?: string;
-  /** How this person gets event reminders. Omitted means a direct message. A chat change overrides it. */
+  /** How this person gets event reminders. Omitted means off. A chat change overrides it. */
   reminders?: ReminderMode;
   /** Normalized at parse. Stays in config; never copied onto the week payload. */
   devices: MemberDevice[];
@@ -132,6 +132,8 @@ export type Config = {
   channels?: Record<string, string>;
   /** Optional Discord account id from channels.discord.accounts; the host default when omitted. */
   discordAccount?: string;
+  /** Optional household agent id for brief attribution, outbound delivery, and kid/guest chat; the host default when omitted. */
+  agentId?: string;
   /** `lan` treats a paired device token as a guest; `solo` keeps the shared-owner model. */
   accessMode?: "solo" | "lan";
   /** The channels key the daily and weekly briefs post to; briefs are off without it. Channel reminders use it too. */

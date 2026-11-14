@@ -144,8 +144,8 @@ Reminders fire the lead time before a timed event, 15 minutes if you leave
 that unset. Quiet hours default to 22:00–07:00. A reminder that comes due
 during quiet hours waits, and goes out in the hour after they end. All-day
 events are not reminders. Each person gets a direct message, a mention in the summary
-channel, or nothing. Omitted means a direct message when the person has a
-Discord id, and nothing when they do not. On Discord, `set_reminder_mode`
+channel, or nothing. Omitted means nothing, even when the person has a
+Discord id. On Discord, `set_reminder_mode`
 changes your own; changing someone else's needs a parent.
 
 ## Do the family commands change config?

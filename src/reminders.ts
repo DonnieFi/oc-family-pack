@@ -40,7 +40,7 @@ function roster(config: Config): readonly MemberConfig[] {
 }
 
 function modeOf(member: MemberConfig, stored: Readonly<Record<string, ReminderMode>>): ReminderMode {
-  return stored[member.id] ?? member.reminders ?? (member.discordId === undefined ? "off" : "dm");
+  return stored[member.id] ?? member.reminders ?? "off";
 }
 
 /** Timed events in the window, copies merged, owners in roster order. All-day events are not reminders. */

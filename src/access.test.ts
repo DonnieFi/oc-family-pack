@@ -189,8 +189,8 @@ test("the LAN blocks are config openclaw accepts", () => {
       default: "guest",
       definitions: {
         parent: { sessions: { others: "write" }, agents: "*", scopes: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"] },
-        kid: { sessions: { others: "none" }, agents: "*", scopes: ["operator.read", "operator.sessions.write"] },
-        guest: { sessions: { others: "none" }, agents: "*", scopes: ["operator.read"] },
+        kid: { sessions: { others: "none" }, agents: ["main"], sandbox: "required", scopes: ["operator.read", "operator.sessions.write"] },
+        guest: { sessions: { others: "none" }, agents: ["main"], scopes: ["operator.read"] },
       },
     },
   });
@@ -323,4 +323,115 @@ test("a trusted-proxy Gateway is LAN even before the plugin setting is added", (
   assert.equal(accessModeFor(gateway, undefined), "lan");
   assert.equal(accessModeFor(gateway, "solo"), "solo");
   assert.equal(accessModeFor({ auth: { mode: "token" } }, undefined), undefined);
+});
+
+test("access role prints identityScopes, users.setRole with the real profile id, and the roster patch together", () => {
+  const gateway = {
+    auth: {
+      identityScopes: {
+        alex: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"],
+        riley: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"],
+      },
+    },
+  };
+  const members = [
+    { id: "alex", profileId: "alex", displayName: "Alex", role: "parent" },
+    { profileId: "riley", displayName: "Riley", role: "parent", email: "riley@example.com" },
+  ];
+  const profiles = [
+    { id: "prof-alex-1", displayName: "alex", role: "parent" },
+    { id: "prof-riley-2", displayName: "riley", role: "parent" },
+  ];
+  const result = runAccess(gateway, "role", { names: ["riley=kid"] }, { members, profiles });
+  assert.equal(result.ok, true);
+  assert.match(result.text, /"riley": \[\n\s+"operator\.read",\n\s+"operator\.sessions\.write"\n\s+\]/);
+  assert.match(result.text, /"alex": \[\n\s+"operator\.read",\n\s+"operator\.write"/);
+  assert.match(result.text, /openclaw gateway call users\.setRole --params '\{"profileId":"prof-riley-2","role":"kid"\}'/);
+  assert.equal(result.text.includes("PROFILE_riley"), false);
+  assert.match(result.text, /"id": "riley"/);
+  assert.match(result.text, /"role": "kid"/);
+  assert.match(result.text, /"email": "riley@example\.com"/);
+
+  const fallback = runAccess(gateway, "role", { names: ["riley=kid"] }, { members });
+  assert.equal(fallback.ok, true);
+  assert.match(fallback.text, /PROFILE_riley/);
+});
+
+test("access check compares roster, identityScopes, and Gateway users.list roles", () => {
+  const gateway = {
+    auth: {
+      identityScopes: {
+        alex: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"],
+        riley: ["operator.read", "operator.sessions.write"],
+      },
+    },
+  };
+  const members = [
+    { id: "alex", profileId: "alex", displayName: "Alex", role: "parent" },
+    { id: "riley", profileId: "riley", displayName: "Riley", role: "kid" },
+  ];
+  const drifted = runAccess(
+    gateway,
+    "check",
+    {},
+    {
+      members,
+      profiles: [
+        { id: "prof-alex", displayName: "alex", role: "parent" },
+        { id: "prof-riley", displayName: "riley", role: "parent" },
+      ],
+    },
+  );
+  assert.equal(drifted.ok, false);
+  assert.match(drifted.text, /Alex \(alex\): roster=parent, identityScopes=parent, Gateway role=parent \(ok\)/);
+  assert.match(drifted.text, /Riley \(riley\): roster=kid, identityScopes=kid, Gateway role=parent \(mismatch\)/);
+  assert.match(drifted.text, /Run: openclaw family access role riley=kid/);
+
+  const aligned = runAccess(
+    gateway,
+    "check",
+    {},
+    {
+      members,
+      profiles: [
+        { id: "prof-alex", displayName: "alex", role: "parent" },
+        { id: "prof-riley", displayName: "riley", role: "kid" },
+      ],
+    },
+  );
+  assert.equal(aligned.ok, true);
+});
+
+test("access lan restricts kid and guest to the household agent, requires sandbox for kid, and refuses when multiple agents have no chosen household agent", () => {
+  const refused = planAccess(
+    "lan",
+    { parent: ["alex"], kid: ["riley"] },
+    { agentIds: ["coding", "household"] },
+  );
+  assert.equal(refused.ok, false);
+  assert.match(refused.text, /More than one agent is configured on this Gateway \(coding, household\)/);
+  assert.match(refused.text, /plugins\.entries\.oc-family-pack\.config\.agentId/);
+
+  const badExplicit = planAccess(
+    "lan",
+    { parent: ["alex"], kid: ["riley"] },
+    { agentIds: ["coding", "household"], householdAgentId: "missing" },
+  );
+  assert.equal(badExplicit.ok, false);
+  assert.match(badExplicit.text, /`agentId` is set to `missing`, which is not one of the configured agents/);
+
+  const chosen = planAccess(
+    "lan",
+    { parent: ["alex"], kid: ["riley"], guest: ["sam"] },
+    { agentIds: ["coding", "household"], householdAgentId: "household", sandboxConfigured: false },
+  );
+  assert.equal(chosen.ok, true);
+  assert.match(chosen.text, /The `kid` role sets `sandbox: "required"`\./);
+  const blocks = [...chosen.text.matchAll(/^\{\n[\s\S]*?^\}$/gm)].map((match) => JSON.parse(match[0]) as { gateway: Record<string, unknown> });
+  const roles = (blocks[1]?.gateway.roles as { definitions: Record<string, unknown> } | undefined)?.definitions;
+  assert.deepEqual(roles, {
+    parent: { sessions: { others: "write" }, agents: "*", scopes: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"] },
+    kid: { sessions: { others: "none" }, agents: ["household"], sandbox: "required", scopes: ["operator.read", "operator.sessions.write"] },
+    guest: { sessions: { others: "none" }, agents: ["household"], scopes: ["operator.read"] },
+  });
 });

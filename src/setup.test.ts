@@ -223,6 +223,30 @@ function lanGateway(extra: Record<string, unknown> = {}) {
   return { ...lan, ...roles, controlUi: { ...(lan.controlUi as object), allowedOrigins: ["https://192.168.1.20"] }, auth, ...extra };
 }
 
+test("setup says why a configured morning brief stays quiet", () => {
+  const member = { ...ALEX, discordId: SNOWFLAKE };
+  const configured = { ...complete, members: [member], morningTime: "07:00" };
+  const hostWithApprovals = {
+    ...host(configured, lanGateway()),
+    approvals: { plugin: { enabled: true, mode: "targets", targets: [{ channel: "discord", to: `user:${SNOWFLAKE}` }] } },
+  };
+  const result = planSetup(hostWithApprovals, {}, READY, "UTC");
+  assert.match(result.text, /no parent with a Discord ID has `reminders` set to `dm` or `channel`/);
+  assert.equal(result.text.split("\n").at(-1), "The checklist is complete. The morning brief stays quiet until a parent sets `reminders`.");
+});
+
+test("an opted-in parent keeps the morning brief quiet warning away", () => {
+  const member = { ...ALEX, discordId: SNOWFLAKE, reminders: "dm" };
+  const configured = { ...complete, members: [member], morningTime: "07:00" };
+  const hostWithApprovals = {
+    ...host(configured, lanGateway()),
+    approvals: { plugin: { enabled: true, mode: "targets", targets: [{ channel: "discord", to: `user:${SNOWFLAKE}` }] } },
+  };
+  const result = planSetup(hostWithApprovals, {}, READY, "UTC");
+  assert.equal(result.text.includes("no parent with a Discord ID has `reminders` set"), false);
+  assert.match(result.text, /^Everything is set up\.$/m);
+});
+
 test("a Discord ID changes only that person's discordId and keeps everything else as written", () => {
   const result = planSetup(host(complete), { discord: [`alex=${SNOWFLAKE}`] }, READY, "UTC");
   const config = patchOf(result.text).plugins.entries["oc-family-pack"].config;
@@ -355,6 +379,8 @@ test("setup reports a Gateway scope that does not match the roster role", () => 
   const result = planSetup(host({ ...complete, members: [ALEX, riley] }, gateway), {}, READY, "UTC");
   assert.match(result.text, /^Members: To do$/m);
   assert.match(result.text, /scopes for Riley \(kid\) don't match/);
+  assert.match(result.text, /openclaw family access role riley-home=kid/);
+  assert.match(result.text, /`identityScopes`, `users\.setRole`, and `members\[\]\.role`/);
 });
 
 test("a complete LAN roster passes the preflight, including roles and allowUsers", () => {
@@ -464,4 +490,32 @@ test("a trusted-proxy Gateway that omits accessMode is treated as LAN", () => {
   const result = planSetup(host(withoutMode, lanGateway()), {}, READY, "UTC");
   assert.equal(result.ok, true);
   assert.equal(result.text.includes("accessMode"), false);
+});
+
+test("when multiple agents exist without a default, setup asks for agentId and --agent prints the patch", () => {
+  const multiHost = {
+    ...host(complete, lanGateway()),
+    agents: { list: [{ id: "coding" }, { id: "household" }] },
+  };
+  const missing = planSetup(multiHost, {}, READY, "UTC");
+  assert.equal(missing.ok, false);
+  assert.match(missing.text, /^Agent: To do$/m);
+  assert.match(missing.text, /OpenClaw has more than one agent \(coding, household\)/);
+  assert.match(missing.text, /openclaw config set plugins\.entries\.oc-family-pack\.config\.agentId coding/);
+
+  const bad = planSetup(multiHost, { agent: "unknown" }, READY, "UTC");
+  assert.equal(bad.ok, false);
+  assert.match(bad.text, /`unknown` is not one of the configured agents \(coding, household\)\./);
+
+  const patched = planSetup(multiHost, { agent: "household" }, READY, "UTC");
+  assert.equal(patched.ok, false);
+  assert.equal(patchOf(patched.text).plugins.entries["oc-family-pack"].config.agentId, "household");
+
+  const configured = {
+    ...host({ ...complete, agentId: "household" }, lanGateway()),
+    agents: { list: [{ id: "coding" }, { id: "household" }] },
+  };
+  const done = planSetup(configured, {}, READY, "UTC");
+  assert.equal(done.ok, true);
+  assert.match(done.text, /^Agent: Done$/m);
 });

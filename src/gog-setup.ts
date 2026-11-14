@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { runAccess } from "./access.ts";
+import { runAccess, type GatewayUserProfile } from "./access.ts";
 import { readGuideCheckpoint, runGuide, type GuideCheckpoint, type GuideState } from "./setup-guide.ts";
-import { planSetup, setupSteps } from "./setup.ts";
+import { familyConfig, hostAgents, planSetup, setupSteps } from "./setup.ts";
 import { openFamilyStore, type FamilyStore } from "./store.ts";
 
 const execFileAsync = promisify(execFile);
@@ -266,6 +266,47 @@ function gatewayPort(gateway: unknown): number | undefined {
   return typeof port === "number" ? port : undefined;
 }
 
+function sandboxConfigured(host: unknown): boolean {
+  if (!isRecord(host) || !isRecord(host.agents)) return false;
+  const defaults = isRecord(host.agents.defaults) ? host.agents.defaults : undefined;
+  const defaultSandbox = defaults && isRecord(defaults.sandbox) ? defaults.sandbox : undefined;
+  if (defaultSandbox?.mode === "all" || defaultSandbox?.mode === "non-main") return true;
+  if (isRecord(host.agents.entries)) {
+    for (const entry of Object.values(host.agents.entries)) {
+      const sbx = isRecord(entry) && isRecord(entry.sandbox) ? entry.sandbox : undefined;
+      if (sbx?.mode === "all" || sbx?.mode === "non-main") return true;
+    }
+  }
+  if (Array.isArray(host.agents.list)) {
+    for (const entry of host.agents.list) {
+      const sbx = isRecord(entry) && isRecord(entry.sandbox) ? entry.sandbox : undefined;
+      if (sbx?.mode === "all" || sbx?.mode === "non-main") return true;
+    }
+  }
+  return false;
+}
+
+async function readGatewayProfiles(run: RunGog, port: number | undefined): Promise<GatewayUserProfile[] | undefined> {
+  try {
+    const args = ["gateway", "call", "users.list", ...(port !== undefined ? ["--port", String(port)] : []), "--json"];
+    const { stdout } = await run("openclaw", args);
+    const parsed = JSON.parse(stdout) as unknown;
+    if (!isRecord(parsed) || !Array.isArray(parsed.profiles)) return undefined;
+    return parsed.profiles.flatMap((entry): GatewayUserProfile[] => {
+      if (!isRecord(entry) || typeof entry.id !== "string" || entry.id.trim() === "") return [];
+      const emails = Array.isArray(entry.emails) ? entry.emails.filter((e): e is string => typeof e === "string") : undefined;
+      return [{
+        id: entry.id.trim(),
+        ...(typeof entry.displayName === "string" ? { displayName: entry.displayName } : {}),
+        ...(emails ? { emails } : {}),
+        ...(typeof entry.role === "string" ? { role: entry.role } : {}),
+      }];
+    });
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * `openclaw family gog` prints the one command that moves gog setup forward.
  * `openclaw family access` reports the household sign-in mode, or prints the setup for one.
@@ -282,6 +323,7 @@ export function registerFamilyCli(
     write?: (text: string) => void;
     guideState?: GuideState;
     stateDir?: string;
+    profiles?: GatewayUserProfile[];
   },
 ): void {
   const write = deps.write ?? ((text: string) => console.log(text));
@@ -304,16 +346,24 @@ export function registerFamilyCli(
     });
   family
     .command("access")
-    .description("Report the household sign-in mode, or print the setup for one")
-    .argument("[mode]", "solo or lan")
-    .argument("[names...]", "People with no role flag, set up as guests")
+    .description("Report the household sign-in mode, check roles, or print the setup for one")
+    .argument("[mode]", "solo, lan, role, or check")
+    .argument("[names...]", "People with no role flag, or NAME=ROLE pairs for role")
     .option("--parent <name...>", "Parents: full access and every session")
     .option("--kid <name...>", "Kids: read, and write their own sessions")
     .option("--guest <name...>", "Guests: read only")
-    .action((mode: string | undefined, names: string[] | undefined, opts: AccessOptions) => {
-      const port = gatewayPort(deps.gateway);
+    .action(async (mode: string | undefined, names: string[] | undefined, opts: AccessOptions) => {
+      const gateway = deps.gateway ?? (isRecord(deps.host) ? deps.host.gateway : undefined);
+      const port = gatewayPort(gateway);
+      const pluginCfg = familyConfig(deps.host);
+      const rawMembers = pluginCfg.members;
+      const members = Array.isArray(rawMembers) ? rawMembers : undefined;
+      const agents = deps.host !== undefined ? hostAgents(deps.host) : undefined;
+      const householdAgentId = typeof pluginCfg.agentId === "string" && pluginCfg.agentId.trim() !== "" ? pluginCfg.agentId.trim() : undefined;
+      const profiles =
+        deps.profiles ?? (mode === "role" || mode === "check" ? await readGatewayProfiles(deps.run, port) : undefined);
       const result = runAccess(
-        deps.gateway,
+        gateway,
         mode,
         {
           ...(opts.parent ? { parent: opts.parent } : {}),
@@ -321,7 +371,15 @@ export function registerFamilyCli(
           ...(opts.guest ? { guest: opts.guest } : {}),
           ...(names ? { names } : {}),
         },
-        port !== undefined ? { port } : {},
+        {
+          ...(port !== undefined ? { port } : {}),
+          ...(members !== undefined ? { members } : {}),
+          ...(profiles !== undefined ? { profiles } : {}),
+          ...(agents !== undefined ? { agentIds: agents.ids } : {}),
+          ...(agents?.defaultId !== undefined ? { defaultAgentId: agents.defaultId } : {}),
+          ...(householdAgentId !== undefined ? { householdAgentId } : {}),
+          ...(deps.host !== undefined ? { sandboxConfigured: sandboxConfigured(deps.host) } : {}),
+        },
       );
       write(result.text);
       process.exitCode = result.ok ? 0 : 1;
@@ -334,12 +392,13 @@ export function registerFamilyCli(
     .option("--guest <name...>", "Guests to add to the family")
     .option("--discord <name=id...>", "Discord user IDs, like alex=123456789012345678")
     .option("--email <name=address...>", "Email addresses, like riley=riley@example.com")
+    .option("--agent <id>", "Household agent id for briefs and kid/guest chat")
     .option("--materialize-ids", "Print a patch that writes the member and device ids this config already uses")
     .option("--guide", "Plan remaining steps and remember answers; does not apply config")
     .option("--dry-run", "With --guide, preview without saving answers")
     .option("--noninteractive", "With --guide, print the checklist instead of asking")
     .option("--answer <choice...>", "Answers for --guide, in order: yes, no, back, skip, or cancel")
-    .action(async (opts: AccessOptions & { discord?: string[]; email?: string[]; materializeIds?: boolean; guide?: boolean; dryRun?: boolean; noninteractive?: boolean; answer?: string[] }) => {
+    .action(async (opts: AccessOptions & { discord?: string[]; email?: string[]; agent?: string; materializeIds?: boolean; guide?: boolean; dryRun?: boolean; noninteractive?: boolean; answer?: string[] }) => {
       const gog = await diagnoseGog(deps.run, deps.gogPath ? { gogPath: deps.gogPath } : {});
       const zone = deps.hostZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
       const result = planSetup(
@@ -350,6 +409,7 @@ export function registerFamilyCli(
           ...(opts.guest ? { guest: opts.guest } : {}),
           ...(opts.discord ? { discord: opts.discord } : {}),
           ...(opts.email ? { email: opts.email } : {}),
+          ...(opts.agent ? { agent: opts.agent } : {}),
           ...(opts.materializeIds ? { materializeIds: true } : {}),
         },
         gog,

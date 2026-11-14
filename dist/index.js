@@ -29,6 +29,8 @@ import { startHouseholds } from "./households.js";
 import { DEMO_MEMBERS } from "./demo.js";
 import { createGarbageFeed } from "./garbage.js";
 import { readEcWeather } from "./weather-ec.js";
+import { resolveBriefAgentName } from "./agent-name.js";
+import { briefSenderAgentId } from "./brief-sender.js";
 function configuredGogPath(raw) {
     try {
         return parseConfig(raw).gogPath;
@@ -110,16 +112,15 @@ const plugin = defineFeaturePlugin({
                 id: "family-briefs",
                 async start(ctx) {
                     const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
-                    const { resolveAgentIdentity, resolveDefaultAgentId } = await import("openclaw/plugin-sdk/agent-runtime");
+                    const { resolveAgentIdentity, listAgentIds } = await import("openclaw/plugin-sdk/agent-runtime");
                     const garbage = createGarbageFeed(fetch, { log: (line) => ctx.logger.warn(line) });
-                    const directory = briefDirectory(config);
+                    const directory = { ...briefDirectory(config), agentId: briefSenderAgentId(config, ctx.config) };
                     stopBriefs = startBriefs({
                         config,
                         store: () => store,
                         deliver: (target, messages, key) => deliver(sendDurableMessageBatch, ctx.config, directory, target, messages, key),
                         agentName: async () => {
-                            const id = resolveDefaultAgentId(ctx.config);
-                            return resolveAgentIdentity(ctx.config, id)?.name?.trim() || id;
+                            return resolveBriefAgentName(ctx.config, (cfg) => briefSenderAgentId(config, cfg), resolveAgentIdentity, listAgentIds);
                         },
                         readWeather: async () => {
                             const state = await readEcWeather(config.location, undefined, Date.now(), { timezone: config.timezone });
@@ -142,7 +143,7 @@ const plugin = defineFeaturePlugin({
                 id: "family-reminders",
                 async start(ctx) {
                     const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
-                    const directory = briefDirectory(config);
+                    const directory = { ...briefDirectory(config), agentId: briefSenderAgentId(config, ctx.config) };
                     stopReminders = startReminders({
                         config,
                         store: () => store,
@@ -164,7 +165,7 @@ const plugin = defineFeaturePlugin({
                 id: "family-household",
                 async start(ctx) {
                     const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
-                    const directory = briefDirectory(config);
+                    const directory = { ...briefDirectory(config), agentId: briefSenderAgentId(config, ctx.config) };
                     stopHousehold = startHouseholds({
                         config,
                         store: () => store,

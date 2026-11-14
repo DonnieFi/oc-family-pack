@@ -241,6 +241,7 @@ export function briefDirectory(config: Config): DeliveryDirectory {
     members: config.members,
     channels: config.channels ?? {},
     ...(config.discordAccount !== undefined ? { account: config.discordAccount } : {}),
+    ...(config.agentId !== undefined ? { agentId: config.agentId } : {}),
   };
 }
 

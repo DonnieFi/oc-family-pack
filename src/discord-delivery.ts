@@ -13,6 +13,8 @@ export type DeliveryDirectory = {
   channels: Readonly<Record<string, string>>;
   /** Optional channels.discord.accounts entry; the host default when omitted. */
   account?: string;
+  /** Optional household agent id; bound on the outbound session when set. */
+  agentId?: string;
 };
 
 /** Bernie's embed (ui/embeds.py): title, description, color, fields, footer. */
@@ -179,6 +181,7 @@ export async function deliver(send: Send, cfg: HostConfig, directory: DeliveryDi
       channel: "discord",
       to,
       ...(directory.account !== undefined ? { accountId: directory.account } : {}),
+      ...(directory.agentId !== undefined ? { session: { agentId: directory.agentId } } : {}),
       payloads: messages.map(payloadOf),
       deliveryIntentId: KEY_PREFIX + key,
       completionRetention: KEY_RETENTION,

@@ -250,8 +250,8 @@ test("the garbage calendar link is marked sensitive, so the Control UI masks it:
   assert.equal(manifest.uiHints.garbageIcsUrl?.sensitive, true);
 });
 
-test("reminders default to a 15 minute lead, quiet hours 22:00 to 07:00, and a direct message", () => {
-  const parsed = parseConfig({ timezone: "UTC", members: [{ profileId: "alex", displayName: "Alex", role: "parent", reminders: "off" }] });
+test("reminders default to a 15 minute lead, quiet hours 22:00 to 07:00, and off", () => {
+  const parsed = parseConfig({ timezone: "UTC", members: [{ profileId: "alex", displayName: "Alex", role: "parent", discordId: "100000000000000001" }] });
   assert.deepEqual(parsed.reminderLeadMinutes, [15]);
   assert.deepEqual(parsed.quietHours, { startHour: 22, endHour: 7 });
   assert.equal(parsed.members[0]!.reminders, "off");
@@ -319,9 +319,11 @@ test("aliases and the Discord account parse and stay lowercased", () => {
   const config = parseConfig({
     members: [{ name: "Alex", role: "parent", aliases: ["Dad", "  Al  "] }],
     discordAccount: "family",
+    agentId: "  household  ",
   });
   assert.deepEqual(config.members[0]?.aliases, ["dad", "al"]);
   assert.equal(config.discordAccount, "family");
+  assert.equal(config.agentId, "household");
 });
 
 test("a calendar key cannot be another calendar's label", () => {
