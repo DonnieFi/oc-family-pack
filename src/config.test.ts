@@ -319,9 +319,11 @@ test("aliases and the Discord account parse and stay lowercased", () => {
   const config = parseConfig({
     members: [{ name: "Alex", role: "parent", aliases: ["Dad", "  Al  "] }],
     discordAccount: "family",
+    agentId: "  household  ",
   });
   assert.deepEqual(config.members[0]?.aliases, ["dad", "al"]);
   assert.equal(config.discordAccount, "family");
+  assert.equal(config.agentId, "household");
 });
 
 test("a calendar key cannot be another calendar's label", () => {

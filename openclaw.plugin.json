@@ -218,6 +218,11 @@
         "minLength": 1,
         "maxLength": 200
       },
+      "agentId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
       "summaryChannel": {
         "type": "string",
         "pattern": "^[a-z0-9][a-z0-9-]{0,39}$"

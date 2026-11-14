@@ -117,7 +117,7 @@ const plugin = defineFeaturePlugin({
           const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
           const { resolveAgentIdentity, listAgentIds } = await import("openclaw/plugin-sdk/agent-runtime");
           const garbage = createGarbageFeed(fetch, { log: (line) => ctx.logger.warn(line) });
-          const directory = briefDirectory(config);
+          const directory = { ...briefDirectory(config), agentId: briefSenderAgentId(config, ctx.config) };
           stopBriefs = startBriefs({
             config,
             store: () => store,
@@ -146,7 +146,7 @@ const plugin = defineFeaturePlugin({
         id: "family-reminders",
         async start(ctx) {
           const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
-          const directory = briefDirectory(config);
+          const directory = { ...briefDirectory(config), agentId: briefSenderAgentId(config, ctx.config) };
           stopReminders = startReminders({
             config,
             store: () => store,
@@ -170,7 +170,7 @@ const plugin = defineFeaturePlugin({
         id: "family-household",
         async start(ctx) {
           const { sendDurableMessageBatch } = await import("openclaw/plugin-sdk/channel-outbound");
-          const directory = briefDirectory(config);
+          const directory = { ...briefDirectory(config), agentId: briefSenderAgentId(config, ctx.config) };
           stopHousehold = startHouseholds({
             config,
             store: () => store,

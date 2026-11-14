@@ -8,8 +8,9 @@ function isSelectionRequired(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "AGENT_SELECTION_REQUIRED";
 }
 
-/** Attribution follows the same explicit Discord account as brief delivery. */
-export function briefSenderAgentId(config: Pick<Config, "discordAccount">, host: HostConfig): string {
+/** Attribution follows the explicit household agent or the same Discord account as brief delivery. */
+export function briefSenderAgentId(config: Pick<Config, "discordAccount" | "agentId">, host: HostConfig): string {
+  if (typeof config.agentId === "string" && config.agentId.trim() !== "") return config.agentId.trim();
   try {
     if (config.discordAccount === undefined) return resolveDefaultAgentId(host);
     return resolveAgentRoute({ cfg: host, channel: "discord", accountId: config.discordAccount }).agentId;

@@ -277,6 +277,62 @@ function garbageNext() {
 function optionalPiece(name, done, next) {
     return { name, done, next, optional: true };
 }
+/** Configured agent IDs on the Gateway and any single marked default. */
+export function hostAgents(host) {
+    const agents = record(record(host).agents);
+    const explicit = agents.ownership === "explicit";
+    if (Object.hasOwn(agents, "entries") && agents.entries !== undefined) {
+        const entries = record(agents.entries);
+        const ids = [];
+        const defaults = [];
+        for (const [rawId, rawEntry] of Object.entries(entries)) {
+            const id = rawId.trim().toLowerCase();
+            if (id === "")
+                continue;
+            if (!ids.includes(id))
+                ids.push(id);
+            if (!explicit && record(rawEntry).default === true)
+                defaults.push(id);
+        }
+        const defaultId = defaults.length === 1 ? defaults[0] : ids.length === 1 ? ids[0] : undefined;
+        return { ids, ...(defaultId !== undefined ? { defaultId } : {}) };
+    }
+    if (Object.hasOwn(agents, "list") && Array.isArray(agents.list)) {
+        const ids = [];
+        const defaults = [];
+        for (const rawEntry of agents.list) {
+            const entry = record(rawEntry);
+            const id = typeof entry.id === "string" ? entry.id.trim().toLowerCase() : "";
+            if (id === "")
+                continue;
+            if (!ids.includes(id))
+                ids.push(id);
+            if (!explicit && entry.default === true)
+                defaults.push(id);
+        }
+        const defaultId = defaults.length === 1 ? defaults[0] : ids.length === 1 ? ids[0] : undefined;
+        return { ids, ...(defaultId !== undefined ? { defaultId } : {}) };
+    }
+    return { ids: ["main"], defaultId: "main" };
+}
+function agentStep(host, config) {
+    const agents = hostAgents(host);
+    const configured = typeof config.agentId === "string" && config.agentId.trim() !== "" ? config.agentId.trim().toLowerCase() : undefined;
+    if (agents.ids.length <= 1 && configured === undefined)
+        return [];
+    const chosen = configured !== undefined ? agents.ids.includes(configured) : agents.defaultId !== undefined;
+    const suggestion = agents.ids.includes("main") ? "main" : (agents.ids[0] ?? "main");
+    const detail = configured !== undefined && !agents.ids.includes(configured)
+        ? `\`agentId\` is set to \`${configured}\`, which is not one of the configured agents (${agents.ids.join(", ")}).`
+        : `OpenClaw has more than one agent (${agents.ids.join(", ")}). Pick the household agent for briefs and kid/guest chat:`;
+    return [
+        {
+            name: "Agent",
+            done: chosen,
+            next: `${detail}\n\`openclaw config set ${CONFIG_PATH}.agentId ${suggestion}\``,
+        },
+    ];
+}
 export function setupSteps(host, gog, hostZone) {
     const config = familyConfig(host);
     const location = record(config.location);
@@ -321,6 +377,7 @@ export function setupSteps(host, gog, hostZone) {
                     : "`openclaw family gog`";
             })(),
         },
+        ...agentStep(host, config),
         optionalPiece("Alerts", alertsDone(config), alertsNext(host, config)),
         optionalPiece("Morning brief", clockDone(config.morningTime), clockNext("morningTime", "Weekday morning direct message to parents who set `reminders` to `dm` or `channel`. It stays quiet while every parent is `off`.", "07:00")),
         optionalPiece("After-school brief", clockDone(config.afterSchoolTime), clockNext("afterSchoolTime", "Weekday after-school post to the summary channel. It stays quiet until `summaryChannel` is set.", "15:30")),
@@ -575,7 +632,7 @@ export function planSetup(host, input, gog, hostZone) {
     const checklist = list.map((step) => `${step.name}: ${step.done ? "Done" : "To do"}`);
     if (input.materializeIds) {
         const namedPeople = (input.parent ?? []).length + (input.kid ?? []).length + (input.guest ?? []).length > 0;
-        if (namedPeople || (input.discord ?? []).length > 0 || (input.email ?? []).length > 0) {
+        if (namedPeople || (input.discord ?? []).length > 0 || (input.email ?? []).length > 0 || input.agent !== undefined) {
             return { ok: false, text: "Run `--materialize-ids` on its own." };
         }
         const config = familyConfig(host);
@@ -588,8 +645,15 @@ export function planSetup(host, input, gog, hostZone) {
             return { ok: true, text: "Every member and device already has an id. No changes to make." };
         return { ok: false, text: [MATERIALIZE_INTRO, "", PATCH_INTRO, `${preview.patch}\n`].join("\n") };
     }
+    const rawAgent = input.agent !== undefined ? input.agent.trim().toLowerCase() : undefined;
+    if (rawAgent !== undefined) {
+        const agents = hostAgents(host);
+        if (rawAgent === "" || (agents.ids.length > 0 && !agents.ids.includes(rawAgent))) {
+            return { ok: false, text: `\`${input.agent?.trim() ?? ""}\` is not one of the configured agents (${agents.ids.join(", ")}).` };
+        }
+    }
     const named = (input.parent ?? []).length + (input.kid ?? []).length + (input.guest ?? []).length > 0;
-    const asked = named || (input.discord ?? []).length > 0 || (input.email ?? []).length > 0;
+    const asked = named || (input.discord ?? []).length > 0 || (input.email ?? []).length > 0 || rawAgent !== undefined;
     if (asked) {
         const found = named ? people(input) : { list: [] };
         if ("error" in found)
@@ -606,10 +670,29 @@ export function planSetup(host, input, gog, hostZone) {
         const { skipped, patch, error } = membersPatch(Array.isArray(existing) ? existing : [], found.list, parsed.ids, mail.emails, calendars, config.channels);
         if (error)
             return { ok: false, text: error };
-        if (patch) {
+        const agentChanged = rawAgent !== undefined && config.agentId !== rawAgent;
+        const mergedPatch = patch !== undefined && agentChanged
+            ? JSON.stringify({
+                plugins: {
+                    entries: {
+                        "oc-family-pack": {
+                            config: {
+                                ...JSON.parse(patch).plugins.entries["oc-family-pack"].config,
+                                agentId: rawAgent,
+                            },
+                        },
+                    },
+                },
+            }, null, 2)
+            : patch !== undefined
+                ? patch
+                : agentChanged
+                    ? JSON.stringify({ plugins: { entries: { "oc-family-pack": { config: { agentId: rawAgent } } } } }, null, 2)
+                    : undefined;
+        if (mergedPatch) {
             return {
                 ok: false,
-                text: [...skipped, PATCH_INTRO, patch, ...linkLines(host, parsed.ids), ...approvalLines(host, parsed.ids, found.list), "", ...checklist].join("\n"),
+                text: [...skipped, PATCH_INTRO, mergedPatch, ...linkLines(host, parsed.ids), ...approvalLines(host, parsed.ids, found.list), "", ...checklist].join("\n"),
             };
         }
         checklist.unshift(...skipped, "No changes to make.", "");

@@ -27,4 +27,6 @@ test("multi-agent host with no default falls back to main or the first configure
   assert.equal(briefSenderAgentId({}, withMain), "main");
   assert.equal(briefSenderAgentId({ discordAccount: "other" }, withMain), "main");
   assert.equal(briefSenderAgentId({}, withoutMain), "helper");
+  assert.equal(briefSenderAgentId({ agentId: "family" }, withoutMain), "family");
+  assert.equal(briefSenderAgentId({ agentId: "family", discordAccount: "family" }, host), "family");
 });

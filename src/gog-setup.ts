@@ -365,12 +365,13 @@ export function registerFamilyCli(
     .option("--guest <name...>", "Guests to add to the family")
     .option("--discord <name=id...>", "Discord user IDs, like alex=123456789012345678")
     .option("--email <name=address...>", "Email addresses, like riley=riley@example.com")
+    .option("--agent <id>", "Household agent id for briefs and kid/guest chat")
     .option("--materialize-ids", "Print a patch that writes the member and device ids this config already uses")
     .option("--guide", "Plan remaining steps and remember answers; does not apply config")
     .option("--dry-run", "With --guide, preview without saving answers")
     .option("--noninteractive", "With --guide, print the checklist instead of asking")
     .option("--answer <choice...>", "Answers for --guide, in order: yes, no, back, skip, or cancel")
-    .action(async (opts: AccessOptions & { discord?: string[]; email?: string[]; materializeIds?: boolean; guide?: boolean; dryRun?: boolean; noninteractive?: boolean; answer?: string[] }) => {
+    .action(async (opts: AccessOptions & { discord?: string[]; email?: string[]; agent?: string; materializeIds?: boolean; guide?: boolean; dryRun?: boolean; noninteractive?: boolean; answer?: string[] }) => {
       const gog = await diagnoseGog(deps.run, deps.gogPath ? { gogPath: deps.gogPath } : {});
       const zone = deps.hostZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
       const result = planSetup(
@@ -381,6 +382,7 @@ export function registerFamilyCli(
           ...(opts.guest ? { guest: opts.guest } : {}),
           ...(opts.discord ? { discord: opts.discord } : {}),
           ...(opts.email ? { email: opts.email } : {}),
+          ...(opts.agent ? { agent: opts.agent } : {}),
           ...(opts.materializeIds ? { materializeIds: true } : {}),
         },
         gog,

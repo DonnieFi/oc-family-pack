@@ -491,3 +491,31 @@ test("a trusted-proxy Gateway that omits accessMode is treated as LAN", () => {
   assert.equal(result.ok, true);
   assert.equal(result.text.includes("accessMode"), false);
 });
+
+test("when multiple agents exist without a default, setup asks for agentId and --agent prints the patch", () => {
+  const multiHost = {
+    ...host(complete, lanGateway()),
+    agents: { list: [{ id: "coding" }, { id: "household" }] },
+  };
+  const missing = planSetup(multiHost, {}, READY, "UTC");
+  assert.equal(missing.ok, false);
+  assert.match(missing.text, /^Agent: To do$/m);
+  assert.match(missing.text, /OpenClaw has more than one agent \(coding, household\)/);
+  assert.match(missing.text, /openclaw config set plugins\.entries\.oc-family-pack\.config\.agentId coding/);
+
+  const bad = planSetup(multiHost, { agent: "unknown" }, READY, "UTC");
+  assert.equal(bad.ok, false);
+  assert.match(bad.text, /`unknown` is not one of the configured agents \(coding, household\)\./);
+
+  const patched = planSetup(multiHost, { agent: "household" }, READY, "UTC");
+  assert.equal(patched.ok, false);
+  assert.equal(patchOf(patched.text).plugins.entries["oc-family-pack"].config.agentId, "household");
+
+  const configured = {
+    ...host({ ...complete, agentId: "household" }, lanGateway()),
+    agents: { list: [{ id: "coding" }, { id: "household" }] },
+  };
+  const done = planSetup(configured, {}, READY, "UTC");
+  assert.equal(done.ok, true);
+  assert.match(done.text, /^Agent: Done$/m);
+});

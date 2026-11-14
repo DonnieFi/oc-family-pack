@@ -110,6 +110,7 @@ export async function deliver(send, cfg, directory, target, messages, key) {
         channel: "discord",
         to,
         ...(directory.account !== undefined ? { accountId: directory.account } : {}),
+        ...(directory.agentId !== undefined ? { session: { agentId: directory.agentId } } : {}),
         payloads: messages.map(payloadOf),
         deliveryIntentId: KEY_PREFIX + key,
         completionRetention: KEY_RETENTION,

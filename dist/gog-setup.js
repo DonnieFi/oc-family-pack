@@ -324,6 +324,7 @@ export function registerFamilyCli(program, deps) {
         .option("--guest <name...>", "Guests to add to the family")
         .option("--discord <name=id...>", "Discord user IDs, like alex=123456789012345678")
         .option("--email <name=address...>", "Email addresses, like riley=riley@example.com")
+        .option("--agent <id>", "Household agent id for briefs and kid/guest chat")
         .option("--materialize-ids", "Print a patch that writes the member and device ids this config already uses")
         .option("--guide", "Plan remaining steps and remember answers; does not apply config")
         .option("--dry-run", "With --guide, preview without saving answers")
@@ -338,6 +339,7 @@ export function registerFamilyCli(program, deps) {
             ...(opts.guest ? { guest: opts.guest } : {}),
             ...(opts.discord ? { discord: opts.discord } : {}),
             ...(opts.email ? { email: opts.email } : {}),
+            ...(opts.agent ? { agent: opts.agent } : {}),
             ...(opts.materializeIds ? { materializeIds: true } : {}),
         }, gog, zone);
         if (opts.guide !== true) {
