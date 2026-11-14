@@ -36,7 +36,7 @@ const HTTPS_INTERNAL =
 const PROXY_RULES =
   "Any proxy works if it's the only way to reach the Gateway, signs each person in, sends their username in `X-Forwarded-User`, and replaces any `X-Forwarded-User` or `X-Forwarded-For` the browser sends.";
 const NO_SIGN_OUT =
-  "There's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. A paired device token is the shared owner in solo mode; in LAN mode it is a guest, so don't leave one on a kid's device. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.";
+  "There's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. A paired device token is the shared owner in solo mode. In LAN mode, a device token with no device identity is refused by the Gateway before the plugin runs. A paired token can connect, but the plugin has no household username for it, so it reads as a guest and sees shared calendars only; don't leave one on a kid's device. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.";
 const LOOPBACK_WARNING = "Anything else running on this machine can sign in as any family member. Run only the proxy and the Gateway here.";
 const LAN_ADDRESS_STEP = "Replace `LAN_ADDRESS` with this machine's address on your home network, like `192.168.1.20`. Use the same address in the Caddyfile and in `allowedOrigins`. If you add a port to the Caddyfile, add it to the origin too.";
 const OUTSIDE =

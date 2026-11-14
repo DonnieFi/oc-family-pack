@@ -1099,8 +1099,8 @@ async function main(): Promise<void> {
   if (!record.source) fail("update path", "the installed plugin has no recorded source, so updates cannot be resolved");
   note(`install source recorded as ${record.source}`, "update path");
 
-  await deviceTokenOwner(port, TOKEN);
-  await householdSignIn(env, configPath, port, logPath);
+  const pairedDevice = await deviceTokenOwner(port, TOKEN);
+  await householdSignIn(env, configPath, port, logPath, pairedDevice);
   const garbage = await garbageFeed();
   await calendarWatch(env, configPath, port, logPath, garbage.url);
   await scheduleTool(configPath, port);
@@ -1214,11 +1214,13 @@ function ownerBrowserSession(
   }), calls);
 }
 
+type PairedDevice = { device: ReturnType<typeof deviceIdentity>; deviceToken: string; buildId: string };
+
 /**
  * 10b. The token owner's browser gets a device token and, coming back on that
  * device token alone, still reads as the owner: family.week holds every calendar.
  */
-async function deviceTokenOwner(port: number, token: string): Promise<void> {
+async function deviceTokenOwner(port: number, token: string): Promise<PairedDevice> {
   const step: Step = "household sign-in";
   const device = deviceIdentity();
   // A same-origin Control UI must send the Gateway's build id, which the page it
@@ -1237,6 +1239,7 @@ async function deviceTokenOwner(port: number, token: string): Promise<void> {
     fail(step, `the owner on a device token should see every calendar, got ${JSON.stringify(back[1]?.error ?? sees)}`);
   }
   note("the token owner's browser, back on its device token alone, gets family.week with all six calendars", step);
+  return { device, deviceToken, buildId };
 }
 
 /**
@@ -1245,7 +1248,7 @@ async function deviceTokenOwner(port: number, token: string): Promise<void> {
  * process plays the proxy from loopback, which the printed config trusts.
  * Runs last because it switches the isolated Gateway off token auth.
  */
-async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port: number, logPath: string): Promise<void> {
+async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port: number, logPath: string, pairedDevice: PairedDevice): Promise<void> {
   const step: Step = "household sign-in";
   const printed = planAccess("lan", { parent: ["alex"], kid: ["riley"] }, { port }).text.replaceAll("LAN_ADDRESS", HOUSEHOLD_ADDRESS);
   const [access, roles] = [...printed.matchAll(/^\{\n[\s\S]*?^\}$/gm)].map(
@@ -1311,6 +1314,33 @@ async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port:
     }
     note(`a proxied session with user header ${JSON.stringify(user)} is refused at connect: ${frames[0].error?.details?.code ?? frames[0].error?.message}`, step);
   }
+
+  // A paired device token with no X-Forwarded-User header carries a signed
+  // device identity, so it can connect, and the plugin scopes it as a guest
+  // (shared calendars only) rather than the shared owner.
+  const pairedLan = await session(
+    port,
+    "paired device token in LAN mode",
+    { origin: `https://${HOUSEHOLD_ADDRESS}`, "x-forwarded-for": HOUSEHOLD_CLIENT },
+    (nonce) => ({
+      minProtocol: 4,
+      maxProtocol: 4,
+      client: { ...CONTROL_UI_CLIENT, buildId: pairedDevice.buildId },
+      role: "operator",
+      scopes: OPERATOR_SCOPES,
+      caps: [],
+      auth: { deviceToken: pairedDevice.deviceToken },
+      device: pairedDevice.device.sign(nonce, pairedDevice.deviceToken),
+    }),
+    [week],
+  );
+  connected(pairedLan, "paired device token in LAN mode");
+  const pairedCalendars = (pairedLan[1]?.payload as { calendars?: { label: string }[] } | undefined)?.calendars;
+  const pairedSees = (pairedCalendars ?? []).map((calendar) => calendar.label).sort().join(", ");
+  if (!pairedLan[1]?.ok || pairedSees !== "Family") {
+    fail(step, `a paired device token in LAN mode with no user header should see shared calendars only (Family), got ${JSON.stringify(pairedLan[1]?.error ?? pairedSees)}`);
+  }
+  note("a paired device token in LAN mode with no user header connects and reads as a guest (Family only)", step);
 
   const cli = async (method: string, params: unknown) =>
     parseHostJson(
