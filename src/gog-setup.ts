@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { runAccess, type GatewayUserProfile } from "./access.ts";
 import { readGuideCheckpoint, runGuide, type GuideCheckpoint, type GuideState } from "./setup-guide.ts";
-import { familyConfig, planSetup, setupSteps } from "./setup.ts";
+import { familyConfig, hostAgents, planSetup, setupSteps } from "./setup.ts";
 import { openFamilyStore, type FamilyStore } from "./store.ts";
 
 const execFileAsync = promisify(execFile);
@@ -266,6 +266,26 @@ function gatewayPort(gateway: unknown): number | undefined {
   return typeof port === "number" ? port : undefined;
 }
 
+function sandboxConfigured(host: unknown): boolean {
+  if (!isRecord(host) || !isRecord(host.agents)) return false;
+  const defaults = isRecord(host.agents.defaults) ? host.agents.defaults : undefined;
+  const defaultSandbox = defaults && isRecord(defaults.sandbox) ? defaults.sandbox : undefined;
+  if (defaultSandbox?.mode === "all" || defaultSandbox?.mode === "non-main") return true;
+  if (isRecord(host.agents.entries)) {
+    for (const entry of Object.values(host.agents.entries)) {
+      const sbx = isRecord(entry) && isRecord(entry.sandbox) ? entry.sandbox : undefined;
+      if (sbx?.mode === "all" || sbx?.mode === "non-main") return true;
+    }
+  }
+  if (Array.isArray(host.agents.list)) {
+    for (const entry of host.agents.list) {
+      const sbx = isRecord(entry) && isRecord(entry.sandbox) ? entry.sandbox : undefined;
+      if (sbx?.mode === "all" || sbx?.mode === "non-main") return true;
+    }
+  }
+  return false;
+}
+
 async function readGatewayProfiles(run: RunGog, port: number | undefined): Promise<GatewayUserProfile[] | undefined> {
   try {
     const args = ["gateway", "call", "users.list", ...(port !== undefined ? ["--port", String(port)] : []), "--json"];
@@ -335,8 +355,11 @@ export function registerFamilyCli(
     .action(async (mode: string | undefined, names: string[] | undefined, opts: AccessOptions) => {
       const gateway = deps.gateway ?? (isRecord(deps.host) ? deps.host.gateway : undefined);
       const port = gatewayPort(gateway);
-      const rawMembers = familyConfig(deps.host).members;
+      const pluginCfg = familyConfig(deps.host);
+      const rawMembers = pluginCfg.members;
       const members = Array.isArray(rawMembers) ? rawMembers : undefined;
+      const agents = deps.host !== undefined ? hostAgents(deps.host) : undefined;
+      const householdAgentId = typeof pluginCfg.agentId === "string" && pluginCfg.agentId.trim() !== "" ? pluginCfg.agentId.trim() : undefined;
       const profiles =
         deps.profiles ?? (mode === "role" || mode === "check" ? await readGatewayProfiles(deps.run, port) : undefined);
       const result = runAccess(
@@ -352,6 +375,10 @@ export function registerFamilyCli(
           ...(port !== undefined ? { port } : {}),
           ...(members !== undefined ? { members } : {}),
           ...(profiles !== undefined ? { profiles } : {}),
+          ...(agents !== undefined ? { agentIds: agents.ids } : {}),
+          ...(agents?.defaultId !== undefined ? { defaultAgentId: agents.defaultId } : {}),
+          ...(householdAgentId !== undefined ? { householdAgentId } : {}),
+          ...(deps.host !== undefined ? { sandboxConfigured: sandboxConfigured(deps.host) } : {}),
         },
       );
       write(result.text);

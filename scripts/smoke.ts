@@ -1250,12 +1250,17 @@ async function deviceTokenOwner(port: number, token: string): Promise<PairedDevi
  */
 async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port: number, logPath: string, pairedDevice: PairedDevice): Promise<void> {
   const step: Step = "household sign-in";
-  const printed = planAccess("lan", { parent: ["alex"], kid: ["riley"] }, { port }).text.replaceAll("LAN_ADDRESS", HOUSEHOLD_ADDRESS);
+  const printed = planAccess(
+    "lan",
+    { parent: ["alex"], kid: ["riley"] },
+    { port, agentIds: ["main", "coding"], defaultAgentId: "main" },
+  ).text.replaceAll("LAN_ADDRESS", HOUSEHOLD_ADDRESS);
   const [access, roles] = [...printed.matchAll(/^\{\n[\s\S]*?^\}$/gm)].map(
     (match) => (JSON.parse(match[0]) as { gateway: Record<string, unknown> & { auth: Record<string, unknown> } }).gateway,
   );
   if (!access || !roles) fail(step, "access lan did not print the Gateway config and roles blocks");
-  const config = JSON.parse(readFileSync(configPath, "utf8")) as { gateway: Record<string, unknown> };
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as { gateway: Record<string, unknown>; agents?: unknown };
+  config.agents = { list: [{ id: "main", default: true }, { id: "coding" }] };
   config.gateway = {
     mode: "local",
     port,
@@ -1390,6 +1395,20 @@ async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port:
     }
   }
   note("People directory and patch preview are denied to read-only Riley; parent Alex can view the demo directory, with real patch preview refused in demo mode", step);
+  const setRiley = await cli("users.setRole", { profileId: rileyId, role: "kid" });
+  if (setRiley.profile?.role !== "kid") fail(step, `users.setRole did not make riley a kid: ${JSON.stringify(setRiley)}`);
+  const rileyAgentFrames = await proxiedSession(port, "riley", [["agents.list", {}]]);
+  connected(rileyAgentFrames, "riley agents.list");
+  const rileyAgents = ((rileyAgentFrames[1]?.payload as { agents?: { id: string }[] } | undefined)?.agents ?? []).map((agent) => agent.id);
+  if (!rileyAgentFrames[1]?.ok || JSON.stringify(rileyAgents) !== JSON.stringify(["main"])) {
+    fail(step, `kid riley should see only the household agent main in agents.list, got ${JSON.stringify(rileyAgentFrames[1] ?? rileyAgents)}`);
+  }
+  const rileyCodingFrames = await proxiedSession(port, "riley", [["sessions.create", { agentId: "coding" }]]);
+  connected(rileyCodingFrames, "riley sessions.create coding");
+  if (rileyCodingFrames[1]?.ok !== false || !/cannot create sessions for agent "coding"|forbidden|allowed agent/i.test(rileyCodingFrames[1]?.error?.message ?? "")) {
+    fail(step, `kid riley should not be able to open a session for non-household agent coding: ${JSON.stringify(rileyCodingFrames[1])}`);
+  }
+  note("kid riley sees only the household agent (main) in agents.list and is denied sessions.create for coding", step);
   // alex now holds operator.write, so a refusal here can only mean the action is gone.
   const oldWeek = (await proxiedSession(port, "alex", [["plugins.sessionAction", { pluginId: PLUGIN_ID, actionId: "family.week", payload: {} }]]))[1];
   const oldResult = oldWeek?.payload as { ok?: boolean } | undefined;

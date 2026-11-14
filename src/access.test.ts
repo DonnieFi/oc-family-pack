@@ -189,8 +189,8 @@ test("the LAN blocks are config openclaw accepts", () => {
       default: "guest",
       definitions: {
         parent: { sessions: { others: "write" }, agents: "*", scopes: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"] },
-        kid: { sessions: { others: "none" }, agents: "*", scopes: ["operator.read", "operator.sessions.write"] },
-        guest: { sessions: { others: "none" }, agents: "*", scopes: ["operator.read"] },
+        kid: { sessions: { others: "none" }, agents: ["main"], sandbox: "required", scopes: ["operator.read", "operator.sessions.write"] },
+        guest: { sessions: { others: "none" }, agents: ["main"], scopes: ["operator.read"] },
       },
     },
   });
@@ -400,4 +400,38 @@ test("access check compares roster, identityScopes, and Gateway users.list roles
     },
   );
   assert.equal(aligned.ok, true);
+});
+
+test("access lan restricts kid and guest to the household agent, requires sandbox for kid, and refuses when multiple agents have no chosen household agent", () => {
+  const refused = planAccess(
+    "lan",
+    { parent: ["alex"], kid: ["riley"] },
+    { agentIds: ["coding", "household"] },
+  );
+  assert.equal(refused.ok, false);
+  assert.match(refused.text, /More than one agent is configured on this Gateway \(coding, household\)/);
+  assert.match(refused.text, /plugins\.entries\.oc-family-pack\.config\.agentId/);
+
+  const badExplicit = planAccess(
+    "lan",
+    { parent: ["alex"], kid: ["riley"] },
+    { agentIds: ["coding", "household"], householdAgentId: "missing" },
+  );
+  assert.equal(badExplicit.ok, false);
+  assert.match(badExplicit.text, /`agentId` is set to `missing`, which is not one of the configured agents/);
+
+  const chosen = planAccess(
+    "lan",
+    { parent: ["alex"], kid: ["riley"], guest: ["sam"] },
+    { agentIds: ["coding", "household"], householdAgentId: "household", sandboxConfigured: false },
+  );
+  assert.equal(chosen.ok, true);
+  assert.match(chosen.text, /The `kid` role sets `sandbox: "required"`\./);
+  const blocks = [...chosen.text.matchAll(/^\{\n[\s\S]*?^\}$/gm)].map((match) => JSON.parse(match[0]) as { gateway: Record<string, unknown> });
+  const roles = (blocks[1]?.gateway.roles as { definitions: Record<string, unknown> } | undefined)?.definitions;
+  assert.deepEqual(roles, {
+    parent: { sessions: { others: "write" }, agents: "*", scopes: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"] },
+    kid: { sessions: { others: "none" }, agents: ["household"], sandbox: "required", scopes: ["operator.read", "operator.sessions.write"] },
+    guest: { sessions: { others: "none" }, agents: ["household"], scopes: ["operator.read"] },
+  });
 });

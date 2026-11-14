@@ -157,5 +157,6 @@ export async function buildWeekPayload(
     viewer: pageViewer(members, viewer),
     canEdit: access.canEdit && !config.demo,
     calendarsReadOnly: access.canEdit && !config.demo && access.grantReadOnly,
+    ...(config.agentId !== undefined ? { householdAgentId: config.agentId } : {}),
   });
 }

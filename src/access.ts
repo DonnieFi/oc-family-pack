@@ -11,6 +11,10 @@ export type AccessOptions = {
   port?: number;
   members?: unknown[];
   profiles?: GatewayUserProfile[];
+  agentIds?: string[];
+  defaultAgentId?: string;
+  householdAgentId?: string;
+  sandboxConfigured?: boolean;
 };
 
 export const ROLES = ["parent", "kid", "guest"] as const;
@@ -50,6 +54,8 @@ const OUTSIDE =
 const HASH_STEP = "Run `caddy hash-password` once for each person and paste each hash in place of its placeholder.";
 const ROLES_INTRO = "Everyone starts as a guest who can only read. The role caps what someone can do, and `identityScopes` grants it. This block sets both.";
 const TOKEN_NOTE = "The shared Gateway token stops working in LAN mode. Keep the Gateway password, because `users.setRole` uses it.";
+const SANDBOX_WARNING =
+  "The `kid` role sets `sandbox: \"required\"`. Configure a sandbox backend under `agents.defaults.sandbox` (for example `mode: \"all\"`) so kid chat sessions can run sandboxed tools.";
 const SET_ROLE_INTRO = "After each person signs in once, set their role:";
 export const PROFILE_STEP = "Replace each PROFILE_ placeholder with that person's profile id from `users.list`.";
 const BAD_USERNAME =
@@ -170,15 +176,42 @@ function json(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function rolesBlock(list: Person[]): string {
+function resolveHouseholdAgentIds(opts: AccessOptions): { ids: string[] } | { error: string } {
+  const explicit =
+    typeof opts.householdAgentId === "string" && opts.householdAgentId.trim() !== ""
+      ? opts.householdAgentId.trim().toLowerCase()
+      : undefined;
+  const agentIds = (opts.agentIds ?? []).map((id) => id.trim().toLowerCase()).filter(Boolean);
+  if (explicit !== undefined) {
+    if (agentIds.length > 0 && !agentIds.includes(explicit)) {
+      return { error: `\`agentId\` is set to \`${explicit}\`, which is not one of the configured agents (${agentIds.join(", ")}).` };
+    }
+    return { ids: [explicit] };
+  }
+  const defaultId =
+    typeof opts.defaultAgentId === "string" && opts.defaultAgentId.trim() !== ""
+      ? opts.defaultAgentId.trim().toLowerCase()
+      : undefined;
+  if (defaultId !== undefined) return { ids: [defaultId] };
+  if (agentIds.length > 1) {
+    return {
+      error: `More than one agent is configured on this Gateway (${agentIds.join(", ")}), and no household agent is chosen. Set \`plugins.entries.oc-family-pack.config.agentId\` (or mark one agent \`default: true\`) before printing LAN roles so kid and guest logins are not granted \`*\`.`,
+    };
+  }
+  return { ids: [agentIds[0] ?? "main"] };
+}
+
+function rolesBlock(list: Person[], householdAgentIds: string[] = ["main"]): string {
   return json({
     gateway: {
       auth: { identityScopes: Object.fromEntries(list.map((person) => [person.name, SCOPES[person.role]])) },
       roles: {
         default: "guest",
-        definitions: Object.fromEntries(
-          ROLES.map((role) => [role, { sessions: { others: SESSIONS[role] }, agents: "*", scopes: SCOPES[role] }]),
-        ),
+        definitions: {
+          parent: { sessions: { others: SESSIONS.parent }, agents: "*", scopes: SCOPES.parent },
+          kid: { sessions: { others: SESSIONS.kid }, agents: householdAgentIds, sandbox: "required", scopes: SCOPES.kid },
+          guest: { sessions: { others: SESSIONS.guest }, agents: householdAgentIds, scopes: SCOPES.guest },
+        },
       },
     },
   });
@@ -235,6 +268,8 @@ export function planAccess(
   if (mode === "lan") {
     const found = people(input);
     if ("error" in found) return { ok: false, text: found.error };
+    const resolvedAgents = resolveHouseholdAgentIds(opts);
+    if ("error" in resolvedAgents) return { ok: false, text: resolvedAgents.error };
     const list = found.list;
     return {
       ok: true,
@@ -266,8 +301,9 @@ export function planAccess(
         "",
         ROLES_INTRO,
         TOKEN_NOTE,
+        ...(opts.sandboxConfigured === false ? [SANDBOX_WARNING] : []),
         "Roles:",
-        rolesBlock(list),
+        rolesBlock(list, resolvedAgents.ids),
         "",
         ...setRoleLines(list),
       ].join("\n"),
