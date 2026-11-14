@@ -50,10 +50,10 @@ test("brief agent name falls back to a configured agent when the fleet has no ma
   );
 });
 
-test("brief agent name uses the agent id when its display name is unavailable", () => {
-  assert.equal(
-    resolveBriefAgentName({}, () => { throw Object.assign(new Error("ambiguous"), { code: "AGENT_SELECTION_REQUIRED" }); }, () => undefined, () => []),
-    "main",
+test("brief agent name rethrows when the fleet is empty", () => {
+  assert.throws(
+    () => resolveBriefAgentName({}, () => { throw Object.assign(new Error("ambiguous"), { code: "AGENT_SELECTION_REQUIRED" }); }, () => undefined, () => []),
+    /ambiguous/,
   );
 });
 

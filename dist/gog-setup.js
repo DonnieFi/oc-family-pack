@@ -242,24 +242,30 @@ function gatewayPort(gateway) {
     const port = typeof gateway === "object" && gateway !== null ? gateway.port : undefined;
     return typeof port === "number" ? port : undefined;
 }
-function sandboxConfigured(host) {
+function sandboxMode(entry) {
+    const sbx = isRecord(entry) && isRecord(entry.sandbox) ? entry.sandbox : undefined;
+    return sbx?.mode === "all" || sbx?.mode === "non-main";
+}
+/** True when defaults cover every agent, or the household agent itself has a sandbox mode. */
+function sandboxConfigured(host, householdAgentId) {
     if (!isRecord(host) || !isRecord(host.agents))
         return false;
     const defaults = isRecord(host.agents.defaults) ? host.agents.defaults : undefined;
     const defaultSandbox = defaults && isRecord(defaults.sandbox) ? defaults.sandbox : undefined;
     if (defaultSandbox?.mode === "all" || defaultSandbox?.mode === "non-main")
         return true;
+    const target = typeof householdAgentId === "string" ? householdAgentId.trim().toLowerCase() : "";
+    if (target === "")
+        return false;
     if (isRecord(host.agents.entries)) {
-        for (const entry of Object.values(host.agents.entries)) {
-            const sbx = isRecord(entry) && isRecord(entry.sandbox) ? entry.sandbox : undefined;
-            if (sbx?.mode === "all" || sbx?.mode === "non-main")
+        for (const [id, entry] of Object.entries(host.agents.entries)) {
+            if (id.trim().toLowerCase() === target && sandboxMode(entry))
                 return true;
         }
     }
     if (Array.isArray(host.agents.list)) {
         for (const entry of host.agents.list) {
-            const sbx = isRecord(entry) && isRecord(entry.sandbox) ? entry.sandbox : undefined;
-            if (sbx?.mode === "all" || sbx?.mode === "non-main")
+            if (isRecord(entry) && typeof entry.id === "string" && entry.id.trim().toLowerCase() === target && sandboxMode(entry))
                 return true;
         }
     }
@@ -341,7 +347,7 @@ export function registerFamilyCli(program, deps) {
             ...(agents !== undefined ? { agentIds: agents.ids } : {}),
             ...(agents?.defaultId !== undefined ? { defaultAgentId: agents.defaultId } : {}),
             ...(householdAgentId !== undefined ? { householdAgentId } : {}),
-            ...(deps.host !== undefined ? { sandboxConfigured: sandboxConfigured(deps.host) } : {}),
+            ...(deps.host !== undefined ? { sandboxConfigured: sandboxConfigured(deps.host, householdAgentId ?? agents?.defaultId) } : {}),
         });
         write(result.text);
         process.exitCode = result.ok ? 0 : 1;

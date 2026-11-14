@@ -304,8 +304,10 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   let agentSignature = "";
   let viewerRole: "parent" | "kid" | "guest" | undefined;
   let householdAgentId: string | undefined;
+  let weekLoaded = false;
   const allowedHouseholdAgent = () => householdAgentId ?? host.agents?.defaultId ?? "main";
   const restrictAgents = () => viewerRole === "kid" || viewerRole === "guest" || (viewerRole === undefined && !host.connection.canWrite);
+  const sameAgent = (agentId: string, allowedId: string) => agentId.trim().toLowerCase() === allowedId.trim().toLowerCase();
   let disposed = false;
   const pageAbort = new AbortController();
   const lifetime = AbortSignal.any([initial.signal, pageAbort.signal]);
@@ -458,6 +460,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   }
 
   function renderWeek(week: WeekPayload) {
+    weekLoaded = true;
     viewerRole = week.viewer?.role;
     householdAgentId = week.householdAgentId;
     renderAgents();
@@ -1000,10 +1003,11 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
 
   function renderAgents() {
     if (!alive()) return;
+    if (restrictAgents() && !weekLoaded) return;
     const restricted = restrictAgents();
     const allowedId = allowedHouseholdAgent();
     const agents = host.agents.rows.filter(
-      (agent: ControlUiAgent) => agent.kind !== "system" && (!restricted || agent.id === allowedId),
+      (agent: ControlUiAgent) => agent.kind !== "system" && (!restricted || sameAgent(agent.id, allowedId)),
     );
     const name = (agent: ControlUiAgent) => agent.identity?.name?.trim() || agent.name?.trim() || agent.id;
     const signature = `${restricted ? allowedId : "*"}\u0002${agents.map((agent) => `${agent.id}\u0000${name(agent)}\u0000${agent.identity?.emoji ?? ""}`).join("\u0001")}`;
@@ -1067,7 +1071,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
   }
 
   async function openAgentChat(agentId: string, button: HTMLButtonElement) {
-    if (!alive() || (restrictAgents() && agentId !== allowedHouseholdAgent())) return;
+    if (!alive() || (restrictAgents() && !sameAgent(agentId, allowedHouseholdAgent()))) return;
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
     chatStrip.querySelector(".ocfp-chat-error")?.remove();

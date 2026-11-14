@@ -132,7 +132,7 @@ export type Config = {
   channels?: Record<string, string>;
   /** Optional Discord account id from channels.discord.accounts; the host default when omitted. */
   discordAccount?: string;
-  /** Optional household agent id for brief attribution, outbound delivery, and kid/guest chat; the host default when omitted. */
+  /** Optional household agent id for brief attribution, outbound delivery, and kid/guest chat. Omitted means the host system agent, then the host default. */
   agentId?: string;
   /** `lan` treats a paired device token as a guest; `solo` keeps the shared-owner model. */
   accessMode?: "solo" | "lan";

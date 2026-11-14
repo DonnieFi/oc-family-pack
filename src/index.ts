@@ -214,7 +214,17 @@ const plugin = defineFeaturePlugin({
       label: "Today",
       requiredScopes: ["operator.read"],
     });
-    api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, { grant: familyGrant, identity: () => store }), config), { scope: "operator.read" });
+    api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, {
+      grant: familyGrant,
+      identity: () => store,
+      householdAgentId: () => {
+        try {
+          return briefSenderAgentId(config, api.config);
+        } catch {
+          return undefined;
+        }
+      },
+    }), config), { scope: "operator.read" });
     api.registerGatewayMethod(
       TODAY_VIEW_METHOD,
       todayViewMethod(familyTodayView(config, { grant: familyGrant, log: (line) => api.logger.warn(line), identity: () => store }), config.accessMode),

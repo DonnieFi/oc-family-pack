@@ -26,6 +26,8 @@ export type FamilyHandlerDeps = {
   log?: (line: string) => void;
   /** The open family store, for durable event identity. Absent until the service starts. */
   identity?: () => object | undefined;
+  /** The household agent briefs and kid chat use. Absent when the host has not chosen one. */
+  householdAgentId?: () => string | undefined;
 };
 
 /** The Environment Canada card for the configured location, in the household's zone, cached for 30 minutes. */
@@ -41,7 +43,7 @@ export function familyWeek(config: Config, deps: FamilyHandlerDeps = {}) {
     buildWeekPayload(config, start, now(), readWeather, viewer, {
       canEdit,
       grantReadOnly: deps.grant?.get() === "read-only",
-    }, deps.identity);
+    }, deps.identity, deps.householdAgentId?.());
 }
 
 /** Today for a page viewer resolved by the Gateway, using the same builder as the agent tool. */

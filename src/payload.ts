@@ -82,6 +82,7 @@ export async function buildWeekPayload(
   viewer: Viewer,
   access: { canEdit: boolean; grantReadOnly: boolean } = { canEdit: false, grantReadOnly: false },
   identity?: () => object | undefined,
+  householdAgentId?: string,
 ): Promise<WeekPayload> {
   let week: Week;
   try {
@@ -157,6 +158,6 @@ export async function buildWeekPayload(
     viewer: pageViewer(members, viewer),
     canEdit: access.canEdit && !config.demo,
     calendarsReadOnly: access.canEdit && !config.demo && access.grantReadOnly,
-    ...(config.agentId !== undefined ? { householdAgentId: config.agentId } : {}),
+    ...((householdAgentId ?? config.agentId) !== undefined ? { householdAgentId: (householdAgentId ?? config.agentId)!.trim().toLowerCase() } : {}),
   });
 }

@@ -2,7 +2,7 @@
 
 This moves a Gateway from the shared token to one sign-in per family member, through a proxy on the same machine. It stays local: nothing here makes the Gateway reachable from the internet.
 
-When the Gateway uses trusted-proxy auth, Family Pack treats the household as LAN even if `accessMode` is unset; setting `accessMode: "lan"` makes it explicit. A device token with no device identity is refused by the Gateway before the plugin runs. A paired token can connect, but the plugin has no household username for it, so it reads as a guest and sees shared calendars only. Revoke device tokens from shared and kid devices anyway: a token left behind still reaches the Gateway.
+When the Gateway uses trusted-proxy auth, Family Pack treats the household as LAN even if `accessMode` is unset; setting `accessMode: "lan"` makes it explicit. A device token with no device identity is refused by the Gateway before the plugin runs. After the printed LAN roles are applied, a paired device token with no verified user is refused at connect. If the host still accepts that session, the plugin treats it as a guest and shows shared calendars only. Revoke device tokens from shared and kid devices anyway: a token left behind still reaches the Gateway.
 
 Start by printing your setup. Every step below uses its output.
 

@@ -518,4 +518,19 @@ test("when multiple agents exist without a default, setup asks for agentId and -
   const done = planSetup(configured, {}, READY, "UTC");
   assert.equal(done.ok, true);
   assert.match(done.text, /^Agent: Done$/m);
+
+  const explicit = {
+    ...host(complete, lanGateway()),
+    agents: {
+      ownership: "explicit",
+      defaults: { systemAgent: { agentId: "hopper" } },
+      list: [{ id: "coding" }, { id: "hopper" }],
+    },
+  };
+  assert.match(planSetup(explicit, {}, READY, "UTC").text, /^Agent: Done$/m);
+
+  const emptyRoster = { ...host(complete, lanGateway()), agents: { entries: {} } };
+  const rejected = planSetup(emptyRoster, { agent: "hopper" }, READY, "UTC");
+  assert.equal(rejected.ok, false);
+  assert.match(rejected.text, /not one of the configured agents \(none\)/);
 });

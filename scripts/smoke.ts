@@ -758,7 +758,8 @@ async function main(): Promise<void> {
     openclaw: { build: { openclawVersion: string }; compat: { pluginApi: string } };
   };
   note(`host ${hostVersion}`, "host version");
-  if (!hostVersion.includes(pkg.openclaw.build.openclawVersion)) {
+  const hostRelease = hostVersion.match(/\d+\.\d+\.\d+/)?.[0];
+  if (hostRelease !== pkg.openclaw.build.openclawVersion) {
     fail(
       "host version",
       `installed host ${hostVersion} does not match pinned build.openclawVersion ${pkg.openclaw.build.openclawVersion}; re-run the smoke and bump both together`,

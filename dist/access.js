@@ -21,7 +21,7 @@ const MODE_NAME = { solo: "solo", lan: "LAN" };
 const PROXY_LINE = "LAN mode needs a proxy on this machine that serves HTTPS and signs each person in. The example below uses Caddy (https://caddyserver.com/docs/install).";
 const HTTPS_INTERNAL = "This uses Caddy's own certificate. Install Caddy's root certificate once on every family phone and laptop, or the Family page won't load. It's `pki/authorities/local/root.crt` in Caddy's data folder. Nothing on this machine has to be reachable from the internet.";
 const PROXY_RULES = "Any proxy works if it's the only way to reach the Gateway, signs each person in, sends their username in `X-Forwarded-User`, and replaces any `X-Forwarded-User` or `X-Forwarded-For` the browser sends.";
-const NO_SIGN_OUT = "There's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. A paired device token is the shared owner in solo mode. In LAN mode, a device token with no device identity is refused by the Gateway before the plugin runs. A paired token can connect, but the plugin has no household username for it, so it reads as a guest and sees shared calendars only; don't leave one on a kid's device. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.";
+const NO_SIGN_OUT = "There's no sign-out and no way to switch accounts. A browser stays signed in as whoever used it first, until you clear its saved data for this site. On a shared laptop, give each person their own browser profile. A paired device token is the shared owner in solo mode. In LAN mode, a device token with no device identity is refused by the Gateway before the plugin runs. After the printed LAN roles are applied, a paired device token with no verified user is refused at connect too. If the host still accepts that session, the plugin treats it as a guest and shows shared calendars only. Don't leave a paired token on a kid's device. If you want a sign-in page, sign-out or passkeys, upgrade to Authelia.";
 const LOOPBACK_WARNING = "Anything else running on this machine can sign in as any family member. Run only the proxy and the Gateway here.";
 const LAN_ADDRESS_STEP = "Replace `LAN_ADDRESS` with this machine's address on your home network, like `192.168.1.20`. Use the same address in the Caddyfile and in `allowedOrigins`. If you add a port to the Caddyfile, add it to the origin too.";
 const OUTSIDE = "This Gateway lets people sign in from outside your home network. Family Pack is local only, so it doesn't set that up. Use `openclaw family access lan` instead.";
@@ -150,8 +150,9 @@ function resolveHouseholdAgentIds(opts) {
         : undefined;
     const agentIds = (opts.agentIds ?? []).map((id) => id.trim().toLowerCase()).filter(Boolean);
     if (explicit !== undefined) {
-        if (agentIds.length > 0 && !agentIds.includes(explicit)) {
-            return { error: `\`agentId\` is set to \`${explicit}\`, which is not one of the configured agents (${agentIds.join(", ")}).` };
+        if (opts.agentIds !== undefined && !agentIds.includes(explicit)) {
+            const listed = agentIds.length > 0 ? agentIds.join(", ") : "none";
+            return { error: `\`agentId\` is set to \`${explicit}\`, which is not one of the configured agents (${listed}).` };
         }
         return { ids: [explicit] };
     }
@@ -162,23 +163,29 @@ function resolveHouseholdAgentIds(opts) {
         return { ids: [defaultId] };
     if (agentIds.length > 1) {
         return {
-            error: `More than one agent is configured on this Gateway (${agentIds.join(", ")}), and no household agent is chosen. Set \`plugins.entries.oc-family-pack.config.agentId\` (or mark one agent \`default: true\`) before printing LAN roles so kid and guest logins are not granted \`*\`.`,
+            error: `More than one agent is configured on this Gateway (${agentIds.join(", ")}), and no household agent is chosen. Set \`plugins.entries.oc-family-pack.config.agentId\` or \`agents.defaults.systemAgent.agentId\` before printing LAN roles so kid and guest logins are not granted \`*\`.`,
         };
     }
+    if (opts.agentIds !== undefined && agentIds.length === 0) {
+        return { error: "No agents configured. Run `openclaw agents add` before printing LAN roles." };
+    }
     return { ids: [agentIds[0] ?? "main"] };
+}
+function roleDefinitions(householdAgentIds) {
+    return {
+        default: "guest",
+        definitions: {
+            parent: { sessions: { others: SESSIONS.parent }, agents: "*", scopes: SCOPES.parent },
+            kid: { sessions: { others: SESSIONS.kid }, agents: householdAgentIds, sandbox: "required", scopes: SCOPES.kid },
+            guest: { sessions: { others: SESSIONS.guest }, agents: householdAgentIds, scopes: SCOPES.guest },
+        },
+    };
 }
 function rolesBlock(list, householdAgentIds = ["main"]) {
     return json({
         gateway: {
             auth: { identityScopes: Object.fromEntries(list.map((person) => [person.name, SCOPES[person.role]])) },
-            roles: {
-                default: "guest",
-                definitions: {
-                    parent: { sessions: { others: SESSIONS.parent }, agents: "*", scopes: SCOPES.parent },
-                    kid: { sessions: { others: SESSIONS.kid }, agents: householdAgentIds, sandbox: "required", scopes: SCOPES.kid },
-                    guest: { sessions: { others: SESSIONS.guest }, agents: householdAgentIds, scopes: SCOPES.guest },
-                },
-            },
+            roles: roleDefinitions(householdAgentIds),
         },
     });
 }
@@ -431,6 +438,9 @@ export function planAccessRole(gateway, input, opts = {}) {
     const identityScopes = { ...existingScopes };
     for (const item of resolved)
         identityScopes[item.login] = SCOPES[item.role];
+    const resolvedAgents = resolveHouseholdAgentIds(opts);
+    if ("error" in resolvedAgents)
+        return { ok: false, text: resolvedAgents.error };
     const needPlaceholder = resolved.some((item) => item.placeholder);
     const setRoleCommands = [
         ...(needPlaceholder ? ["openclaw gateway call users.list --json"] : []),
@@ -450,6 +460,9 @@ export function planAccessRole(gateway, input, opts = {}) {
             "",
             "3. Family roster:",
             json({ plugins: { entries: { "oc-family-pack": { config: { members: nextMembers } } } } }),
+            "",
+            "4. Gateway role definitions. Apply this with the scopes above so an older `agents: \"*\"` block does not stay in place:",
+            json({ gateway: { roles: roleDefinitions(resolvedAgents.ids) } }),
         ].join("\n"),
     };
 }
@@ -461,6 +474,9 @@ export function formatAccessCheck(gateway, opts = {}) {
     const members = Array.isArray(opts.members) ? opts.members : [];
     if (members.length === 0) {
         return { ok: false, text: "No family members are configured yet. Run `openclaw family setup --parent NAME` first." };
+    }
+    if (opts.profiles === undefined) {
+        return { ok: false, text: "Could not read Gateway profiles from `users.list`. The role check did not run." };
     }
     const scopes = record(record(record(gateway).auth).identityScopes);
     const lines = [];
@@ -496,6 +512,42 @@ export function formatAccessCheck(gateway, opts = {}) {
     }
     if (fixes.length > 0) {
         lines.push("", `Run: openclaw family access role ${fixes.join(" ")}`);
+    }
+    const watched = members.filter((member) => {
+        const role = memberRoleOf(member);
+        return role === "kid" || role === "guest";
+    });
+    if (watched.length > 0) {
+        const resolvedAgents = resolveHouseholdAgentIds(opts);
+        if ("error" in resolvedAgents) {
+            allOk = false;
+            lines.push(resolvedAgents.error);
+        }
+        else {
+            const definitions = record(record(record(gateway).roles).definitions);
+            const expected = [...resolvedAgents.ids].sort();
+            const listed = (role) => {
+                const agents = record(definitions[role]).agents;
+                if (agents === "*")
+                    return "*";
+                if (!Array.isArray(agents))
+                    return undefined;
+                return agents.map((id) => String(id).trim().toLowerCase()).filter((id) => id !== "").sort();
+            };
+            const same = (got) => Array.isArray(got) && got.length === expected.length && got.every((id, index) => id === expected[index]);
+            const problems = [];
+            if (watched.some((member) => memberRoleOf(member) === "kid")) {
+                const kid = record(definitions.kid);
+                if (!same(listed("kid")) || kid.sandbox !== "required")
+                    problems.push("kid");
+            }
+            if (watched.some((member) => memberRoleOf(member) === "guest") && !same(listed("guest")))
+                problems.push("guest");
+            if (problems.length > 0) {
+                allOk = false;
+                lines.push(`${problems.join(" and ")} must use agents ${expected.join(", ")}${problems.includes("kid") ? " and kid sandbox required" : ""}. Re-apply the roles from \`openclaw family access lan\`.`);
+            }
+        }
     }
     return { ok: allOk, text: lines.join("\n") };
 }

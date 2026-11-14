@@ -786,7 +786,7 @@ export function parseConfig(raw) {
         config.discordAccount = text(value.discordAccount, "discordAccount");
     }
     if (value.agentId !== undefined) {
-        config.agentId = text(value.agentId, "agentId");
+        config.agentId = text(value.agentId, "agentId").toLowerCase();
     }
     if (value.summaryChannel !== undefined) {
         const key = text(value.summaryChannel, "summaryChannel");

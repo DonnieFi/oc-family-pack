@@ -319,7 +319,7 @@ test("aliases and the Discord account parse and stay lowercased", () => {
   const config = parseConfig({
     members: [{ name: "Alex", role: "parent", aliases: ["Dad", "  Al  "] }],
     discordAccount: "family",
-    agentId: "  household  ",
+    agentId: "  Household  ",
   });
   assert.deepEqual(config.members[0]?.aliases, ["dad", "al"]);
   assert.equal(config.discordAccount, "family");

@@ -9,8 +9,8 @@ function isSelectionRequired(error: unknown): boolean {
  *
  * `resolveDefaultAgentId` throws `AgentSelectionRequiredError` when several
  * agents are configured and none owns ambient work. A brief is ambient, so
- * fall back to `main` when the fleet has it, else to a configured agent, rather
- * than failing the whole brief. Any other error is a real fault and is
+ * fall back to `main` when the fleet has it, else to a configured agent.
+ * An empty fleet rethrows. Any other error is a real fault and is
  * rethrown, so a host problem still reaches the log. */
 export function resolveBriefAgentName<T>(
   config: T,
@@ -24,7 +24,8 @@ export function resolveBriefAgentName<T>(
   } catch (error) {
     if (!isSelectionRequired(error)) throw error;
     const ids = listAgentIds(config);
-    agentId = ids.includes("main") ? "main" : (ids[0] ?? "main");
+    if (ids.length === 0) throw error;
+    agentId = ids.includes("main") ? "main" : ids[0]!;
   }
   return resolveAgentIdentity(config, agentId)?.name?.trim() || agentId;
 }

@@ -295,7 +295,18 @@ function optionalPiece(name: string, done: boolean, next: string): SetupStep {
   return { name, done, next, optional: true };
 }
 
-/** Configured agent IDs on the Gateway and any single marked default. */
+function systemAgentId(agents: Record<string, unknown>, ids: readonly string[]): string | undefined {
+  const raw = record(record(agents.defaults).systemAgent).agentId;
+  const id = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  return id !== "" && ids.includes(id) ? id : undefined;
+}
+
+function withDefault(ids: string[], legacy: string | undefined, agents: Record<string, unknown>): { ids: string[]; defaultId?: string } {
+  const defaultId = systemAgentId(agents, ids) ?? legacy;
+  return { ids, ...(defaultId !== undefined ? { defaultId } : {}) };
+}
+
+/** Configured agent IDs on the Gateway. The default is the system agent, then one legacy `default: true`, then a sole agent. */
 export function hostAgents(host: unknown): { ids: string[]; defaultId?: string } {
   const agents = record(record(host).agents);
   const explicit = agents.ownership === "explicit";
@@ -309,8 +320,8 @@ export function hostAgents(host: unknown): { ids: string[]; defaultId?: string }
       if (!ids.includes(id)) ids.push(id);
       if (!explicit && record(rawEntry).default === true) defaults.push(id);
     }
-    const defaultId = defaults.length === 1 ? defaults[0] : ids.length === 1 ? ids[0] : undefined;
-    return { ids, ...(defaultId !== undefined ? { defaultId } : {}) };
+    const legacy = defaults.length === 1 ? defaults[0] : ids.length === 1 ? ids[0] : undefined;
+    return withDefault(ids, legacy, agents);
   }
   if (Object.hasOwn(agents, "list") && Array.isArray(agents.list)) {
     const ids: string[] = [];
@@ -322,8 +333,8 @@ export function hostAgents(host: unknown): { ids: string[]; defaultId?: string }
       if (!ids.includes(id)) ids.push(id);
       if (!explicit && entry.default === true) defaults.push(id);
     }
-    const defaultId = defaults.length === 1 ? defaults[0] : ids.length === 1 ? ids[0] : undefined;
-    return { ids, ...(defaultId !== undefined ? { defaultId } : {}) };
+    const legacy = defaults.length === 1 ? defaults[0] : ids.length === 1 ? ids[0] : undefined;
+    return withDefault(ids, legacy, agents);
   }
   return { ids: ["main"], defaultId: "main" };
 }
@@ -333,7 +344,7 @@ function agentStep(host: unknown, config: Record<string, unknown>): SetupStep[] 
   const configured = typeof config.agentId === "string" && config.agentId.trim() !== "" ? config.agentId.trim().toLowerCase() : undefined;
   if (agents.ids.length <= 1 && configured === undefined) return [];
   const chosen = configured !== undefined ? agents.ids.includes(configured) : agents.defaultId !== undefined;
-  const suggestion = agents.ids.includes("main") ? "main" : (agents.ids[0] ?? "main");
+  const suggestion = agents.defaultId ?? (agents.ids.includes("main") ? "main" : (agents.ids[0] ?? "main"));
   const detail =
     configured !== undefined && !agents.ids.includes(configured)
       ? `\`agentId\` is set to \`${configured}\`, which is not one of the configured agents (${agents.ids.join(", ")}).`
@@ -646,8 +657,9 @@ export function planSetup(host: unknown, input: SetupInput, gog: GogSetupPlan, h
   const rawAgent = input.agent !== undefined ? input.agent.trim().toLowerCase() : undefined;
   if (rawAgent !== undefined) {
     const agents = hostAgents(host);
-    if (rawAgent === "" || (agents.ids.length > 0 && !agents.ids.includes(rawAgent))) {
-      return { ok: false, text: `\`${input.agent?.trim() ?? ""}\` is not one of the configured agents (${agents.ids.join(", ")}).` };
+    if (rawAgent === "" || !agents.ids.includes(rawAgent)) {
+      const listed = agents.ids.length > 0 ? agents.ids.join(", ") : "none";
+      return { ok: false, text: `\`${input.agent?.trim() ?? ""}\` is not one of the configured agents (${listed}).` };
     }
   }
   const named = (input.parent ?? []).length + (input.kid ?? []).length + (input.guest ?? []).length > 0;

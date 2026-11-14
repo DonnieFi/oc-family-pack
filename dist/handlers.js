@@ -16,7 +16,7 @@ export function familyWeek(config, deps = {}) {
     return ({ start }, viewer, canEdit = false) => buildWeekPayload(config, start, now(), readWeather, viewer, {
         canEdit,
         grantReadOnly: deps.grant?.get() === "read-only",
-    }, deps.identity);
+    }, deps.identity, deps.householdAgentId?.());
 }
 /** Today for a page viewer resolved by the Gateway, using the same builder as the agent tool. */
 export function familyTodayView(config, deps = {}) {

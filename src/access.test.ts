@@ -388,7 +388,16 @@ test("access check compares roster, identityScopes, and Gateway users.list roles
   assert.match(drifted.text, /Run: openclaw family access role riley=kid/);
 
   const aligned = runAccess(
-    gateway,
+    {
+      ...gateway,
+      roles: {
+        default: "guest",
+        definitions: {
+          kid: { agents: ["main"], sandbox: "required" },
+          guest: { agents: ["main"] },
+        },
+      },
+    },
     "check",
     {},
     {
@@ -400,6 +409,25 @@ test("access check compares roster, identityScopes, and Gateway users.list roles
     },
   );
   assert.equal(aligned.ok, true);
+
+  const wide = runAccess(
+    { ...gateway, roles: { definitions: { kid: { agents: "*", sandbox: "required" } } } },
+    "check",
+    {},
+    {
+      members,
+      profiles: [
+        { id: "prof-alex", displayName: "alex", role: "parent" },
+        { id: "prof-riley", displayName: "riley", role: "kid" },
+      ],
+    },
+  );
+  assert.equal(wide.ok, false);
+  assert.match(wide.text, /kid must use agents main and kid sandbox required/);
+
+  const unread = runAccess(gateway, "check", {}, { members });
+  assert.equal(unread.ok, false);
+  assert.match(unread.text, /Could not read Gateway profiles/);
 });
 
 test("access lan restricts kid and guest to the household agent, requires sandbox for kid, and refuses when multiple agents have no chosen household agent", () => {
