@@ -245,6 +245,7 @@ function caddyfile(list: Person[], port: number): string {
     "\tbasic_auth {",
     ...list.map((person) => `\t\t${person.name} HASH_${person.name}`),
     "\t}",
+    "\trespond /__openclaw_family_proxy_check 204",
     `\treverse_proxy 127.0.0.1:${port} {`,
     "\t\theader_up X-Forwarded-User {http.auth.user.id}",
     "\t\theader_up X-Forwarded-For {remote_host}",
@@ -293,6 +294,9 @@ export function planAccess(
         caddyfile(list, opts.port ?? DEFAULT_PORT),
         LAN_ADDRESS_STEP,
         HASH_STEP,
+        "Before changing Gateway authentication: back up the current config and credentials; document how to restore and restart the Gateway. Validate the Caddyfile, start the proxy, and check HTTPS and each proxy login from a family device. Confirm an unauthenticated request is rejected. A working HTTPS response alone does not prove Gateway identity or role isolation.",
+        "For a read-only HTTPS and proxy-login check, use `openclaw family access lan --verify-proxy --proxy-url https://LAN_ADDRESS --proxy-user USER --proxy-ca PATH` after setting OPENCLAW_FAMILY_PROXY_PASSWORD securely for that command. See HOUSEHOLD-LAN.md; this does not test the Gateway roles or change configuration.",
+        "After the cutover, approve each browser as required, assign roles, and test parent and kid access separately. If sign-in or role checks fail, restore the backup and restart; do not leave an unverified LAN configuration in service. See HOUSEHOLD-LAN.md for the detailed steps.",
         "",
         "Gateway config:",
         json({

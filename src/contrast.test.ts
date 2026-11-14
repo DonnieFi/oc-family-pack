@@ -88,3 +88,11 @@ test("schema colours that are not unitless oklch still mix, and an unreadable on
     color: ink,
   });
 });
+
+test("an unsupported theme background cannot throw and strand the week", () => {
+  assert.deepEqual(mixTowardInk("#3590e0", "#202020", "color-mix(in srgb, #f8f8f8 50%, white)"), {
+    inkPercent: 100,
+    ratio: 1,
+    color: "#202020",
+  });
+});

@@ -154,12 +154,30 @@ function namedRgb(input: string): Rgb | undefined {
   return hex ? parseHex(hex) : undefined;
 }
 
+/** Resolve browser-supported CSS colours (including color-mix) to opaque sRGB. */
+function browserRgb(input: string): Rgb | undefined {
+  if (typeof document === "undefined" || typeof CSS === "undefined" || !CSS.supports("color", input)) return undefined;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return undefined;
+    context.fillStyle = input;
+    context.fillRect(0, 0, 1, 1);
+    const [r, g, b, alpha] = context.getImageData(0, 0, 1, 1).data;
+    if (alpha !== 255 || r === undefined || g === undefined || b === undefined) return undefined;
+    return [r / 255, g / 255, b / 255];
+  } catch {
+    return undefined;
+  }
+}
+
 function toOklch(color: string): Oklch {
   const parsed = color.trim();
   return (
     parseOklch(parsed) ??
     parseOklab(parsed) ??
-    rgbToOklch(parseHex(parsed) ?? parseRgb(parsed) ?? parseHsl(parsed) ?? namedRgb(parsed) ?? undefined)
+    rgbToOklch(parseHex(parsed) ?? parseRgb(parsed) ?? parseHsl(parsed) ?? namedRgb(parsed) ?? browserRgb(parsed))
   );
 }
 
@@ -189,6 +207,13 @@ export function contrastRatio(foreground: string, background: string): number {
   return round3((lighter + 0.05) / (darker + 0.05));
 }
 
+function ratioAgainstLuminance(foreground: string, backgroundLuminance: number): number {
+  const foregroundLuminance = luminance(foreground);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return round3((lighter + 0.05) / (darker + 0.05));
+}
+
 function hueLerp(from: number, to: number, amount: number): number {
   const delta = ((to - from + 540) % 360) - 180;
   return (from + delta * amount + 360) % 360;
@@ -207,11 +232,15 @@ export function mixTowardInk(
 ): { inkPercent: number; ratio: number; color: string } {
   let source: Oklch;
   let target: Oklch;
+  let backgroundLuminance: number;
   try {
     source = toOklch(color);
     target = toOklch(ink);
+    // A custom theme can supply a colour unsupported by either parser or browser.
+    // Check the background here too, so it cannot leave the week stuck loading.
+    backgroundLuminance = luminance(background);
   } catch {
-    // A roster colour the mixer cannot read must not blank the week. Ink already clears the card.
+    // An unreadable colour must not blank the week; report unknown contrast if needed.
     try {
       return { inkPercent: 100, ratio: contrastRatio(ink, background), color: ink };
     } catch {
@@ -225,13 +254,13 @@ export function mixTowardInk(
       c: source.c + (target.c - source.c) * amount,
       h: hueLerp(source.h, target.h, amount),
     };
-    const ratio = contrastRatio(formatOklch(mixed), background);
+    const ratio = ratioAgainstLuminance(formatOklch(mixed), backgroundLuminance);
     if (ratio >= minRatio) {
       return step === 0
-        ? { inkPercent: 0, ratio: contrastRatio(color, background), color }
+        ? { inkPercent: 0, ratio: ratioAgainstLuminance(color, backgroundLuminance), color }
         : { inkPercent: round3(amount * 100), ratio, color: formatOklch(mixed) };
     }
   }
   const full = { l: target.l, c: target.c, h: target.h };
-  return { inkPercent: 100, ratio: contrastRatio(formatOklch(full), background), color: formatOklch(full) };
+  return { inkPercent: 100, ratio: ratioAgainstLuminance(formatOklch(full), backgroundLuminance), color: formatOklch(full) };
 }
