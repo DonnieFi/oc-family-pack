@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.2 — 2026-11-15
+
+- Add People roster save with validation and disable editing while a save is in progress.
+- Show uniform notes before the week and highlight special uniforms and events.
+
 ## 0.2.1 — 2026-11-15
 
 - Successful Google Calendar reads stay in memory for two hours (`calendarCacheMinutes`, a whole number from 0 to 1440; 0 disables it; omitted means 120). A later read of the same calendar and range reuses that copy, and overlapping reads share one `gog` process. The copy is dropped when a watch poll sees an external change, when a local create, change, move, or delete finishes, or when the entry expires.
