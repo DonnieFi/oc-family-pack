@@ -504,6 +504,14 @@ function feedUrl(value, field) {
     }
     return url;
 }
+function cacheMinutes(value) {
+    if (value === undefined)
+        return undefined;
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 1440) {
+        throw new ConfigError("calendarCacheMinutes", "must be a whole number of minutes from 0 to 1440");
+    }
+    return value;
+}
 function hour(value, field) {
     if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 23) {
         throw new ConfigError(field, "must be an hour from 0 to 23");
@@ -754,13 +762,14 @@ export function parseConfig(raw) {
             }
         }
     }
+    const calendarCacheMinutes = cacheMinutes(value.calendarCacheMinutes);
     const config = {
         timezone: value.timezone === undefined
             ? Intl.DateTimeFormat().resolvedOptions().timeZone
             : timezone(value.timezone, "timezone"),
         demo,
         ...(value.accessMode === undefined ? {} : { accessMode: oneOf(value.accessMode, "accessMode", ["solo", "lan"]) }),
-        ...(value.calendarCacheMinutes !== undefined && typeof value.calendarCacheMinutes === "number" ? { calendarCacheMinutes: value.calendarCacheMinutes } : {}),
+        ...(calendarCacheMinutes === undefined ? {} : { calendarCacheMinutes }),
         gogPath: value.gogPath === undefined ? "gog" : text(value.gogPath, "gogPath"),
         writes: value.writes === undefined ? "confirm" : oneOf(value.writes, "writes", WRITE_MODES),
         members,

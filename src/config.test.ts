@@ -280,6 +280,12 @@ test("household jobs take a clock time and ship with empty phrase lists", () => 
   assert.deepEqual(parseConfig({ timezone: "UTC" }).schoolHints, []);
   assert.throws(() => parseConfig({ timezone: "UTC", morningTime: "7am" }), /morningTime/);
   assert.throws(() => parseConfig({ timezone: "UTC", weekendPreviewWeekday: 7 }), /weekendPreviewWeekday/);
+  assert.equal(Object.hasOwn(parseConfig({ timezone: "UTC" }), "calendarCacheMinutes"), false);
+  assert.equal(parseConfig({ timezone: "UTC", calendarCacheMinutes: 0 }).calendarCacheMinutes, 0);
+  assert.equal(parseConfig({ timezone: "UTC", calendarCacheMinutes: 1440 }).calendarCacheMinutes, 1440);
+  assert.throws(() => parseConfig({ timezone: "UTC", calendarCacheMinutes: 1441 }), /calendarCacheMinutes must be a whole number of minutes from 0 to 1440/);
+  assert.throws(() => parseConfig({ timezone: "UTC", calendarCacheMinutes: -1 }), /calendarCacheMinutes/);
+  assert.throws(() => parseConfig({ timezone: "UTC", calendarCacheMinutes: 1.5 }), /calendarCacheMinutes/);
   assert.throws(() => parseConfig({ timezone: "UTC", schoolHints: ["trip", "Trip"] }), /must not repeat/);
 });
 

@@ -464,3 +464,92 @@ test("failed reads are not cached", async () => {
 
   clearCalendarCache();
 });
+
+test("overlapping reads of one range share a single gog process", async () => {
+  clearCalendarCache();
+  let calls = 0;
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const run: RunGog = async () => {
+    calls += 1;
+    await gate;
+    return { stdout: JSON.stringify({ events: [{ id: "e1", summary: "Shared", start: { date: "2026-10-01" }, end: { date: "2026-10-02" } }] }) };
+  };
+  const config = familyConfig("/bin/gog-test-share", [{ id: "share-cal@example.com", label: "Share" }]);
+  const t0 = Date.parse("2026-10-01T12:00:00Z");
+  const pending = Promise.all([readGogCalendars(config, week, run, t0), readGogCalendars(config, week, run, t0)]);
+  assert.equal(calls, 1);
+  release();
+  const [first, second] = await pending;
+  assert.equal(first.status, "ok");
+  assert.equal(second.status, "ok");
+  assert.equal(calls, 1);
+  clearCalendarCache();
+});
+
+test("a clear during an in-flight read does not keep that result", async () => {
+  clearCalendarCache();
+  let calls = 0;
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const run: RunGog = async () => {
+    calls += 1;
+    await gate;
+    return { stdout: JSON.stringify({ events: [{ id: "e1", summary: "Flight", start: { date: "2026-10-01" }, end: { date: "2026-10-02" } }] }) };
+  };
+  const config = familyConfig("/bin/gog-test-inflight", [{ id: "flight-cal@example.com", label: "Flight" }]);
+  const t0 = Date.parse("2026-10-01T12:00:00Z");
+  const first = readGogCalendars(config, week, run, t0);
+  assert.equal(calls, 1);
+  clearCalendarCache("flight-cal@example.com");
+  release();
+  await first;
+  await readGogCalendars(config, week, run, t0 + 1000);
+  assert.equal(calls, 2);
+  clearCalendarCache();
+});
+
+test("clearing one calendar leaves another cached when the id is a timestamp fragment", async () => {
+  clearCalendarCache();
+  let calls = 0;
+  const run: RunGog = async () => {
+    calls += 1;
+    return { stdout: JSON.stringify({ events: [{ id: "e1", summary: "Key", start: { date: "2026-10-01" }, end: { date: "2026-10-02" } }] }) };
+  };
+  const t0 = Date.parse("2026-10-01T12:00:00Z");
+  const zero = familyConfig("/bin/gog-test-key", [{ id: "00", label: "Zero" }]);
+  const school = familyConfig("/bin/gog-test-key", [{ id: "school@example.com", label: "School" }]);
+  await readGogCalendars(zero, week, run, t0);
+  await readGogCalendars(school, week, run, t0);
+  assert.equal(calls, 2);
+  assert.equal(calendarCacheSize(), 2);
+  clearCalendarCache("00");
+  assert.equal(calendarCacheSize(), 1);
+  await readGogCalendars(school, week, run, t0 + 1000);
+  assert.equal(calls, 2);
+  await readGogCalendars(zero, week, run, t0 + 1000);
+  assert.equal(calls, 3);
+  clearCalendarCache();
+});
+
+test("an expired entry is dropped even when that range is not read again", async () => {
+  clearCalendarCache();
+  let calls = 0;
+  const run: RunGog = async () => {
+    calls += 1;
+    return { stdout: JSON.stringify({ events: [{ id: "e1", summary: "Expire", start: { date: "2026-10-01" }, end: { date: "2026-10-02" } }] }) };
+  };
+  const config = familyConfig("/bin/gog-test-sweep", [{ id: "sweep-cal@example.com", label: "Sweep" }]);
+  const t0 = Date.parse("2026-10-01T12:00:00Z");
+  const later = resolveWeek("2026-10-12", t0, "America/Toronto");
+  await readGogCalendars(config, week, run, t0);
+  assert.equal(calendarCacheSize(), 1);
+  await readGogCalendars(config, later, run, t0 + 180 * 60_000);
+  assert.equal(calls, 2);
+  assert.equal(calendarCacheSize(), 1);
+  clearCalendarCache();
+});

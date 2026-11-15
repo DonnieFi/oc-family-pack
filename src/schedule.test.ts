@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { beforeEach, test } from "node:test";
 import { Value } from "typebox/value";
-import type { RunGog } from "./calendar-gog.ts";
-import { GOG_SETUP_HINT } from "./calendar-gog.ts";
+import { clearCalendarCache, GOG_SETUP_HINT, type RunGog } from "./calendar-gog.ts";
 import { parseConfig } from "./config.ts";
 import { ScheduleOutputSchema } from "./contract.ts";
 import { familyHandlers } from "./handlers.ts";
@@ -19,6 +18,8 @@ function legacyRead(value: unknown): unknown {
     return key === "fpId" ? undefined : entry;
   }));
 }
+
+beforeEach(() => clearCalendarCache());
 
 const TZ = "America/Toronto";
 /** Friday Oct 9, 2026, mid-afternoon in Toronto. */
@@ -158,6 +159,7 @@ test("a merged event takes the earliest section in precedence: homework, uniform
       ["uniforms", true],
     ],
   );
+  clearCalendarCache();
   const homework = await schedule({ start: "2026-10-09" }, OWNER, {
     family: [allDay("p1", "Science project", "2026-10-09", "2026-10-10")],
     "school-calla": [allDay("p2", "Science project", "2026-10-09", "2026-10-10")],

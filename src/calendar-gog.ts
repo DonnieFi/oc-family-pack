@@ -269,17 +269,52 @@ type CalendarCacheEntry = {
   read: CalendarRead;
 };
 
+/** One gog read shared by overlapping callers. A clear while it is running sets invalidated so the result is not stored. */
+type CalendarFlight = {
+  promise: Promise<CalendarRead>;
+  invalidated: boolean;
+};
+
 const calendarCache = new Map<string, CalendarCacheEntry>();
+const calendarFlights = new Map<string, CalendarFlight>();
+
+/**
+ * gogPath and a calendar id can contain colons, and the range bounds are ISO timestamps
+ * (`...T05:00:00.000Z`), so a key split on ":" treats the fragment `00` as a calendar id.
+ */
+function calendarCacheKey(gogPath: string, calendarId: string, from: string, to: string): string {
+  return JSON.stringify([gogPath, calendarId, from, to]);
+}
+
+function calendarIdFromCacheKey(key: string): string | undefined {
+  try {
+    const parsed = JSON.parse(key) as unknown;
+    if (Array.isArray(parsed) && parsed.length === 4 && parsed.every((part) => typeof part === "string")) return parsed[1];
+  } catch {
+    // Ignore a key this process did not write.
+  }
+  return undefined;
+}
+
+function cacheKeyMatches(key: string, calendarId: string | undefined): boolean {
+  return calendarId === undefined || calendarIdFromCacheKey(key) === calendarId;
+}
+
+function sweepExpired(now: number): void {
+  for (const [key, entry] of calendarCache) {
+    if (entry.expires <= now) calendarCache.delete(key);
+  }
+}
 
 export function clearCalendarCache(calendarId?: string): void {
-  if (calendarId) {
-    for (const key of calendarCache.keys()) {
-      if (key.includes(`:${calendarId}:`)) {
-        calendarCache.delete(key);
-      }
-    }
-  } else {
-    calendarCache.clear();
+  for (const key of calendarCache.keys()) {
+    if (cacheKeyMatches(key, calendarId)) calendarCache.delete(key);
+  }
+  for (const key of calendarFlights.keys()) {
+    if (!cacheKeyMatches(key, calendarId)) continue;
+    const flight = calendarFlights.get(key);
+    if (flight) flight.invalidated = true;
+    calendarFlights.delete(key);
   }
 }
 
@@ -296,54 +331,61 @@ async function readCalendar(
 ): Promise<CalendarRead> {
   const from = new Date(startOfLocalDay(range.start, range.timezone)).toISOString();
   const to = new Date(startOfLocalDay(addDays(range.end, 1), range.timezone)).toISOString();
-  const cacheKey = `${config.gogPath}:${calendar.id}:${from}:${to}`;
+  const cacheKey = calendarCacheKey(config.gogPath, calendar.id, from, to);
   const ttlMinutes = config.calendarCacheMinutes ?? CALENDAR_CACHE_MINUTES;
 
   if (ttlMinutes > 0) {
+    sweepExpired(now);
     const cached = calendarCache.get(cacheKey);
-    if (cached && cached.expires > now && cached.read.status === "ok") {
-      return cached.read;
-    }
+    if (cached?.read.status === "ok") return cached.read;
+    const existing = calendarFlights.get(cacheKey);
+    if (existing) return existing.promise;
   }
 
-  let stdout: string;
-  try {
-    ({ stdout } = await runGog(config.gogPath, [
-      "calendar",
-      "events",
-      "--from",
-      from,
-      "--to",
-      to,
-      "--all-pages",
-      "--max",
-      GOG_PAGE_SIZE,
-      "--json",
-      "--no-input",
-      "--",
-      calendar.id,
-    ]));
-  } catch (error) {
-    return classifyFailure(error, calendar.label);
-  }
-  let raw: unknown;
-  try {
-    raw = JSON.parse(stdout);
-  } catch {
-    return { status: "error", message: calendarProblem(calendar.label, UNREADABLE) };
-  }
-  const events = parseGogEvents(raw, calendar);
-  if (!events) {
-    return { status: "error", message: calendarProblem(calendar.label, UNREADABLE) };
-  }
-  const result: CalendarRead = { status: "ok", events, truncated: hasAnotherPage(raw) };
+  const flight: CalendarFlight = { invalidated: false, promise: undefined as unknown as Promise<CalendarRead> };
+  const promise = (async (): Promise<CalendarRead> => {
+    let stdout: string;
+    try {
+      ({ stdout } = await runGog(config.gogPath, [
+        "calendar",
+        "events",
+        "--from",
+        from,
+        "--to",
+        to,
+        "--all-pages",
+        "--max",
+        GOG_PAGE_SIZE,
+        "--json",
+        "--no-input",
+        "--",
+        calendar.id,
+      ]));
+    } catch (error) {
+      return classifyFailure(error, calendar.label);
+    }
+    let raw: unknown;
+    try {
+      raw = JSON.parse(stdout);
+    } catch {
+      return { status: "error", message: calendarProblem(calendar.label, UNREADABLE) };
+    }
+    const events = parseGogEvents(raw, calendar);
+    if (!events) return { status: "error", message: calendarProblem(calendar.label, UNREADABLE) };
+    const result: CalendarRead = { status: "ok", events, truncated: hasAnotherPage(raw) };
+    if (ttlMinutes > 0 && !flight.invalidated) {
+      calendarCache.set(cacheKey, { expires: now + ttlMinutes * 60_000, read: result });
+    }
+    return result;
+  })();
+  flight.promise = promise;
   if (ttlMinutes > 0) {
-    calendarCache.set(cacheKey, {
-      expires: now + ttlMinutes * 60_000,
-      read: result,
+    calendarFlights.set(cacheKey, flight);
+    void promise.finally(() => {
+      if (calendarFlights.get(cacheKey) === flight) calendarFlights.delete(cacheKey);
     });
   }
-  return result;
+  return promise;
 }
 
 /**
