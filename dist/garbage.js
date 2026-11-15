@@ -23,7 +23,8 @@ export const GARBAGE_DOWN = "I couldn't get the garbage schedule just now. Try a
 export const GARBAGE_NONE = "No upcoming garbage/recycling collections found.";
 export const defaultDnsLookup = async (hostname) => {
     try {
-        const results = await dnsLookup(hostname, { all: true });
+        // URL.hostname retains IPv6 brackets, which dns.lookup does not accept.
+        const results = await dnsLookup(hostname.replace(/^\[(.*)\]$/, "$1"), { all: true });
         return results.map((r) => r.address);
     }
     catch {

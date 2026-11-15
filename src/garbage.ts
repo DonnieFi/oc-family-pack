@@ -40,7 +40,8 @@ export type GarbageFeedOptions = {
 
 export const defaultDnsLookup: DnsLookup = async (hostname: string) => {
   try {
-    const results = await dnsLookup(hostname, { all: true });
+    // URL.hostname retains IPv6 brackets, which dns.lookup does not accept.
+    const results = await dnsLookup(hostname.replace(/^\[(.*)\]$/, "$1"), { all: true });
     return results.map((r) => r.address);
   } catch {
     return [];

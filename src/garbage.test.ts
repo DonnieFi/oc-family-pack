@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { test } from "node:test";
 import { Value } from "typebox/value";
 import { GarbageOutputSchema } from "./contract.ts";
-import { createGarbageFeed, garbageBriefLine, garbageSchedule, GARBAGE_BODY_MAX, GARBAGE_DOWN, GARBAGE_NONE, GARBAGE_UNSET, isLocalHost, parseIcs, type GarbageFetch } from "./garbage.ts";
+import { createGarbageFeed, defaultDnsLookup, garbageBriefLine, garbageSchedule, GARBAGE_BODY_MAX, GARBAGE_DOWN, GARBAGE_NONE, GARBAGE_UNSET, isLocalHost, parseIcs, type GarbageFetch } from "./garbage.ts";
 
 const ICS = readFileSync(new URL("./fixtures/garbage-recollect.ics", import.meta.url), "utf8");
 /** What Bernie's own garbage_service.py returned for this fixture (~/ocfp-share/runs/s5k.21-bernie-golden.py). */
@@ -588,4 +588,8 @@ test("redirects reject mixed public and private DNS answers", async () => {
   const feed = createGarbageFeed(fetcher, { lookup: async () => ["8.8.8.8", "10.0.0.9"] });
   await feed.tomorrow(URL_, TZ, at("2026-10-04T12:00:00-03:00"));
   assert.equal(calls.length, 1);
+});
+
+test("DNS lookup accepts a public IPv6 literal from URL.hostname", async () => {
+  assert.deepEqual(await defaultDnsLookup("[2001:4860:4860::8888]"), ["2001:4860:4860::8888"]);
 });
