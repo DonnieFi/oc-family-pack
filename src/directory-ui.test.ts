@@ -148,7 +148,8 @@ test("a parent pins Lobsterdex companions on a kid and the patch keeps them", as
   assert.equal(page.container.querySelector('[data-lobster="balloon"]')?.getAttribute("aria-pressed"), "true");
 });
 
-test("Save changes sends save: true and refreshes the edited card", async () => {
+test("Save changes sends save: true, disables controls while in flight, and refreshes the edited card", async () => {
+  let resolveSave: ((value: unknown) => void) | undefined;
   const page = mount(true, async (method, params) => {
     if (method === DIRECTORY_METHOD) {
       return {
@@ -163,13 +164,16 @@ test("Save changes sends save: true and refreshes the edited card", async () => 
       const body = params as { op: string; save?: boolean; edits: { id: string; displayName: string }[] };
       assert.equal(body.op, "edit");
       assert.equal(body.save, true);
-      return {
-        ok: true,
-        saved: true,
-        changed: true,
-        members: [{ ...RILEY, displayName: body.edits[0]?.displayName ?? RILEY.displayName }],
-        note: "Saved roster changes to the Gateway config.",
-      };
+      return await new Promise((resolve) => {
+        resolveSave = () =>
+          resolve({
+            ok: true,
+            saved: true,
+            changed: true,
+            members: [{ ...RILEY, displayName: body.edits[0]?.displayName ?? RILEY.displayName }],
+            note: "Saved roster changes to the Gateway config.",
+          });
+      });
     }
     throw new Error(method);
   });
@@ -178,10 +182,18 @@ test("Save changes sends save: true and refreshes the edited card", async () => 
   const nameInput = page.container.querySelector('input[aria-label="Name"]') as HTMLInputElement;
   nameInput.value = "Riley Updated";
   nameInput.dispatchEvent(new page.document.defaultView!.Event("input"));
-  const save = [...page.container.querySelectorAll("button")].find((button) => button.textContent === "Save changes");
+  const save = [...page.container.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Save changes");
+  const back = page.container.querySelector<HTMLButtonElement>(".ocfp-people-back");
   assert.ok(save);
   save?.click();
+  assert.equal(save?.hasAttribute("disabled"), true);
+  assert.equal(nameInput.hasAttribute("disabled"), true);
+  assert.equal(back?.hasAttribute("disabled"), true);
+  resolveSave?.(undefined);
   await flush();
+  assert.equal(save?.hasAttribute("disabled"), false);
+  const refreshedNameInput = page.container.querySelector('input[aria-label="Name"]') as HTMLInputElement;
+  assert.equal(refreshedNameInput.hasAttribute("disabled"), false);
   assert.equal(page.container.querySelector(".ocfp-patch")?.textContent, "Saved roster changes to the Gateway config.");
   assert.match(page.container.querySelector(".ocfp-profile-banner")?.textContent ?? "", /Riley Updated’s space/);
   assert.equal(page.container.querySelector(".ocfp-people-dirty"), null);

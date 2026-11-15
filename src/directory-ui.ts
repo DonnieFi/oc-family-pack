@@ -147,6 +147,7 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
   const render = (members: DirectoryMember[], persistence: string, delivery: string, reservation: string, demo: boolean) => {
     let selected = 0;
     let profileOpen = false;
+    let saving = false;
     const edited = new Set<number>();
     const list = h("div", { class: "ocfp-people-list", role: "list" });
     const form = h("div", { class: "ocfp-people-form" });
@@ -253,6 +254,7 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
         );
         button.style.setProperty("--ocfp-lobster", lobster.shell);
         button.addEventListener("click", () => {
+          if (saving) return;
           const current = member.lobsterPreferences ?? [];
           const next = current.includes(lobster.id)
             ? current.filter((id) => id !== lobster.id)
@@ -338,7 +340,13 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
       );
     };
     const back = h("button", { type: "button", class: "ocfp-btn ocfp-people-back" }, "← Everyone");
-    back.addEventListener("click", () => { profileOpen = false; paintList(); syncView(); list.querySelector<HTMLButtonElement>("button")?.focus(); });
+    back.addEventListener("click", () => {
+      if (saving) return;
+      profileOpen = false;
+      paintList();
+      syncView();
+      list.querySelector<HTMLButtonElement>("button")?.focus();
+    });
     const actions = h("div", { class: "ocfp-people-actions" });
     const syncView = () => {
       list.hidden = profileOpen;
@@ -346,18 +354,46 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
       back.hidden = !profileOpen;
       actions.hidden = !profileOpen;
     };
-    const save = h("button", { type: "button", class: "ocfp-btn ocfp-btn-today", ...(demo ? { disabled: true } : {}) }, "Save changes");
+    const save = h("button", { type: "button", class: "ocfp-btn ocfp-btn-today", ...(demo ? { disabled: true } : {}) }, "Save changes") as HTMLButtonElement;
+    const preview = h("button", { type: "button" }, "Preview patch") as HTMLButtonElement;
+    const migrate = h("button", { type: "button" }, "Preview id migration") as HTMLButtonElement;
+    const setSaving = (busy: boolean) => {
+      saving = busy;
+      for (const control of form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement | HTMLFieldSetElement>("input, select, button, fieldset")) {
+        if (busy) {
+          control.setAttribute("disabled", "");
+        } else if (control.hasAttribute("data-lobster")) {
+          const member = members[selected];
+          const savedSet = new Set(member?.lobsterPreferences ?? []);
+          const isFull = (member?.lobsterPreferences ?? []).length >= LOBSTER_LIMIT;
+          const id = control.getAttribute("data-lobster") ?? "";
+          if (isFull && !savedSet.has(id)) control.setAttribute("disabled", "");
+          else control.removeAttribute("disabled");
+        } else {
+          control.removeAttribute("disabled");
+        }
+      }
+      for (const button of [back as HTMLButtonElement, preview, migrate]) {
+        if (busy) button.setAttribute("disabled", "");
+        else button.removeAttribute("disabled");
+      }
+      if (busy || demo) save.setAttribute("disabled", "");
+      else save.removeAttribute("disabled");
+    };
     save.addEventListener("click", () => {
+      if (saving || demo) return;
       const targets = edited.size > 0 ? [...edited] : [selected];
       const edits = targets.flatMap((index) => {
         const member = members[index];
         return member === undefined ? [] : [editFrom(member)];
       });
       if (edits.length === 0) return;
+      setSaving(true);
       result.textContent = `Saving ${edits.length} ${edits.length === 1 ? "card" : "cards"}…`;
       void host.request<PreviewResponse>(DIRECTORY_PREVIEW_METHOD, { op: "edit", edits, save: true }).then(
         (body) => {
           if (disposed) return;
+          setSaving(false);
           if (body?.ok === false) {
             result.textContent = body.error ?? "That change was not accepted.";
             return;
@@ -371,11 +407,12 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
           result.textContent = body?.note ?? "Saved roster changes to the Gateway config.";
         },
         () => {
-          if (!disposed) result.textContent = "The changes could not be saved.";
+          if (disposed) return;
+          setSaving(false);
+          result.textContent = "The changes could not be saved.";
         },
       );
     });
-    const preview = h("button", { type: "button" }, "Preview patch");
     preview.addEventListener("click", () => {
       const targets = edited.size > 0 ? [...edited] : [selected];
       const edits = targets.flatMap((index) => {
@@ -398,7 +435,7 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
         },
       );
     });
-    const migrate = h("button", { type: "button" }, "Preview id migration");
+
     migrate.addEventListener("click", () => {
       result.textContent = "Checking ids…";
       void host.request<PreviewResponse>(DIRECTORY_PREVIEW_METHOD, { op: "materialize" }).then(
