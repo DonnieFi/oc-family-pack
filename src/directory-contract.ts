@@ -4,12 +4,16 @@ export const DIRECTORY_PREVIEW_METHOD = "family.directory.preview";
 export const PEOPLE_PAGE_ID = "people";
 
 /**
- * The host has no plugin-page API that writes `plugins.entries` config.
- * `openclaw/plugin-sdk/config-mutation` rewrites the whole host file and is a
- * CLI helper, so the page previews a patch instead of keeping a second roster.
+ * Saving writes the updated roster to `plugins.entries["oc-family-pack"].config.members`.
+ * You can also preview a patch and apply it with `openclaw config patch --stdin --dry-run`, then again without `--dry-run`.
  */
 export const DIRECTORY_PERSISTENCE =
-  "This preview does not write the Gateway config, and Family Pack does not keep a second roster. Apply it with `openclaw config patch --stdin --dry-run`, then again without `--dry-run`.";
+  "Save changes writes the roster to the Gateway config. Preview patch does not write the Gateway config; apply it with `openclaw config patch --stdin --dry-run`, then again without `--dry-run`.";
+
+export const DIRECTORY_SAVED_NOTE = "Saved roster changes to the Gateway config.";
+
+export const DIRECTORY_MIGRATED_NOTE =
+  "Saved member and device ids to the Gateway config. Calendar owners and reminder history keep those same ids.";
 
 /** Discord is the only delivery path in this version. */
 export const DELIVERY_NOTE =

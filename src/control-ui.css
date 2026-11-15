@@ -585,12 +585,112 @@
   font-style: italic;
 }
 
-.ocfp-uniform {
-  margin: 0;
-  padding: 0 12px 8px;
+.ocfp-uniform-strip {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.ocfp-uniform-strip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--family-warm) 8%, transparent);
+}
+
+.ocfp-uniform-strip-sub {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ocfp-uniform-strip-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.ocfp-uniform-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-right: 1px solid var(--border);
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
+}
+
+.ocfp-uniform-cell:last-child {
+  border-right: 0;
+}
+
+.ocfp-uniform-cell.is-today {
+  background: color-mix(in oklab, var(--family-warm) 5%, transparent);
+}
+
+.ocfp-uniform-cell.is-special {
+  background: color-mix(in oklab, var(--family-warm) 14%, var(--card));
+  color: var(--text-strong);
+}
+
+.ocfp-uniform-cell-day {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ocfp-uniform-cell-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.ocfp-uniform-cell-none {
+  color: var(--muted);
+  opacity: 0.55;
+}
+
+.ocfp-uniform {
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--text) 2.5%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ocfp-uniform.is-special {
+  border-bottom-color: color-mix(in oklab, var(--family-warm) 45%, var(--border));
+  background: color-mix(in oklab, var(--family-warm) 14%, var(--card));
+  color: var(--text-strong);
+}
+
+.ocfp-uniform-item.is-special {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.ocfp-highlight-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--family-warm);
+  color: var(--family-badge-ink);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .ocfp-layer-label {
@@ -652,6 +752,19 @@
 .ocfp-event.is-all-day {
   padding-block: 6px;
   background: color-mix(in oklab, var(--ocfp-event) 18%, var(--card));
+}
+
+.ocfp-event.is-signal {
+  border-color: color-mix(in oklab, var(--family-warm) 65%, var(--border));
+  background:
+    linear-gradient(90deg, var(--family-warm) 0 4px, transparent 4px),
+    color-mix(in oklab, var(--family-warm) 14%, var(--card));
+}
+
+.ocfp-event-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .ocfp-event-meta {
@@ -1059,8 +1172,21 @@
     display: none;
   }
 
+  .ocfp-uniform-strip-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ocfp-uniform-cell {
+    display: none;
+    border-right: 0;
+  }
+
+  .ocfp-uniform-cell.is-selected {
+    display: flex;
+  }
+
   .ocfp-uniform {
-    padding: 12px 12px 0;
+    padding: 10px 12px;
   }
 
   .ocfp-day-events {

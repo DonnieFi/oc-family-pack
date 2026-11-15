@@ -289,6 +289,31 @@ test("the directory methods return the roster to a parent and a preview that doe
   assert.equal(preview.patch.includes("192.168"), false);
 
   seen.length = 0;
+  let persistedMembers: unknown[] | undefined;
+  let savedCallbackMembers: unknown[] | undefined;
+  const saveMethod = directoryPreviewMethod(() => config, () => raw, {
+    persist: async (operation) => {
+      assert.notEqual(operation, "materialize");
+      const planned = planDirectoryEdit(raw.members, operation as { id: string; login: string }[], raw.calendars);
+      if (planned.ok) persistedMembers = planned.members;
+      return planned;
+    },
+    onSaved: (members) => {
+      savedCallbackMembers = members;
+    },
+  });
+  await saveMethod({ client: owner, params: { op: "edit", edits: [{ id: "person-riley", login: "riley-home" }], save: true }, respond });
+  const saved = seen[0] as { ok: boolean; saved: boolean; changed: boolean; members: { id: string; login?: string }[]; note: string };
+  assert.equal(saved.ok, true);
+  assert.equal(saved.saved, true);
+  assert.equal(saved.changed, true);
+  assert.equal(saved.members[0]?.id, "person-riley");
+  assert.equal(saved.members[0]?.login, "riley-home");
+  assert.equal((persistedMembers?.[0] as { profileId?: string })?.profileId, "riley-home");
+  assert.deepEqual(savedCallbackMembers, persistedMembers);
+  assert.match(saved.note, /Saved roster changes/);
+
+  seen.length = 0;
   const demo = parseConfig({ demo: true, timezone: "UTC" });
   await directoryPreviewMethod(() => demo, () => raw)({ client: owner, params: { op: "edit", edits: [{ id: "alex", login: "alex-home" }] }, respond });
   assert.match(JSON.stringify(seen[0]), /Turn demo off/);

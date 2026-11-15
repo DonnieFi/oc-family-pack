@@ -223,7 +223,7 @@ export function mountPeoplePage(container, initial) {
                 });
                 picker.append(button);
             }
-            const lobsters = h("section", { class: "ocfp-people-group ocfp-lobster-picker" }, h("h3", {}, "Lobster companion"), h("p", { class: "ocfp-people-note" }, `Choose up to ${LOBSTER_LIMIT}. The choice is saved on this person's card when the config patch is applied.`), picker, unknown.length > 0 ? h("p", { class: "ocfp-people-note" }, `Saved, and not in this Lobsterdex: ${unknown.join(", ")}.`) : null);
+            const lobsters = h("section", { class: "ocfp-people-group ocfp-lobster-picker" }, h("h3", {}, "Lobster companion"), h("p", { class: "ocfp-people-note" }, `Choose up to ${LOBSTER_LIMIT}. Click Save changes to save on this person's card, or preview the config patch.`), picker, unknown.length > 0 ? h("p", { class: "ocfp-people-note" }, `Saved, and not in this Lobsterdex: ${unknown.join(", ")}.`) : null);
             form.prepend(banner);
             form.append(identity, signIn, contact, lobsters, h("h3", { class: "ocfp-people-devices-title" }, "Network devices"), h("p", { class: "ocfp-people-note ocfp-people-wide" }, reservation));
             for (const device of member.devices) {
@@ -281,6 +281,35 @@ export function mountPeoplePage(container, initial) {
             back.hidden = !profileOpen;
             actions.hidden = !profileOpen;
         };
+        const save = h("button", { type: "button", class: "ocfp-btn ocfp-btn-today", ...(demo ? { disabled: true } : {}) }, "Save changes");
+        save.addEventListener("click", () => {
+            const targets = edited.size > 0 ? [...edited] : [selected];
+            const edits = targets.flatMap((index) => {
+                const member = members[index];
+                return member === undefined ? [] : [editFrom(member)];
+            });
+            if (edits.length === 0)
+                return;
+            result.textContent = `Saving ${edits.length} ${edits.length === 1 ? "card" : "cards"}…`;
+            void host.request(DIRECTORY_PREVIEW_METHOD, { op: "edit", edits, save: true }).then((body) => {
+                if (disposed)
+                    return;
+                if (body?.ok === false) {
+                    result.textContent = body.error ?? "That change was not accepted.";
+                    return;
+                }
+                if (Array.isArray(body?.members)) {
+                    members.splice(0, members.length, ...body.members.map(memberDraft));
+                    edited.clear();
+                    paintList();
+                    paintForm();
+                }
+                result.textContent = body?.note ?? "Saved roster changes to the Gateway config.";
+            }, () => {
+                if (!disposed)
+                    result.textContent = "The changes could not be saved.";
+            });
+        });
         const preview = h("button", { type: "button" }, "Preview patch");
         preview.addEventListener("click", () => {
             const targets = edited.size > 0 ? [...edited] : [selected];
@@ -322,7 +351,7 @@ export function mountPeoplePage(container, initial) {
         });
         paintList();
         paintForm();
-        actions.append(preview, migrate);
+        actions.append(save, preview, migrate);
         syncView();
         section.replaceChildren(h("div", { class: "ocfp-masthead" }, h("div", {}, h("p", { class: "ocfp-kicker" }, "Family · a place for everyone"), h("h2", { class: "ocfp-title" }, "People"), h("p", { class: "ocfp-subtitle" }, "All your people, together in one place."))), h("p", { class: "ocfp-people-note" }, delivery), h("p", { class: "ocfp-people-note" }, persistence), h("p", { class: "ocfp-people-note" }, reservation), ...(demo ? [h("p", { class: "ocfp-people-note" }, "Demo mode shows the sample family. Turn demo off before previewing a roster patch.")] : []), list, back, form, actions, result);
     };

@@ -231,10 +231,25 @@ const plugin = defineFeaturePlugin({
       { scope: "operator.read" },
     );
     // operator.write: a kid can read the week and cannot read contact details.
-    const directoryConfig = () => config;
-    const directoryRaw = () => api.pluginConfig;
+    let latestRaw: unknown = api.pluginConfig;
+    let latestConfig = config;
+    const directoryConfig = () => latestConfig;
+    const directoryRaw = () => latestRaw;
     api.registerGatewayMethod(DIRECTORY_METHOD, directoryMethod(directoryConfig, directoryRaw), { scope: "operator.write" });
-    api.registerGatewayMethod(DIRECTORY_PREVIEW_METHOD, directoryPreviewMethod(directoryConfig, directoryRaw), { scope: "operator.write" });
+    api.registerGatewayMethod(
+      DIRECTORY_PREVIEW_METHOD,
+      directoryPreviewMethod(directoryConfig, directoryRaw, {
+        onSaved: (savedMembers) => {
+          const base = typeof latestRaw === "object" && latestRaw !== null && !Array.isArray(latestRaw) ? (latestRaw as Record<string, unknown>) : {};
+          const nextRaw = { ...base, members: savedMembers };
+          latestRaw = nextRaw;
+          const nextParsed = parseConfig(nextRaw);
+          latestConfig = accessMode === undefined ? nextParsed : { ...nextParsed, accessMode };
+          config.members = nextParsed.members;
+        },
+      }),
+      { scope: "operator.write" },
+    );
     api.registerGatewayMethod(
       DELIVERY_STATUS_METHOD,
       deliveryStatusMethod(

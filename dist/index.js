@@ -215,10 +215,21 @@ const plugin = defineFeaturePlugin({
         }), config), { scope: "operator.read" });
         api.registerGatewayMethod(TODAY_VIEW_METHOD, todayViewMethod(familyTodayView(config, { grant: familyGrant, log: (line) => api.logger.warn(line), identity: () => store }), config.accessMode), { scope: "operator.read" });
         // operator.write: a kid can read the week and cannot read contact details.
-        const directoryConfig = () => config;
-        const directoryRaw = () => api.pluginConfig;
+        let latestRaw = api.pluginConfig;
+        let latestConfig = config;
+        const directoryConfig = () => latestConfig;
+        const directoryRaw = () => latestRaw;
         api.registerGatewayMethod(DIRECTORY_METHOD, directoryMethod(directoryConfig, directoryRaw), { scope: "operator.write" });
-        api.registerGatewayMethod(DIRECTORY_PREVIEW_METHOD, directoryPreviewMethod(directoryConfig, directoryRaw), { scope: "operator.write" });
+        api.registerGatewayMethod(DIRECTORY_PREVIEW_METHOD, directoryPreviewMethod(directoryConfig, directoryRaw, {
+            onSaved: (savedMembers) => {
+                const base = typeof latestRaw === "object" && latestRaw !== null && !Array.isArray(latestRaw) ? latestRaw : {};
+                const nextRaw = { ...base, members: savedMembers };
+                latestRaw = nextRaw;
+                const nextParsed = parseConfig(nextRaw);
+                latestConfig = accessMode === undefined ? nextParsed : { ...nextParsed, accessMode };
+                config.members = nextParsed.members;
+            },
+        }), { scope: "operator.write" });
         api.registerGatewayMethod(DELIVERY_STATUS_METHOD, deliveryStatusMethod(() => store, () => (config.demo ? DEMO_MEMBERS : config.members)), { scope: "operator.read" });
         // operator.write so a kid cannot consume the one-time Home seed.
         api.registerGatewayMethod(TODAY_HOME_METHOD, todayHomeMethod(() => store, () => config), { scope: "operator.write" });

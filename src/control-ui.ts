@@ -658,19 +658,27 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
         label ? h("span", { class: "ocfp-owner-name" }, label) : null,
       );
     };
-    const eventCard = (event: FamilyEvent, date: string) =>
-      paint(
+    const isSignalEvent = (event: FamilyEvent) => DEFAULT_VOCABULARY.alwaysSignal.test(event.title);
+    const isRegularUniform = (event: FamilyEvent) => !isSignalEvent(event) && DEFAULT_VOCABULARY.routineUniform.test(event.title);
+    const eventCard = (event: FamilyEvent, date: string) => {
+      const signal = isSignalEvent(event);
+      return paint(
         on(
           h(
             "button",
             {
               type: "button",
-              class: `ocfp-event${event.allDay ? " is-all-day" : ""}`,
+              class: `ocfp-event${event.allDay ? " is-all-day" : ""}${signal ? " is-signal" : ""}`,
               "data-event-id": event.id,
               "aria-haspopup": "dialog",
               "aria-label": `${event.title}, ${timeLabel(event, date)}, ${ownerLabel(event) || "unassigned"}`,
             },
-            h("span", { class: "ocfp-event-meta" }, h("span", {}, timeLabel(event, date)), ownerDots(event)),
+            h(
+              "span",
+              { class: "ocfp-event-meta" },
+              h("span", {}, timeLabel(event, date)),
+              h("span", { class: "ocfp-event-badges" }, signal ? h("span", { class: "ocfp-highlight-tag" }, "Special") : null, ownerDots(event)),
+            ),
             h("span", { class: "ocfp-event-title" }, event.title),
             event.location ? h("span", { class: "ocfp-event-location" }, event.location) : null,
           ),
@@ -679,42 +687,96 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
         ),
         { "--ocfp-event": eventColor(event) },
       );
+    };
+
+    const dayColumns = week.days.map((day) => {
+      const date = noon(day.date);
+      const uniforms: FamilyEvent[] = [];
+      const homework: FamilyEvent[] = [];
+      const cards: HTMLElement[] = [];
+      let coursesAwaitingPerson = false;
+      for (const id of day.eventIds) {
+        const event = events.get(id);
+        if (!event) continue;
+        const layer = layerOf(event);
+        // All-day school assignments and uniform notes belong on their due day.
+        // An end that is not the exclusive next day would otherwise miss every column.
+        if ((layer === "homework" || layer === "uniform") && event.allDay) {
+          const due = addDays(event.end, -1);
+          if (day.date !== (due < event.start ? event.start : due)) continue;
+        }
+        if (!inView(event, layer)) continue;
+        if (layer === "uniform") uniforms.push(event);
+        else if (layer === "homework") homework.push(event);
+        else if (layer === "course" && !showCourse(event) && viewedId === undefined) coursesAwaitingPerson = true;
+        else cards.push(eventCard(event, day.date));
+      }
+      return { day, date, uniforms, homework, cards, coursesAwaitingPerson };
+    });
+
+    const renderUniformItems = (uniforms: readonly FamilyEvent[]) =>
+      uniforms.flatMap((event, index) => {
+        const owner = ownerLabel(event);
+        const special = !isRegularUniform(event);
+        const item = h(
+          "span",
+          { class: `ocfp-uniform-item${special ? " is-special" : ""}`, "data-event-id": event.id },
+          special ? h("span", { class: "ocfp-highlight-tag" }, "Special") : null,
+          special ? " " : "",
+          event.title,
+          owner ? h("span", { class: "ocfp-owner-name" }, ` ${owner}`) : "",
+        );
+        return [index > 0 ? " · " : "", item];
+      });
+
+    const hasAnyUniforms = dayColumns.some((col) => col.uniforms.length > 0);
+    const uniformStrip = hasAnyUniforms
+      ? h(
+          "section",
+          { class: "ocfp-uniform-strip ocfp-panel", "aria-label": "Uniforms this week" },
+          h(
+            "div",
+            { class: "ocfp-uniform-strip-head" },
+            h("span", { class: "ocfp-layer-label" }, "Uniform"),
+            h("span", { class: "ocfp-uniform-strip-sub" }, "School dress & gear"),
+          ),
+          h(
+            "div",
+            { class: "ocfp-uniform-strip-grid" },
+            ...dayColumns.map(({ day, date, uniforms }) => {
+              const hasSpecial = uniforms.some((event) => !isRegularUniform(event));
+              const classes = [
+                "ocfp-uniform-cell",
+                day.isToday && "is-today",
+                selectedDay === day.date && "is-selected",
+                uniforms.length === 0 && "is-empty",
+                hasSpecial && "is-special",
+              ];
+              return h(
+                "div",
+                { class: classes.filter(Boolean).join(" "), "data-date": day.date },
+                h("span", { class: "ocfp-uniform-cell-day" }, fmt.weekday.format(date)),
+                uniforms.length
+                  ? h("div", { class: "ocfp-uniform-cell-items" }, ...renderUniformItems(uniforms))
+                  : h("span", { class: "ocfp-uniform-cell-none" }, "—"),
+              );
+            }),
+          ),
+        )
+      : null;
 
     const grid = h(
       "div",
       { class: `ocfp-week-grid ocfp-panel${entering ? " is-entering" : ""}` },
-      ...week.days.map((day) => {
-        const date = noon(day.date);
-        const uniforms: FamilyEvent[] = [];
-        const homework: FamilyEvent[] = [];
-        const cards: HTMLElement[] = [];
-        let coursesAwaitingPerson = false;
-        for (const id of day.eventIds) {
-          const event = events.get(id);
-          if (!event) continue;
-          const layer = layerOf(event);
-          // All-day school assignments and uniform notes belong on their due day.
-          // An end that is not the exclusive next day would otherwise miss every column.
-          if ((layer === "homework" || layer === "uniform") && event.allDay) {
-            const due = addDays(event.end, -1);
-            if (day.date !== (due < event.start ? event.start : due)) continue;
-          }
-          if (!inView(event, layer)) continue;
-          if (layer === "uniform") uniforms.push(event);
-          else if (layer === "homework") homework.push(event);
-          else if (layer === "course" && !showCourse(event) && viewedId === undefined) coursesAwaitingPerson = true;
-          else cards.push(eventCard(event, day.date));
-        }
+      ...dayColumns.map(({ day, date, uniforms, homework, cards, coursesAwaitingPerson }) => {
+        const hasSpecialUniform = uniforms.some((event) => !isRegularUniform(event));
         const uniformRow = uniforms.length
           ? h(
               "p",
-              { class: "ocfp-uniform" },
+              { class: `ocfp-uniform${hasSpecialUniform ? " is-special" : ""}` },
               h("span", { class: "ocfp-layer-label" }, "Uniform"),
               " ",
-              ...uniforms.flatMap((event, index) => {
-                const owner = ownerLabel(event);
-                return [index > 0 ? " · " : "", event.title, owner ? h("span", { class: "ocfp-owner-name" }, ` ${owner}`) : ""];
-              }),
+              ...renderUniformItems(uniforms),
             )
           : null;
         const homeworkRow = homework.length
@@ -771,6 +833,9 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     const selectDay = (date: string, focus: boolean) => {
       selectedDay = date;
       for (const node of grid.querySelectorAll(".ocfp-day")) node.classList.toggle("is-selected", node.id === `ocfp-day-${date}`);
+      for (const cell of uniformStrip?.querySelectorAll<HTMLElement>(".ocfp-uniform-cell") ?? []) {
+        cell.classList.toggle("is-selected", cell.dataset.date === date);
+      }
       for (const tab of tabs.querySelectorAll<HTMLButtonElement>(".ocfp-day-tab")) {
         const selected = tab.dataset.date === date;
         tab.setAttribute("aria-pressed", String(selected));
@@ -826,7 +891,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
     content.replaceChildren(
       masthead,
       filters,
-      h("div", { class: weather ? "ocfp-layout" : "ocfp-layout is-single" }, weather, h("section", { class: "ocfp-week-area", "aria-label": title }, notice, tabs, grid)),
+      h("div", { class: weather ? "ocfp-layout" : "ocfp-layout is-single" }, weather, h("section", { class: "ocfp-week-area", "aria-label": title }, notice, tabs, uniformStrip, grid)),
     );
     syncDelivery();
     focused?.(content);

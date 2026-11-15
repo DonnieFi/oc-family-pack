@@ -147,3 +147,42 @@ test("a parent pins Lobsterdex companions on a kid and the patch keeps them", as
   assert.deepEqual(sent.edits[0]?.lobsterPreferences, ["bee", "not-a-lobster", "balloon"]);
   assert.equal(page.container.querySelector('[data-lobster="balloon"]')?.getAttribute("aria-pressed"), "true");
 });
+
+test("Save changes sends save: true and refreshes the edited card", async () => {
+  const page = mount(true, async (method, params) => {
+    if (method === DIRECTORY_METHOD) {
+      return {
+        demo: false,
+        persistence: "Save changes writes the roster to the Gateway config.",
+        delivery: "This version sends reminders and briefs through Discord.",
+        reservation: "A reserved address is stored on the device. Saving it does not change the router.",
+        members: [RILEY],
+      };
+    }
+    if (method === DIRECTORY_PREVIEW_METHOD) {
+      const body = params as { op: string; save?: boolean; edits: { id: string; displayName: string }[] };
+      assert.equal(body.op, "edit");
+      assert.equal(body.save, true);
+      return {
+        ok: true,
+        saved: true,
+        changed: true,
+        members: [{ ...RILEY, displayName: body.edits[0]?.displayName ?? RILEY.displayName }],
+        note: "Saved roster changes to the Gateway config.",
+      };
+    }
+    throw new Error(method);
+  });
+  await flush();
+  page.container.querySelector<HTMLButtonElement>(".ocfp-person")?.click();
+  const nameInput = page.container.querySelector('input[aria-label="Name"]') as HTMLInputElement;
+  nameInput.value = "Riley Updated";
+  nameInput.dispatchEvent(new page.document.defaultView!.Event("input"));
+  const save = [...page.container.querySelectorAll("button")].find((button) => button.textContent === "Save changes");
+  assert.ok(save);
+  save?.click();
+  await flush();
+  assert.equal(page.container.querySelector(".ocfp-patch")?.textContent, "Saved roster changes to the Gateway config.");
+  assert.match(page.container.querySelector(".ocfp-profile-banner")?.textContent ?? "", /Riley Updated’s space/);
+  assert.equal(page.container.querySelector(".ocfp-people-dirty"), null);
+});
