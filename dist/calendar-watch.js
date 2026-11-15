@@ -1,3 +1,4 @@
+import { clearCalendarCache } from "./calendar-gog.js";
 export const POLL_MS = 3 * 60_000;
 export const MAX_WAIT_MS = 30 * 60_000;
 /** Google Calendar can reject a 30-day updatedMin; start within the verified seven-day window. */
@@ -89,8 +90,10 @@ export function watchCalendars(options) {
             }
         }
         if (!first) {
-            if (changed)
+            if (changed) {
+                clearCalendarCache();
                 send(() => events.emit("calendar-changed", { reason: "external", calendarKeys: [], at: new Date().toISOString() }), "calendar-changed");
+            }
             if (ok)
                 send(() => events.emit("calendar-checked", {}), "calendar-checked");
         }

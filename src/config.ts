@@ -71,6 +71,7 @@ export const ConfigSchema = Type.Object(
     weekendPreviewWeekday: Type.Optional(Type.Integer({ minimum: 0, maximum: 6 })),
     schoolHints: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_PHRASE }), { maxItems: MAX_PHRASES })),
     closedDayPhrases: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_PHRASE }), { maxItems: MAX_PHRASES })),
+    calendarCacheMinutes: Type.Optional(Type.Integer({ minimum: 0, maximum: 1440 })),
     gogPath: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
     writes: Type.Optional(Type.Union(WRITE_MODES.map((mode) => Type.Literal(mode)), { default: "confirm" })),
     members: Type.Optional(
@@ -831,6 +832,7 @@ export function parseConfig(raw: unknown): Config {
         : timezone(value.timezone, "timezone"),
     demo,
     ...(value.accessMode === undefined ? {} : { accessMode: oneOf(value.accessMode, "accessMode", ["solo", "lan"] as const) }),
+    ...(value.calendarCacheMinutes !== undefined && typeof value.calendarCacheMinutes === "number" ? { calendarCacheMinutes: value.calendarCacheMinutes } : {}),
     gogPath: value.gogPath === undefined ? "gog" : text(value.gogPath, "gogPath"),
     writes: value.writes === undefined ? "confirm" : oneOf(value.writes, "writes", WRITE_MODES),
     members,

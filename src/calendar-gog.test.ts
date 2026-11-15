@@ -3,7 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { execGog, parseGogEvents, readGogCalendars, type RunGog } from "./calendar-gog.ts";
+import { clearCalendarCache, calendarCacheSize, execGog, parseGogEvents, readGogCalendars, type RunGog } from "./calendar-gog.ts";
 import { parseConfig } from "./config.ts";
 import { groupByDay, resolveWeek } from "./week.ts";
 
@@ -358,4 +358,109 @@ test("gog's page-cap failure is a fixed warning and does not copy stderr", async
   assert.equal(JSON.stringify(state).includes("teacher@example.com"), false);
   assert.equal(JSON.stringify(state).includes("pagination exceeded"), false);
   assert.equal(state.status === "ok" && state.data.some((event) => event.id === "c1/e7"), true);
+});
+
+test("readGogCalendars caches successful reads for calendarCacheMinutes TTL", async () => {
+  clearCalendarCache();
+  let calls = 0;
+  const run: RunGog = async () => {
+    calls++;
+    return {
+      stdout: JSON.stringify({
+        events: [{ id: "e1", summary: "Soccer", start: { date: "2026-10-01" }, end: { date: "2026-10-02" } }],
+      }),
+    };
+  };
+
+  const config = familyConfig("/bin/gog-test-cache", [{ id: "cache-cal@example.com", label: "CacheCal" }]);
+  const t0 = Date.parse("2026-10-01T12:00:00Z");
+
+  // First call fetches from gog
+  const first = await readGogCalendars(config, week, run, t0);
+  assert.equal(first.status, "ok");
+  assert.equal(calls, 1);
+  assert.equal(calendarCacheSize() > 0, true);
+
+  // Second call within 2 hours (e.g. +30 mins) hits memory cache without running gog
+  const second = await readGogCalendars(config, week, run, t0 + 30 * 60_000);
+  assert.equal(second.status, "ok");
+  assert.equal(calls, 1); // no new runGog invocation!
+
+  // Call after TTL expires (e.g. +3 hours) runs gog again
+  const third = await readGogCalendars(config, week, run, t0 + 180 * 60_000);
+  assert.equal(third.status, "ok");
+  assert.equal(calls, 2);
+
+  clearCalendarCache();
+});
+
+test("clearCalendarCache invalidates cached entries so next read refetches", async () => {
+  clearCalendarCache();
+  let calls = 0;
+  const run: RunGog = async () => {
+    calls++;
+    return {
+      stdout: JSON.stringify({
+        events: [{ id: "e1", summary: "Art", start: { date: "2026-10-01" }, end: { date: "2026-10-02" } }],
+      }),
+    };
+  };
+
+  const config = familyConfig("/bin/gog-test-clear", [{ id: "art-cal@example.com", label: "Art" }]);
+  const t0 = Date.parse("2026-10-01T12:00:00Z");
+
+  await readGogCalendars(config, week, run, t0);
+  assert.equal(calls, 1);
+
+  clearCalendarCache("art-cal@example.com");
+  await readGogCalendars(config, week, run, t0 + 60_000);
+  assert.equal(calls, 2);
+
+  clearCalendarCache();
+});
+
+test("calendarCacheMinutes: 0 disables caching completely", async () => {
+  clearCalendarCache();
+  let calls = 0;
+  const run: RunGog = async () => {
+    calls++;
+    return {
+      stdout: JSON.stringify({
+        events: [{ id: "e1", summary: "Music", start: { date: "2026-10-01" }, end: { date: "2026-10-02" } }],
+      }),
+    };
+  };
+
+  const config = {
+    ...familyConfig("/bin/gog-test-nocache", [{ id: "nocache-cal@example.com", label: "NoCache" }]),
+    calendarCacheMinutes: 0,
+  };
+  const t0 = Date.parse("2026-10-01T12:00:00Z");
+
+  await readGogCalendars(config, week, run, t0);
+  assert.equal(calls, 1);
+
+  await readGogCalendars(config, week, run, t0 + 60_000);
+  assert.equal(calls, 2);
+
+  clearCalendarCache();
+});
+
+test("failed reads are not cached", async () => {
+  clearCalendarCache();
+  let calls = 0;
+  const run: RunGog = async () => {
+    calls++;
+    throw new Error("Temporary network glitch");
+  };
+
+  const config = familyConfig("/bin/gog-test-fail", [{ id: "fail-cal@example.com", label: "Fail" }]);
+  const t0 = Date.parse("2026-10-01T12:00:00Z");
+
+  const first = await readGogCalendars(config, week, run, t0);
+  assert.equal(first.status, "error");
+  assert.equal(calls, 1);
+  assert.equal(calendarCacheSize(), 0);
+
+  clearCalendarCache();
 });

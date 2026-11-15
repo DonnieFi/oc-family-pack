@@ -1,5 +1,5 @@
 import type { FeatureEventEmitter } from "openclaw/plugin-sdk/feature-plugin";
-import type { RunGog } from "./calendar-gog.ts";
+import { clearCalendarCache, type RunGog } from "./calendar-gog.ts";
 import type { contract } from "./contract.ts";
 import type { GrantHolder } from "./grant.ts";
 import type { CalendarConfig, Config } from "./types.ts";
@@ -108,7 +108,10 @@ export function watchCalendars(options: {
       }
     }
     if (!first) {
-      if (changed) send(() => events.emit("calendar-changed", { reason: "external", calendarKeys: [], at: new Date().toISOString() }), "calendar-changed");
+      if (changed) {
+        clearCalendarCache();
+        send(() => events.emit("calendar-changed", { reason: "external", calendarKeys: [], at: new Date().toISOString() }), "calendar-changed");
+      }
       if (ok) send(() => events.emit("calendar-checked", {}), "calendar-checked");
     }
     wait = ok ? POLL_MS : Math.min(wait * 2, MAX_WAIT_MS);

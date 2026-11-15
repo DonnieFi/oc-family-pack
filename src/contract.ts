@@ -74,6 +74,9 @@ export const FamilyEventSchema = Type.Object({
 /** Bernie's weather cache (weather_cache_ttl_s, 1800 s): one Environment Canada read is reused for 30 minutes. Not configurable. */
 export const WEATHER_CACHE_MINUTES = 30;
 
+/** Minutes to cache successful Google Calendar reads in memory (default: 2 hours). Not an API cap. */
+export const CALENDAR_CACHE_MINUTES = 120;
+
 /** Bernie's recommendation_engine output for the card: one summary line, what to bring, at most one alert. */
 export const WeatherRecommendationSchema = Type.Object({
   summary: Text(500),

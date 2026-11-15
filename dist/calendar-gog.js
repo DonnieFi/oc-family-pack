@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { EVENT_ID_MAX, LINK_MAX, LOCATION_MAX, MESSAGE_MAX, TITLE_MAX } from "./contract.js";
+import { CALENDAR_CACHE_MINUTES, EVENT_ID_MAX, LINK_MAX, LOCATION_MAX, MESSAGE_MAX, TITLE_MAX } from "./contract.js";
 import { addDays, parseDate, startOfLocalDay } from "./week.js";
 const execFileAsync = promisify(execFile);
 const GOG_TIMEOUT_MS = 20_000;
@@ -232,9 +232,33 @@ function classifyFailure(error, label) {
 function hasAnotherPage(raw) {
     return isRecord(raw) && typeof raw.nextPageToken === "string" && raw.nextPageToken.trim() !== "";
 }
-async function readCalendar(config, calendar, { range }, runGog) {
+const calendarCache = new Map();
+export function clearCalendarCache(calendarId) {
+    if (calendarId) {
+        for (const key of calendarCache.keys()) {
+            if (key.includes(`:${calendarId}:`)) {
+                calendarCache.delete(key);
+            }
+        }
+    }
+    else {
+        calendarCache.clear();
+    }
+}
+export function calendarCacheSize() {
+    return calendarCache.size;
+}
+async function readCalendar(config, calendar, { range }, runGog, now = Date.now()) {
     const from = new Date(startOfLocalDay(range.start, range.timezone)).toISOString();
     const to = new Date(startOfLocalDay(addDays(range.end, 1), range.timezone)).toISOString();
+    const cacheKey = `${config.gogPath}:${calendar.id}:${from}:${to}`;
+    const ttlMinutes = config.calendarCacheMinutes ?? CALENDAR_CACHE_MINUTES;
+    if (ttlMinutes > 0) {
+        const cached = calendarCache.get(cacheKey);
+        if (cached && cached.expires > now && cached.read.status === "ok") {
+            return cached.read;
+        }
+    }
     let stdout;
     try {
         ({ stdout } = await runGog(config.gogPath, [
@@ -267,17 +291,24 @@ async function readCalendar(config, calendar, { range }, runGog) {
     if (!events) {
         return { status: "error", message: calendarProblem(calendar.label, UNREADABLE) };
     }
-    return { status: "ok", events, truncated: hasAnotherPage(raw) };
+    const result = { status: "ok", events, truncated: hasAnotherPage(raw) };
+    if (ttlMinutes > 0) {
+        calendarCache.set(cacheKey, {
+            expires: now + ttlMinutes * 60_000,
+            read: result,
+        });
+    }
+    return result;
 }
 /**
  * One calendar's failure becomes a warning beside the rest. The source is unconfigured only when gog is missing or every calendar fails auth.
  * Events keep their Google fields for the classifier; the week payload strips them at its boundary.
  */
-export async function readGogCalendars(config, span, runGog = execGog()) {
+export async function readGogCalendars(config, span, runGog = execGog(), now = Date.now()) {
     if (config.calendars.length === 0) {
         return { status: "unconfigured", hint: `Add calendars to the plugin config. ${GOG_SETUP_HINT}` };
     }
-    const reads = await Promise.all(config.calendars.map((calendar) => readCalendar(config, calendar, span, runGog)));
+    const reads = await Promise.all(config.calendars.map((calendar) => readCalendar(config, calendar, span, runGog, now)));
     if (reads.some((read) => read.status === "unconfigured")) {
         return { status: "unconfigured", hint: GOG_SETUP_HINT };
     }

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { clearCalendarCache } from "./calendar-gog.js";
 import { resolveWriteRequester } from "./requester.js";
 import { addDays, parseDate } from "./week.js";
 import { stderrOf } from "./grant.js";
@@ -267,6 +268,7 @@ export async function createEvent(deps, request) {
             return gogFailed(error);
         }
         await logCommitted(deps, { ...row, requestKey: key, eventId }, false);
+        clearCalendarCache(request.calendarId);
         return { status: "created", eventId, key };
     });
 }
@@ -582,6 +584,7 @@ export async function changeEvent(deps, request) {
                 return gogFailed(error, { beforeJson }, event.title);
             }
             await logCommitted(deps, logged, false);
+            clearCalendarCache(request.calendarId);
             return answer("changed", pick(after));
         }
         if (request.op === "move") {
@@ -593,6 +596,9 @@ export async function changeEvent(deps, request) {
                 return gogFailed(error, { beforeJson }, event.title);
             }
             await logCommitted(deps, { ...withBefore, afterJson: JSON.stringify({ calendarId: destination }) }, false);
+            clearCalendarCache(request.calendarId);
+            if (destination)
+                clearCalendarCache(destination);
             return answer("changed", before);
         }
         const deleted = { ...withBefore, ...(seriesNote ? { afterJson: JSON.stringify(seriesNote) } : {}) };
@@ -603,9 +609,11 @@ export async function changeEvent(deps, request) {
             if (!GONE.test(stderrOf(error)))
                 return gogFailed(error, { beforeJson }, event.title);
             await logCommitted(deps, deleted, true);
+            clearCalendarCache(request.calendarId);
             return answer("existing", before);
         }
         await logCommitted(deps, deleted, false);
+        clearCalendarCache(request.calendarId);
         return answer("changed", before);
     });
 }

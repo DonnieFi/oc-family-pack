@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { EVENT_ID_MAX, LINK_MAX, LOCATION_MAX, MESSAGE_MAX, TITLE_MAX } from "./contract.ts";
+import { CALENDAR_CACHE_MINUTES, EVENT_ID_MAX, LINK_MAX, LOCATION_MAX, MESSAGE_MAX, TITLE_MAX } from "./contract.ts";
 import type { CalendarConfig, CalendarStateOf, Config, FamilyEvent } from "./types.ts";
 import { addDays, parseDate, startOfLocalDay, type Week } from "./week.ts";
 
@@ -264,9 +264,48 @@ function hasAnotherPage(raw: unknown): boolean {
   return isRecord(raw) && typeof raw.nextPageToken === "string" && raw.nextPageToken.trim() !== "";
 }
 
-async function readCalendar(config: Config, calendar: CalendarConfig, { range }: Pick<Week, "range">, runGog: RunGog): Promise<CalendarRead> {
+type CalendarCacheEntry = {
+  expires: number;
+  read: CalendarRead;
+};
+
+const calendarCache = new Map<string, CalendarCacheEntry>();
+
+export function clearCalendarCache(calendarId?: string): void {
+  if (calendarId) {
+    for (const key of calendarCache.keys()) {
+      if (key.includes(`:${calendarId}:`)) {
+        calendarCache.delete(key);
+      }
+    }
+  } else {
+    calendarCache.clear();
+  }
+}
+
+export function calendarCacheSize(): number {
+  return calendarCache.size;
+}
+
+async function readCalendar(
+  config: Config,
+  calendar: CalendarConfig,
+  { range }: Pick<Week, "range">,
+  runGog: RunGog,
+  now = Date.now(),
+): Promise<CalendarRead> {
   const from = new Date(startOfLocalDay(range.start, range.timezone)).toISOString();
   const to = new Date(startOfLocalDay(addDays(range.end, 1), range.timezone)).toISOString();
+  const cacheKey = `${config.gogPath}:${calendar.id}:${from}:${to}`;
+  const ttlMinutes = config.calendarCacheMinutes ?? CALENDAR_CACHE_MINUTES;
+
+  if (ttlMinutes > 0) {
+    const cached = calendarCache.get(cacheKey);
+    if (cached && cached.expires > now && cached.read.status === "ok") {
+      return cached.read;
+    }
+  }
+
   let stdout: string;
   try {
     ({ stdout } = await runGog(config.gogPath, [
@@ -297,18 +336,30 @@ async function readCalendar(config: Config, calendar: CalendarConfig, { range }:
   if (!events) {
     return { status: "error", message: calendarProblem(calendar.label, UNREADABLE) };
   }
-  return { status: "ok", events, truncated: hasAnotherPage(raw) };
+  const result: CalendarRead = { status: "ok", events, truncated: hasAnotherPage(raw) };
+  if (ttlMinutes > 0) {
+    calendarCache.set(cacheKey, {
+      expires: now + ttlMinutes * 60_000,
+      read: result,
+    });
+  }
+  return result;
 }
 
 /**
  * One calendar's failure becomes a warning beside the rest. The source is unconfigured only when gog is missing or every calendar fails auth.
  * Events keep their Google fields for the classifier; the week payload strips them at its boundary.
  */
-export async function readGogCalendars(config: Config, span: Pick<Week, "range">, runGog: RunGog = execGog()): Promise<CalendarStateOf<GogEvent>> {
+export async function readGogCalendars(
+  config: Config,
+  span: Pick<Week, "range">,
+  runGog: RunGog = execGog(),
+  now = Date.now(),
+): Promise<CalendarStateOf<GogEvent>> {
   if (config.calendars.length === 0) {
     return { status: "unconfigured", hint: `Add calendars to the plugin config. ${GOG_SETUP_HINT}` };
   }
-  const reads = await Promise.all(config.calendars.map((calendar) => readCalendar(config, calendar, span, runGog)));
+  const reads = await Promise.all(config.calendars.map((calendar) => readCalendar(config, calendar, span, runGog, now)));
   if (reads.some((read) => read.status === "unconfigured")) {
     return { status: "unconfigured", hint: GOG_SETUP_HINT };
   }

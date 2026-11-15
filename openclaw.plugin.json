@@ -87,6 +87,10 @@
       "label": "Demo week",
       "help": "Show a synthetic week instead of real calendars."
     },
+    "calendarCacheMinutes": {
+      "label": "Calendar cache (minutes)",
+      "placeholder": "120"
+    },
     "gogPath": {
       "label": "gog command",
       "placeholder": "gog"
@@ -295,6 +299,11 @@
           "maxLength": 40
         },
         "maxItems": 16
+      },
+      "calendarCacheMinutes": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 1440
       },
       "gogPath": {
         "type": "string",
@@ -676,9 +685,9 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/4382c35a3fb3376244b0087dca95111896f4ca7a5e9dcdedf0bd3d8ca90898db/index.js",
+    "entry": "dist/control-ui/1632fbb00468d07f0e7464ed803032296c31dfe0cce8666d8f5568212911142e/index.js",
     "styles": [
-      "dist/control-ui/4382c35a3fb3376244b0087dca95111896f4ca7a5e9dcdedf0bd3d8ca90898db/index.css"
+      "dist/control-ui/1632fbb00468d07f0e7464ed803032296c31dfe0cce8666d8f5568212911142e/index.css"
     ]
   },
   "contracts": {

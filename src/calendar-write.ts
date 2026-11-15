@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { FeatureInvocationContext } from "openclaw/plugin-sdk/feature-plugin";
-import type { RunGog } from "./calendar-gog.ts";
+import { clearCalendarCache, type RunGog } from "./calendar-gog.ts";
 import { resolveWriteRequester, type Requester } from "./requester.ts";
 import type { FamilyStore, WriteLogRow } from "./store.ts";
 import type { CalendarConfig, Config } from "./types.ts";
@@ -335,6 +335,7 @@ export async function createEvent(deps: WriteDeps, request: CreateRequest): Prom
       return gogFailed(error);
     }
     await logCommitted(deps, { ...row, requestKey: key, eventId }, false);
+    clearCalendarCache(request.calendarId);
     return { status: "created", eventId, key };
   });
 }
@@ -672,6 +673,7 @@ export async function changeEvent(deps: WriteDeps, request: ChangeRequest): Prom
         return gogFailed(error, { beforeJson }, event.title);
       }
       await logCommitted(deps, logged, false);
+      clearCalendarCache(request.calendarId);
       return answer("changed", pick(after));
     }
     if (request.op === "move") {
@@ -682,6 +684,8 @@ export async function changeEvent(deps: WriteDeps, request: ChangeRequest): Prom
         return gogFailed(error, { beforeJson }, event.title);
       }
       await logCommitted(deps, { ...withBefore, afterJson: JSON.stringify({ calendarId: destination }) }, false);
+      clearCalendarCache(request.calendarId);
+      if (destination) clearCalendarCache(destination);
       return answer("changed", before);
     }
     const deleted = { ...withBefore, ...(seriesNote ? { afterJson: JSON.stringify(seriesNote) } : {}) };
@@ -690,9 +694,11 @@ export async function changeEvent(deps: WriteDeps, request: ChangeRequest): Prom
     } catch (error) {
       if (!GONE.test(stderrOf(error))) return gogFailed(error, { beforeJson }, event.title);
       await logCommitted(deps, deleted, true);
+      clearCalendarCache(request.calendarId);
       return answer("existing", before);
     }
     await logCommitted(deps, deleted, false);
+    clearCalendarCache(request.calendarId);
     return answer("changed", before);
   });
 }

@@ -154,6 +154,8 @@ export type Config = {
   schoolHints?: string[];
   /** Phrases that mark a weekday closed, so the after-school post stays quiet. Empty means only weekends. */
   closedDayPhrases?: string[];
+  /** Minutes to cache successful Google Calendar reads in memory. 0 disables caching. Omitted means 120 (2 hours). */
+  calendarCacheMinutes?: number;
   gogPath: string;
   writes: WriteMode;
   members: MemberConfig[];

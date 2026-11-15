@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add in-memory caching for Google Calendar reads (default: 2 hours, configurable via `calendarCacheMinutes`). Successful reads for week, today, and schedule ranges are cached in memory so subsequent page loads, widget renders, and tab switches load instantaneously without spawning multiple `gog` CLI processes. The cache is automatically invalidated when `watchCalendars` detects external updates or when events are created, updated, moved, or deleted locally.
 - Briefs, reminders, the Family page, and the printed kid and guest roles use one household agent. An explicit `agentId` wins and must be a configured agent. Otherwise a Discord account uses that account's route, then `agents.defaults.systemAgent.agentId` (the owner a template install records), then the host default. An empty fleet fails instead of inventing `main`. `openclaw family access check` fails when kid or guest roles still grant `agents: "*"`, and `openclaw family access role` reprints the role definitions.
 - The daily and weekly brief footer now resolves the sender agent through `discordAccount` routing when set, and falls back to `main` (or the first configured agent) instead of failing when a multi-agent Gateway has no unique default agent.
 - Omitting a member's `reminders` now means `off`, even when they have a `discordId`. Event reminders and the weekday morning brief are opt-in: set `reminders: "dm"` or `"channel"` on each person who should get them. A config that relied on the old implicit direct message stops those sends after upgrading until a mode is set.

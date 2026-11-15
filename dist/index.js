@@ -4,7 +4,7 @@ import { accessModeFor } from "./access.js";
 import { ConfigSchema, parseConfig } from "./config.js";
 import { contract, PAGE_WRITE_METHOD, TODAY_VIEW_METHOD, TODAY_WIDGET_ID, WEEK_METHOD } from "./contract.js";
 import { DELIVERY_STATUS_METHOD, deliveryStatusMethod } from "./delivery-status.js";
-import { execGog } from "./calendar-gog.js";
+import { clearCalendarCache, execGog } from "./calendar-gog.js";
 import { watchCalendars } from "./calendar-watch.js";
 import { registerFamilyCli } from "./gog-setup.js";
 import { familyHandlers, familyTodayView, familyWeek } from "./handlers.js";
@@ -229,6 +229,7 @@ const plugin = defineFeaturePlugin({
             log: () => store,
             identity: () => store,
             changed: () => {
+                clearCalendarCache();
                 try {
                     // Guests receive this event, so it carries no calendar keys. The page refetches the week.
                     events.emit("calendar-changed", { reason: "write", calendarKeys: [], at: new Date().toISOString() });
