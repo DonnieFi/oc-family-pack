@@ -1106,7 +1106,7 @@ async function main(): Promise<void> {
   await calendarWatch(env, configPath, port, logPath, garbage.url);
   await scheduleTool(configPath, port);
   await garbageTool(port, garbage);
-  await peopleProfileLink(port);
+  await peopleProfileLink(env, port, logPath);
 }
 
 /** Stand-ins for what a real household fills in, used only on this isolated Gateway. */
@@ -1611,7 +1611,7 @@ async function calendarWatch(env: NodeJS.ProcessEnv, configPath: string, port: n
   note(`a signed-in page got calendar-changed and calendar-checked ${Math.round((Date.now() - started) / 1000)}s after start; the second poll asked gog for edits since the baseline`, step);
 }
 
-async function peopleProfileLink(port: number): Promise<void> {
+async function peopleProfileLink(env: NodeJS.ProcessEnv, port: number, logPath: string): Promise<void> {
   const step: Step = "household sign-in";
   const riley = await proxiedSession(port, "riley", [["users.self", {}]]);
   const profile = riley[1]?.payload?.profile as { id?: string } | undefined;
@@ -1636,11 +1636,18 @@ async function peopleProfileLink(port: number): Promise<void> {
       !members.some((member) => member?.id === "person-test-link" && member?.gatewayProfileId === profile.id)) {
     fail(step, `People did not save the verified native profile link: ${JSON.stringify(saved)}`);
   }
+  // A roster save can hot-reload the plugin and retire current RPC authority.
+  // Restart between writes to verify the persisted links and a fresh caller.
+  await bootGateway(env, port, logPath);
   if (await role() !== "kid") fail(step, "Riley's signed-in week did not use the linked roster role");
   const unlinked = (await proxiedSession(port, "alex", [[DIRECTORY_PREVIEW_METHOD, {
     op: "edit", edits: [{ id: "person-test-link", gatewayProfileId: null }], save: true,
   }]]))[1];
-  if (!unlinked?.ok || unlinked.payload?.saved !== true || await role() !== "guest") {
+  if (!unlinked?.ok || unlinked.payload?.saved !== true) {
+    fail(step, `People did not save the unlink: ${String(unlinked?.payload?.error ?? unlinked?.error?.message ?? "no save confirmation")}`);
+  }
+  await bootGateway(env, port, logPath);
+  if (await role() !== "guest") {
     fail(step, "removing the roster link did not return Riley to the guest view");
   }
   note("People rejected an unknown profile and used the new roster link for a signed-in week until it was removed", step);
