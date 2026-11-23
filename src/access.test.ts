@@ -105,6 +105,35 @@ test("runAccess reports with no mode and plans with one", () => {
   assert.match(runAccess(lanReady, "lan", { parent: ["alex"] }, {}).text, /^LAN\./);
 });
 
+test("Household Guest previews a separate invite-only role without replacing host policy", () => {
+  const options = { agentIds: ["main", "household"], householdAgentId: "household" };
+  const roles = { default: "reader", definitions: { reader: { agents: "*" } } };
+  const gateway = { ...lanReady, roles };
+  const preview = runAccess(gateway, "guest-preset", {}, options);
+  assert.equal(preview.ok, true);
+  const patch = JSON.parse(preview.text.slice(preview.text.indexOf("\n\n") + 2));
+  assert.deepEqual(patch, {
+    gateway: {
+      roles: {
+        definitions: {
+          "household-guest": {
+            sessions: { others: "invited" },
+            agents: ["household"],
+            scopes: ["operator.sessions.write"],
+            sandbox: "required",
+            modelPolicy: { sourceAgent: "household" },
+          },
+        },
+      },
+    },
+  });
+  assert.match(preview.text, /Family currently requires broad Gateway read access/);
+  const existing = { ...gateway, roles: { ...roles, definitions: { ...roles.definitions, "household-guest": {} } } };
+  assert.equal(runAccess(existing, "guest-preset", {}, options).ok, false);
+  assert.equal(runAccess(lanReady, "guest-preset", {}, options).ok, false);
+  assert.equal(runAccess(gateway, "guest-preset", { guest: ["riley"] }, options).ok, false);
+});
+
 test("detection never claims roles are assigned", () => {
   const report = formatDetection(detectAccess(lanReady));
   assert.match(report.text, /Roles are set per person with `users\.setRole`, so they can't be checked from here\./);

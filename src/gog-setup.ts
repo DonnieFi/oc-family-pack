@@ -371,7 +371,7 @@ export function registerFamilyCli(
   family
     .command("access")
     .description("Report the household sign-in mode, check roles, or print the setup for one")
-    .argument("[mode]", "solo, lan, role, or check")
+    .argument("[mode]", "solo, lan, role, check, or guest-preset")
     .argument("[names...]", "People with no role flag, or NAME=ROLE pairs for role")
     .option("--parent <name...>", "Parents: full access and every session")
     .option("--kid <name...>", "Kids: read, and write their own sessions")
