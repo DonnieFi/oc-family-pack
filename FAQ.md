@@ -183,7 +183,7 @@ A member is the household's record of a person, in `plugins.entries.oc-family-pa
 
 `openclaw family setup --parent alex --kid riley` prints a members patch and does not save it. Usernames are lower case: letters, numbers, dots, dashes, and underscores, up to 32 characters. `alex` is valid. `Alex Smith` is not. The display name becomes the username with the first letter capitalized. Someone already in the config is left unchanged. Pass `--guest sam` for a guest.
 
-Apply it with `openclaw config patch --stdin --dry-run`, then again without `--dry-run`. The People page shows the same roster and can preview a patch. It does not save, and it does not keep a second copy of the family.
+Apply it with `openclaw config patch --stdin --dry-run`, then again without `--dry-run`. The People page shows the same roster and lets a parent preview or save roster edits.
 
 ## Where do email and phone go?
 
@@ -208,7 +208,7 @@ Five lines, each Done or To do, then one next step.
 - **Access mode.** `openclaw family access`.
 - **Timezone.** Set `plugins.entries.oc-family-pack.config.timezone`, for example `America/Toronto`.
 - **Location.** `lat` and `lon`. Weather is Canada only.
-- **Members.** At least one parent. In LAN mode every member must also be in `allowUsers` with Gateway scopes that match the roster role; members with no login are named.
+- **Members.** At least one parent. In LAN mode, at least one parent needs a configured sign-in. Proxy logins must be in `allowUsers` with matching Gateway scopes. Other members can stay roster-only.
 - **Calendars.** `openclaw family gog`, then put calendar ids in config; every personal or school calendar needs an owner who is a parent or kid.
 
 When all five are Done, no approval block is pending, and no id or LAN-mode warning remains, it prints "Everything is set up." A patch is not saved yet, so that run is not finished.

@@ -68,6 +68,24 @@ test("a kid does not load contact details", async () => {
   assert.equal((page.container.textContent ?? "").includes("192.168.1.40"), false);
 });
 
+test("discarding a named draft leaves the roster untouched", async () => {
+  const page = mount(true, async (method) => {
+    assert.equal(method, DIRECTORY_METHOD);
+    return { demo: false, members: [RILEY] };
+  });
+  await flush();
+  page.container.querySelector<HTMLButtonElement>(".ocfp-people-add")?.click();
+  const name = page.container.querySelector<HTMLInputElement>('input[aria-label="Name"]');
+  assert.ok(name);
+  name.value = "Jordan";
+  name.dispatchEvent(new page.document.defaultView!.Event("input"));
+  const back = page.container.querySelector<HTMLButtonElement>(".ocfp-people-back");
+  assert.equal(back?.textContent, "Discard new person");
+  back?.click();
+  assert.equal(page.container.querySelectorAll(".ocfp-person").length, 1);
+  assert.equal(page.calls.length, 1);
+});
+
 test("a parent edits the sample login and previews a patch that keeps the member id", async () => {
   const page = mount(true, async (method, params) => {
     if (method === DIRECTORY_METHOD) {

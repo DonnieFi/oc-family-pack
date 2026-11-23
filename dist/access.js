@@ -527,8 +527,14 @@ export function formatAccessCheck(gateway, opts = {}) {
         const roster = memberRoleOf(member);
         const login = memberLoginOf(member);
         if (login === undefined) {
-            allOk = false;
-            lines.push(`${name}: roster=${roster}, identityScopes=no login, Gateway role=no login (mismatch)`);
+            const id = record(member).gatewayProfileId;
+            if (typeof id !== "string" || !id.trim()) {
+                lines.push(`${name}: roster=${roster}, roster only`);
+                continue;
+            }
+            const linked = opts.profiles.some((profile) => profile.id === id.trim());
+            allOk &&= linked;
+            lines.push(`${name}: roster=${roster}, ${linked ? "native profile connected" : "native profile unavailable"}`);
             continue;
         }
         const hasScopes = Array.isArray(scopes[login]);
@@ -555,7 +561,7 @@ export function formatAccessCheck(gateway, opts = {}) {
     }
     const watched = members.filter((member) => {
         const role = memberRoleOf(member);
-        return role === "kid" || role === "guest";
+        return memberLoginOf(member) !== undefined && (role === "kid" || role === "guest");
     });
     if (watched.length > 0) {
         const resolvedAgents = resolveHouseholdAgentIds(opts);

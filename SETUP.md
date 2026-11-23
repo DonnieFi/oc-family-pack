@@ -7,9 +7,11 @@ The person is the record you add. `openclaw family setup` prints the next step a
 Each person is a member in `plugins.entries.oc-family-pack.config.members`.
 
 A parent can add a roster-only person in **People → Add person**. To connect
-someone who already signs in, open their card, choose their OpenClaw profile,
-and save. If they have yet to sign in, use your OpenClaw sign-in or invitation
-flow, then reopen the picker after their first sign-in. To remove the link,
+someone who already signs in through the trusted proxy, open their card, choose their OpenClaw profile,
+and save. If their card already has a proxy login, the native profile must
+verify that login. For someone new, use your host’s enrollment flow, then
+reopen the picker after their first sign-in. Native invitation features vary
+by OpenClaw version and are managed separately from People. To remove the link,
 select **Roster only** or **No native profile** and save. OpenClaw manages access
 grants and conversations separately.
 
@@ -159,7 +161,7 @@ When `gog` can list calendars, put them in config. Each one has an `id`, a `labe
 
 You sign in as your `profileId`. Gateway roles and plugin roster roles are separate settings: `openclaw family access lan` sets `identityScopes`, and `users.setRole` sets the host role. The plugin checks `members[].role` for Discord calendar writes, page writes, People, and approvals. Setup reports when `identityScopes` and `members[].role` disagree, and `openclaw family access check` also checks `users.list`. Run `openclaw family access role NAME=ROLE` when someone changes role to print all three updates together.
 
-`openclaw family access` reports solo or LAN and changes nothing. In solo mode, everyone who opens the Control UI is the shared owner, and family members use Discord. In LAN mode, each person has their own sign-in, and every member is in `allowUsers`. A trusted-proxy Gateway is treated as LAN even before `accessMode` is set; setting `accessMode: "lan"` makes it explicit. A device token with no device identity is refused by the Gateway before the plugin runs. After the printed LAN roles are applied, a paired device token with no verified user is refused at connect. If the host still accepts that session, the plugin treats it as a guest and shows shared calendars only. In solo mode it is the shared owner. The cutover is [HOUSEHOLD-LAN.md](HOUSEHOLD-LAN.md).
+`openclaw family access` reports solo or LAN and changes nothing. In solo mode, everyone who opens the Control UI is the shared owner, and family members use Discord. In LAN mode, each person who signs in through the proxy needs an entry in `allowUsers`. A trusted-proxy Gateway is treated as LAN even before `accessMode` is set; setting `accessMode: "lan"` makes it explicit. A device token with no device identity is refused by the Gateway before the plugin runs. After the printed LAN roles are applied, a paired device token with no verified user is refused at connect. If the host still accepts that session, the plugin treats it as a guest and shows shared calendars only. In solo mode it is the shared owner. The cutover is [HOUSEHOLD-LAN.md](HOUSEHOLD-LAN.md).
 
 Calendar approvals use OpenClaw plugin approvals. The parent LAN role includes `operator.approvals`. In LAN mode, `openclaw family setup` prints an `approvals.plugin` block with the roster parents' Discord targets. Apply it, enable writes for the proof window, prove a kid's shared-calendar write reaches a parent, then enable reminders and briefs.
 

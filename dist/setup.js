@@ -146,6 +146,12 @@ function membersStep(host, members) {
         return { name, done: false, next: ADD_PARENT };
     const gateway = record(host).gateway;
     if (detectAccess(gateway).mode === "lan") {
+        if (!members.some((member) => {
+            const nativeId = record(member).gatewayProfileId;
+            return rosterRole(member) === "parent" && (loginOf(member) !== undefined || (typeof nativeId === "string" && nativeId.trim() !== ""));
+        })) {
+            return { name, done: false, next: "Configure a proxy login or connect an OpenClaw profile for at least one parent." };
+        }
         const list = record(record(record(gateway).auth).trustedProxy).allowUsers;
         const allowed = Array.isArray(list) ? list.map((user) => String(user).toLowerCase()) : [];
         const locked = members.flatMap((member) => loginOf(member) ?? []).filter((id) => !allowed.includes(id));

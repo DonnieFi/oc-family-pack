@@ -43,6 +43,7 @@ test("a native profile link rejects unavailable, retired and conflicting profile
       { id: "gateway-owner" },
       { id: "retired", mergedInto: "profile-alex" },
       { id: "profile-alex", displayName: "Alex", emails: ["alex@example.test"] },
+      { id: "profile-jordan", displayName: "Jordan", emails: ["jordan@example.test"] },
     ],
     persist: async () => assert.fail("an invalid profile link reached persistence"),
   });
@@ -63,6 +64,28 @@ test("a native profile link rejects unavailable, retired and conflicting profile
       },
     });
   }
+  await method({
+    client: { usesSharedGatewayAuth: true } as never,
+    params: { op: "edit", edits: [{ id: "person-alex", gatewayProfileId: "profile-jordan" }], save: true },
+    respond: (_ok, payload) => assert.match((payload as { error: string }).error, /does not verify this proxy login/),
+  });
+});
+
+test("roster authorization is checked again against the pre-edit roster during a save", async () => {
+  const raw = { members: [{ id: "person-alex", profileId: "alex", name: "Alex", role: "parent" }] };
+  const demoted = parseConfig({ members: [{ ...raw.members[0], role: "kid" }] });
+  const method = directoryPreviewMethod(() => parseConfig(raw), () => raw, {
+    persist: async (_operation, check) => {
+      assert.ok(check);
+      assert.throws(() => check(raw.members, demoted), /roster access changed/);
+      return { ok: false, error: "demoted" };
+    },
+  });
+  await method({
+    client: { authenticatedUserId: "alex" } as never,
+    params: { op: "edit", edits: [{ id: "person-alex", displayName: "Alex Updated" }], save: true },
+    respond: (_ok, payload) => assert.deepEqual(payload, { ok: false, error: "demoted" }),
+  });
 });
 
 function host(members: unknown[], calendars: unknown[] = []) {

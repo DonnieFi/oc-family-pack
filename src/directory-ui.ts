@@ -407,7 +407,7 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
     back.addEventListener("click", () => {
       if (saving) return;
       const member = members[selected];
-      if (member && newMembers.has(member.id) && !member.displayName.trim()) {
+      if (member && newMembers.has(member.id)) {
         newMembers.delete(member.id);
         linkEdits.delete(member.id);
         members.splice(selected, 1);
@@ -427,6 +427,7 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
       add.hidden = profileOpen;
       form.hidden = !profileOpen;
       back.hidden = !profileOpen;
+      back.textContent = newMembers.has(members[selected]?.id ?? "") ? "Discard new person" : "← Everyone";
       actions.hidden = !profileOpen;
     };
     const save = h("button", { type: "button", class: "ocfp-btn ocfp-btn-today", ...(demo ? { disabled: true } : {}) }, "Save changes") as HTMLButtonElement;
@@ -480,6 +481,7 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
             newMembers.clear();
             paintList();
             paintForm();
+            syncView();
           }
           result.textContent = body?.note ?? "Saved roster changes to the Gateway config.";
         },

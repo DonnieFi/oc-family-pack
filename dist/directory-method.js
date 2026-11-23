@@ -8,6 +8,7 @@ import { DELIVERY_NOTE, DIRECTORY_MIGRATED_NOTE, DIRECTORY_PERSISTENCE, DIRECTOR
 import { directoryMembers, planDirectoryEdit, planMaterialize, MATERIALIZE_INTRO } from "./directory.js";
 import { DEMO_MEMBERS } from "./demo.js";
 import { parseConfig } from "./config.js";
+import { accessModeFor } from "./access.js";
 import { isRosterParent } from "./visibility.js";
 import { viewerOf } from "./week-method.js";
 async function loadNativeProfiles() {
@@ -97,7 +98,13 @@ export const defaultPersistRoster = async (operation, check) => {
                     throw new Error(planned.error);
                 }
                 if (planned.changed) {
-                    check?.(planned.members);
+                    if (check) {
+                        const current = parseConfig(pluginConfig);
+                        const mode = accessModeFor(root.gateway, current.accessMode);
+                        if (mode !== undefined)
+                            current.accessMode = mode;
+                        check(planned.members, current);
+                    }
                     pluginConfig.members = planned.members;
                     entry.config = pluginConfig;
                     entries["oc-family-pack"] = entry;
@@ -153,6 +160,12 @@ export function directoryPreviewMethod(config, raw, deps = {}) {
             return;
         }
         const save = body.save === true;
+        const assertWriteAuthority = (latest) => {
+            if (latest.demo || (hasCurrentClientAuthority && !hasCurrentClientAuthority()) ||
+                !isRosterParent(latest, viewerOf(client, latest.accessMode))) {
+                throw new Error("Gateway or roster access changed. Sign in again and retry.");
+            }
+        };
         const roster = rawRoster(raw());
         if (body.op === "materialize") {
             const preview = planMaterialize(roster.members, roster.calendars);
@@ -180,7 +193,7 @@ export function directoryPreviewMethod(config, raw, deps = {}) {
                 });
                 return;
             }
-            const saved = await persist("materialize");
+            const saved = await persist("materialize", (_members, latest) => assertWriteAuthority(latest));
             if (!saved.ok) {
                 respond(true, { ok: false, error: saved.error });
                 return;
@@ -207,7 +220,7 @@ export function directoryPreviewMethod(config, raw, deps = {}) {
             respond(true, { ok: false, error: preview.error });
             return;
         }
-        let check;
+        let selected = [];
         const newLinks = edits.flatMap((edit) => typeof edit.gatewayProfileId === "string" ? [edit.gatewayProfileId.trim()] : []);
         if (newLinks.length > 0) {
             const profiles = await (deps.loadProfiles ?? loadNativeProfiles)().catch(() => undefined);
@@ -218,28 +231,37 @@ export function directoryPreviewMethod(config, raw, deps = {}) {
                 respond(true, { ok: false, error: "The selected OpenClaw profile is unavailable. Refresh the profile list and choose again." });
                 return;
             }
-            const selected = candidates.filter((candidate) => newLinks.includes(String(candidate.id)));
-            check = (members) => {
-                if (hasCurrentClientAuthority && !hasCurrentClientAuthority()) {
-                    throw new Error("Gateway access changed. Sign in again and retry.");
+            selected = candidates.filter((candidate) => newLinks.includes(String(candidate.id)));
+        }
+        const check = (members, latest) => {
+            assertWriteAuthority(latest);
+            const plannedMembers = parseConfig({ members }).members;
+            for (const profile of selected) {
+                const emails = (Array.isArray(profile.emails) ? profile.emails : [])
+                    .flatMap((name) => typeof name === "string" ? [name.trim().toLowerCase()] : []);
+                // A mutable display name can flag ambiguity, but cannot establish identity.
+                const names = [...emails, typeof profile.displayName === "string" ? profile.displayName.trim().toLowerCase() : ""];
+                if (plannedMembers.some((member) => member.profileId && names.includes(member.profileId) && member.gatewayProfileId !== profile.id)) {
+                    throw new Error("The selected OpenClaw profile may already belong to another roster login. Check those cards before linking it.");
                 }
-                const plannedMembers = parseConfig({ members }).members;
-                for (const profile of selected) {
-                    // A mutable display name can flag ambiguity, but cannot establish identity.
-                    const names = [profile.displayName, ...(Array.isArray(profile.emails) ? profile.emails : [])]
-                        .flatMap((name) => typeof name === "string" ? [name.trim().toLowerCase()] : []);
-                    if (plannedMembers.some((member) => member.profileId && names.includes(member.profileId) && member.gatewayProfileId !== profile.id)) {
-                        throw new Error("The selected OpenClaw profile may already belong to another roster login. Check those cards before linking it.");
-                    }
+                if (plannedMembers.some((member) => member.gatewayProfileId === profile.id && member.profileId && !emails.includes(member.profileId))) {
+                    throw new Error("The selected OpenClaw profile does not verify this proxy login. Clear the proxy login or choose its verified profile.");
                 }
-            };
-            try {
-                check(preview.members);
             }
-            catch (error) {
-                respond(true, { ok: false, error: error instanceof Error ? error.message : "The profile could not be linked." });
-                return;
+            for (const member of plannedMembers) {
+                const previous = latest.members.find((entry) => entry.id === member.id);
+                if (member.profileId && member.gatewayProfileId && previous?.gatewayProfileId === member.gatewayProfileId &&
+                    previous.profileId !== member.profileId && !newLinks.includes(member.gatewayProfileId)) {
+                    throw new Error("Unlink the OpenClaw profile before replacing its proxy login.");
+                }
             }
+        };
+        try {
+            check(preview.members, current);
+        }
+        catch (error) {
+            respond(true, { ok: false, error: error instanceof Error ? error.message : "The roster edit could not be verified." });
+            return;
         }
         if (!save) {
             respond(true, {
