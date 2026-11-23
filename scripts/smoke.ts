@@ -1413,6 +1413,13 @@ async function householdSignIn(env: NodeJS.ProcessEnv, configPath: string, port:
     fail(step, `alex has no operator.write after users.setRole parent: ${JSON.stringify(scopesOf(alexAgain))}`);
   }
   note(`users.setRole made alex a parent: ${scopesOf(alexAgain).join(", ")}`, step);
+  const profilePicker = await proxiedSession(port, "alex", [["users.list", {}]]);
+  connected(profilePicker, "alex opening the native profile directory");
+  const profiles = profilePicker[1]?.payload?.profiles;
+  if (!profilePicker[1]?.ok || !Array.isArray(profiles) || !profiles.some((profile) => profile?.id === rileyId)) {
+    fail(step, "the signed-in parent cannot discover Riley's native profile for the People picker");
+  }
+  note("a signed-in parent can discover the existing native profile by ID via users.list", step);
   // Exercise the new People RPCs against host authorization, not only handlers.
   const directoryCalls: [string, unknown][] = [[DIRECTORY_METHOD, {}], [DIRECTORY_PREVIEW_METHOD, { op: "materialize" }]];
   for (const user of ["riley", "alex"]) {
