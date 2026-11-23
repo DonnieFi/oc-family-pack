@@ -13,6 +13,58 @@ const READY = { status: "ready", command: "", message: "" } as const;
 const PHONE = "+1 902 555 0100";
 const MAC = "aa:bb:cc:dd:ee:10";
 
+test("a native profile link preserves the roster ID and legacy login and cannot be assigned twice", () => {
+  const members = [
+    { id: "person-alex", profileId: "alex", name: "Alex", role: "parent" },
+    { id: "person-riley", name: "Riley", role: "kid", gatewayProfileId: "profile-riley" },
+  ];
+  const repeated = planDirectoryEdit(members, [{ id: "person-alex", gatewayProfileId: "profile-riley" }]);
+  assert.ok(!repeated.ok);
+  assert.match(repeated.error, /same Gateway profile/);
+
+  const linked = planDirectoryEdit(members, [{ id: "person-alex", gatewayProfileId: "profile-alex" }]);
+  assert.ok(linked.ok);
+  assert.deepEqual(linked.members[0], { ...members[0], gatewayProfileId: "profile-alex" });
+
+  const unlinked = planDirectoryEdit(linked.members, [{ id: "person-alex", gatewayProfileId: null }]);
+  assert.ok(unlinked.ok);
+  assert.deepEqual(unlinked.members, members);
+});
+
+test("a native profile link rejects unavailable, retired and conflicting profiles before persistence", async () => {
+  const raw = {
+    members: [
+      { id: "person-alex", profileId: "alex@example.test", name: "Alex", role: "parent" },
+      { id: "person-riley", name: "Riley", role: "kid" },
+    ],
+  };
+  const method = directoryPreviewMethod(() => parseConfig(raw), () => raw, {
+    loadProfiles: async () => [
+      { id: "gateway-owner" },
+      { id: "retired", mergedInto: "profile-alex" },
+      { id: "profile-alex", displayName: "Alex", emails: ["alex@example.test"] },
+    ],
+    persist: async () => assert.fail("an invalid profile link reached persistence"),
+  });
+  for (const [id, message] of [
+    ["unknown", /unavailable/],
+    ["gateway-owner", /unavailable/],
+    ["retired", /unavailable/],
+    ["profile-alex", /another roster login/],
+  ] as const) {
+    await method({
+      client: { usesSharedGatewayAuth: true } as never,
+      params: { op: "edit", edits: [{ id: "person-riley", gatewayProfileId: id }], save: true },
+      respond: (ok, payload) => {
+        assert.equal(ok, true);
+        const result = payload as { ok: boolean; error: string };
+        assert.equal(result.ok, false);
+        assert.match(result.error, message);
+      },
+    });
+  }
+});
+
 function host(members: unknown[], calendars: unknown[] = []) {
   return { plugins: { entries: { "oc-family-pack": { config: { timezone: "UTC", members, calendars } } } } };
 }

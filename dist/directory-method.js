@@ -2,6 +2,7 @@
 // so a kid never receives contact details. Preview does not write; save writes
 // the validated members list to the Gateway config.
 import { mutateConfigFile } from "openclaw/plugin-sdk/config-mutation";
+import { dispatchGatewayMethod } from "openclaw/plugin-sdk/gateway-method-runtime";
 import { ErrorCodes, errorShape } from "openclaw/plugin-sdk/gateway-runtime";
 import { DELIVERY_NOTE, DIRECTORY_MIGRATED_NOTE, DIRECTORY_PERSISTENCE, DIRECTORY_SAVED_NOTE, RESERVATION_NOTE } from "./directory-contract.js";
 import { directoryMembers, planDirectoryEdit, planMaterialize, MATERIALIZE_INTRO } from "./directory.js";
@@ -9,6 +10,12 @@ import { DEMO_MEMBERS } from "./demo.js";
 import { parseConfig } from "./config.js";
 import { isRosterParent } from "./visibility.js";
 import { viewerOf } from "./week-method.js";
+async function loadNativeProfiles() {
+    const response = await dispatchGatewayMethod("users.list", {});
+    if (!response.ok)
+        return undefined;
+    return isRecord(response.payload) ? response.payload.profiles : undefined;
+}
 const PARENT_ONLY = "People is for a parent. This sign-in can read the week, and it cannot see emails, phone numbers, Discord ids, or devices.";
 function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -20,7 +27,7 @@ function rawRoster(raw) {
         calendars: Array.isArray(config.calendars) ? config.calendars : [],
     };
 }
-const EDIT_KEYS = ["id", "displayName", "login", "email", "phone", "discordId", "aliases", "lobsterPreferences", "role", "color", "reminders", "devices"];
+const EDIT_KEYS = ["id", "create", "displayName", "login", "gatewayProfileId", "email", "phone", "discordId", "aliases", "lobsterPreferences", "role", "color", "reminders", "devices"];
 function parseEdits(value) {
     if (!Array.isArray(value))
         return undefined;
@@ -33,12 +40,17 @@ function parseEdits(value) {
                 return undefined;
         }
         const edit = { id: entry.id };
+        if ("create" in entry) {
+            if (entry.create !== true)
+                return undefined;
+            edit.create = true;
+        }
         if ("displayName" in entry) {
             if (typeof entry.displayName !== "string" || entry.displayName.trim() === "")
                 return undefined;
             edit.displayName = entry.displayName;
         }
-        for (const key of ["login", "email", "phone", "discordId", "role", "color", "reminders"]) {
+        for (const key of ["login", "gatewayProfileId", "email", "phone", "discordId", "role", "color", "reminders"]) {
             if (!(key in entry))
                 continue;
             const field = entry[key];
@@ -65,7 +77,7 @@ function parseEdits(value) {
     }
     return edits;
 }
-export const defaultPersistRoster = async (operation) => {
+export const defaultPersistRoster = async (operation, check) => {
     try {
         let outcome;
         await mutateConfigFile({
@@ -85,6 +97,7 @@ export const defaultPersistRoster = async (operation) => {
                     throw new Error(planned.error);
                 }
                 if (planned.changed) {
+                    check?.(planned.members);
                     pluginConfig.members = planned.members;
                     entry.config = pluginConfig;
                     entries["oc-family-pack"] = entry;
@@ -122,7 +135,7 @@ export function directoryMethod(config, _raw) {
 /** Validate an edit or an id migration, returning a config patch or saving when save: true is requested. */
 export function directoryPreviewMethod(config, raw, deps = {}) {
     const persist = deps.persist ?? defaultPersistRoster;
-    return async ({ params, client, respond }) => {
+    return async ({ params, client, respond, hasCurrentClientAuthority }) => {
         const current = config();
         if (!isRosterParent(current, viewerOf(client, current.accessMode))) {
             respond(true, { ok: false, error: PARENT_ONLY });
@@ -194,6 +207,40 @@ export function directoryPreviewMethod(config, raw, deps = {}) {
             respond(true, { ok: false, error: preview.error });
             return;
         }
+        let check;
+        const newLinks = edits.flatMap((edit) => typeof edit.gatewayProfileId === "string" ? [edit.gatewayProfileId.trim()] : []);
+        if (newLinks.length > 0) {
+            const profiles = await (deps.loadProfiles ?? loadNativeProfiles)().catch(() => undefined);
+            const candidates = Array.isArray(profiles)
+                ? profiles.filter((profile) => isRecord(profile) && profile.id !== "gateway-owner" && !profile.mergedInto)
+                : [];
+            if (!newLinks.every((id) => candidates.some((profile) => profile.id === id))) {
+                respond(true, { ok: false, error: "The selected OpenClaw profile is unavailable. Refresh the profile list and choose again." });
+                return;
+            }
+            const selected = candidates.filter((candidate) => newLinks.includes(String(candidate.id)));
+            check = (members) => {
+                if (hasCurrentClientAuthority && !hasCurrentClientAuthority()) {
+                    throw new Error("Gateway access changed. Sign in again and retry.");
+                }
+                const plannedMembers = parseConfig({ members }).members;
+                for (const profile of selected) {
+                    // A mutable display name can flag ambiguity, but cannot establish identity.
+                    const names = [profile.displayName, ...(Array.isArray(profile.emails) ? profile.emails : [])]
+                        .flatMap((name) => typeof name === "string" ? [name.trim().toLowerCase()] : []);
+                    if (plannedMembers.some((member) => member.profileId && names.includes(member.profileId) && member.gatewayProfileId !== profile.id)) {
+                        throw new Error("The selected OpenClaw profile may already belong to another roster login. Check those cards before linking it.");
+                    }
+                }
+            };
+            try {
+                check(preview.members);
+            }
+            catch (error) {
+                respond(true, { ok: false, error: error instanceof Error ? error.message : "The profile could not be linked." });
+                return;
+            }
+        }
         if (!save) {
             respond(true, {
                 ok: true,
@@ -214,7 +261,7 @@ export function directoryPreviewMethod(config, raw, deps = {}) {
             });
             return;
         }
-        const saved = await persist(edits);
+        const saved = await persist(edits, check);
         if (!saved.ok) {
             respond(true, { ok: false, error: saved.error });
             return;

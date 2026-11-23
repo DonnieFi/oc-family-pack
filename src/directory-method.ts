@@ -3,6 +3,7 @@
 // the validated members list to the Gateway config.
 
 import { mutateConfigFile } from "openclaw/plugin-sdk/config-mutation";
+import { dispatchGatewayMethod } from "openclaw/plugin-sdk/gateway-method-runtime";
 import { ErrorCodes, errorShape, type GatewayRequestHandlerOptions } from "openclaw/plugin-sdk/gateway-runtime";
 import { DELIVERY_NOTE, DIRECTORY_MIGRATED_NOTE, DIRECTORY_PERSISTENCE, DIRECTORY_SAVED_NOTE, RESERVATION_NOTE } from "./directory-contract.ts";
 import { directoryMembers, planDirectoryEdit, planMaterialize, MATERIALIZE_INTRO, type DirectoryEdit } from "./directory.ts";
@@ -12,14 +13,22 @@ import type { Config } from "./types.ts";
 import { isRosterParent } from "./visibility.ts";
 import { viewerOf } from "./week-method.ts";
 
-type Respond = Pick<GatewayRequestHandlerOptions, "params" | "respond"> & Partial<Pick<GatewayRequestHandlerOptions, "client">>;
-export type PersistRosterFn = (edits: readonly DirectoryEdit[] | "materialize") => Promise<
+type Respond = Pick<GatewayRequestHandlerOptions, "params" | "respond"> &
+  Partial<Pick<GatewayRequestHandlerOptions, "client" | "hasCurrentClientAuthority">>;
+export type PersistRosterFn = (edits: readonly DirectoryEdit[] | "materialize", check?: (members: unknown[]) => void) => Promise<
   { ok: true; changed: boolean; members: unknown[]; patch: string } | { ok: false; error: string }
 >;
 export type DirectoryPreviewDeps = {
   persist?: PersistRosterFn;
   onSaved?: (members: unknown[]) => void;
+  loadProfiles?: () => Promise<unknown>;
 };
+
+async function loadNativeProfiles(): Promise<unknown> {
+  const response = await dispatchGatewayMethod("users.list", {});
+  if (!response.ok) return undefined;
+  return isRecord(response.payload) ? response.payload.profiles : undefined;
+}
 
 const PARENT_ONLY = "People is for a parent. This sign-in can read the week, and it cannot see emails, phone numbers, Discord ids, or devices.";
 
@@ -35,7 +44,7 @@ function rawRoster(raw: unknown): { members: unknown[]; calendars: unknown[] } {
   };
 }
 
-const EDIT_KEYS = ["id", "displayName", "login", "email", "phone", "discordId", "aliases", "lobsterPreferences", "role", "color", "reminders", "devices"] as const;
+const EDIT_KEYS = ["id", "create", "displayName", "login", "gatewayProfileId", "email", "phone", "discordId", "aliases", "lobsterPreferences", "role", "color", "reminders", "devices"] as const;
 
 function parseEdits(value: unknown): DirectoryEdit[] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -46,11 +55,15 @@ function parseEdits(value: unknown): DirectoryEdit[] | undefined {
       if (!EDIT_KEYS.includes(key as (typeof EDIT_KEYS)[number])) return undefined;
     }
     const edit: DirectoryEdit = { id: entry.id };
+    if ("create" in entry) {
+      if (entry.create !== true) return undefined;
+      edit.create = true;
+    }
     if ("displayName" in entry) {
       if (typeof entry.displayName !== "string" || entry.displayName.trim() === "") return undefined;
       edit.displayName = entry.displayName;
     }
-    for (const key of ["login", "email", "phone", "discordId", "role", "color", "reminders"] as const) {
+    for (const key of ["login", "gatewayProfileId", "email", "phone", "discordId", "role", "color", "reminders"] as const) {
       if (!(key in entry)) continue;
       const field = entry[key];
       if (field !== null && typeof field !== "string") return undefined;
@@ -73,7 +86,7 @@ function parseEdits(value: unknown): DirectoryEdit[] | undefined {
   return edits;
 }
 
-export const defaultPersistRoster: PersistRosterFn = async (operation) => {
+export const defaultPersistRoster: PersistRosterFn = async (operation, check) => {
   try {
     let outcome: { ok: true; changed: boolean; members: unknown[]; patch: string } | { ok: false; error: string } | undefined;
     await mutateConfigFile({
@@ -94,6 +107,7 @@ export const defaultPersistRoster: PersistRosterFn = async (operation) => {
           throw new Error(planned.error);
         }
         if (planned.changed) {
+          check?.(planned.members);
           pluginConfig.members = planned.members;
           entry.config = pluginConfig;
           entries["oc-family-pack"] = entry;
@@ -132,7 +146,7 @@ export function directoryMethod(config: () => Config, _raw: () => unknown) {
 /** Validate an edit or an id migration, returning a config patch or saving when save: true is requested. */
 export function directoryPreviewMethod(config: () => Config, raw: () => unknown, deps: DirectoryPreviewDeps = {}) {
   const persist = deps.persist ?? defaultPersistRoster;
-  return async ({ params, client, respond }: Respond): Promise<void> => {
+  return async ({ params, client, respond, hasCurrentClientAuthority }: Respond): Promise<void> => {
     const current = config();
     if (!isRosterParent(current, viewerOf(client, current.accessMode))) {
       respond(true, { ok: false, error: PARENT_ONLY });
@@ -206,6 +220,40 @@ export function directoryPreviewMethod(config: () => Config, raw: () => unknown,
       respond(true, { ok: false, error: preview.error });
       return;
     }
+    let check: ((members: unknown[]) => void) | undefined;
+    const newLinks = edits.flatMap((edit) => typeof edit.gatewayProfileId === "string" ? [edit.gatewayProfileId.trim()] : []);
+    if (newLinks.length > 0) {
+      const profiles = await (deps.loadProfiles ?? loadNativeProfiles)().catch(() => undefined);
+      const candidates = Array.isArray(profiles)
+        ? profiles.filter((profile): profile is Record<string, unknown> =>
+          isRecord(profile) && profile.id !== "gateway-owner" && !profile.mergedInto)
+        : [];
+      if (!newLinks.every((id) => candidates.some((profile) => profile.id === id))) {
+        respond(true, { ok: false, error: "The selected OpenClaw profile is unavailable. Refresh the profile list and choose again." });
+        return;
+      }
+      const selected = candidates.filter((candidate) => newLinks.includes(String(candidate.id)));
+      check = (members) => {
+        if (hasCurrentClientAuthority && !hasCurrentClientAuthority()) {
+          throw new Error("Gateway access changed. Sign in again and retry.");
+        }
+        const plannedMembers = parseConfig({ members }).members;
+        for (const profile of selected) {
+          // A mutable display name can flag ambiguity, but cannot establish identity.
+          const names = [profile.displayName, ...(Array.isArray(profile.emails) ? profile.emails : [])]
+            .flatMap((name) => typeof name === "string" ? [name.trim().toLowerCase()] : []);
+          if (plannedMembers.some((member) => member.profileId && names.includes(member.profileId) && member.gatewayProfileId !== profile.id)) {
+            throw new Error("The selected OpenClaw profile may already belong to another roster login. Check those cards before linking it.");
+          }
+        }
+      };
+      try {
+        check(preview.members);
+      } catch (error) {
+        respond(true, { ok: false, error: error instanceof Error ? error.message : "The profile could not be linked." });
+        return;
+      }
+    }
     if (!save) {
       respond(true, {
         ok: true,
@@ -226,7 +274,7 @@ export function directoryPreviewMethod(config: () => Config, raw: () => unknown,
       });
       return;
     }
-    const saved = await persist(edits);
+    const saved = await persist(edits, check);
     if (!saved.ok) {
       respond(true, { ok: false, error: saved.error });
       return;

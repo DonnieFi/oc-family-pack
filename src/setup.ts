@@ -163,15 +163,6 @@ function membersStep(host: unknown, members: unknown[]): SetupStep {
   if (!members.some((member) => rosterRole(member) === "parent")) return { name, done: false, next: ADD_PARENT };
   const gateway = record(host).gateway;
   if (detectAccess(gateway).mode === "lan") {
-    const noLogin = members.filter((member) => loginOf(member) === undefined).map(nameOf);
-    if (noLogin.length > 0) {
-      const who = named(noLogin);
-      return {
-        name,
-        done: false,
-        next: `${who} ${noLogin.length === 1 ? "has" : "have"} no Control UI login, so ${noLogin.length === 1 ? "that person" : "they"} can't sign in. Add \`login\` to ${noLogin.length === 1 ? "that member" : "those members"} in the plugin config (or preview the edit on the People page), then re-run \`openclaw family access lan\` with everyone.`,
-      };
-    }
     const list = record(record(record(gateway).auth).trustedProxy).allowUsers;
     const allowed = Array.isArray(list) ? list.map((user) => String(user).toLowerCase()) : [];
     const locked = members.flatMap((member) => loginOf(member) ?? []).filter((id) => !allowed.includes(id));

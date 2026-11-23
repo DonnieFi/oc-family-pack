@@ -1106,6 +1106,7 @@ async function main(): Promise<void> {
   await calendarWatch(env, configPath, port, logPath, garbage.url);
   await scheduleTool(configPath, port);
   await garbageTool(port, garbage);
+  await peopleProfileLink(port);
 }
 
 /** Stand-ins for what a real household fills in, used only on this isolated Gateway. */
@@ -1608,6 +1609,41 @@ async function calendarWatch(env: NodeJS.ProcessEnv, configPath: string, port: n
     fail(step, `gog was called as ${JSON.stringify([first, second])}`);
   }
   note(`a signed-in page got calendar-changed and calendar-checked ${Math.round((Date.now() - started) / 1000)}s after start; the second poll asked gog for edits since the baseline`, step);
+}
+
+async function peopleProfileLink(port: number): Promise<void> {
+  const step: Step = "household sign-in";
+  const riley = await proxiedSession(port, "riley", [["users.self", {}]]);
+  const profile = riley[1]?.payload?.profile as { id?: string } | undefined;
+  if (!riley[1]?.ok || !profile?.id) fail(step, "could not read the synthetic profile for the People link");
+  const role = async () => {
+    const frame = (await proxiedSession(port, "riley", [[WEEK_METHOD, {}]]))[1];
+    if (!frame?.ok) fail(step, "could not read Riley's week during the People link check");
+    return (frame.payload?.viewer as { role?: string } | undefined)?.role;
+  };
+  if (await role() !== "guest") fail(step, "Riley got a roster role before being linked");
+  const link = async (gatewayProfileId: string, save: boolean) =>
+    (await proxiedSession(port, "alex", [[DIRECTORY_PREVIEW_METHOD, {
+      op: "edit", edits: [{ id: "person-test-link", create: true, displayName: "Riley", role: "kid", gatewayProfileId }], save,
+    }]]))[1];
+  const unknown = await link("missing-smoke-profile", false);
+  if (!unknown?.ok || unknown.payload?.ok !== false || !String(unknown.payload.error).includes("unavailable")) {
+    fail(step, "People did not reject the unknown native profile");
+  }
+  const saved = await link(profile.id, true);
+  const members = saved?.payload?.members;
+  if (!saved?.ok || saved.payload?.saved !== true || !Array.isArray(members) ||
+      !members.some((member) => member?.id === "person-test-link" && member?.gatewayProfileId === profile.id)) {
+    fail(step, `People did not save the verified native profile link: ${JSON.stringify(saved)}`);
+  }
+  if (await role() !== "kid") fail(step, "Riley's signed-in week did not use the linked roster role");
+  const unlinked = (await proxiedSession(port, "alex", [[DIRECTORY_PREVIEW_METHOD, {
+    op: "edit", edits: [{ id: "person-test-link", gatewayProfileId: null }], save: true,
+  }]]))[1];
+  if (!unlinked?.ok || unlinked.payload?.saved !== true || await role() !== "guest") {
+    fail(step, "removing the roster link did not return Riley to the guest view");
+  }
+  note("People rejected an unknown profile and used the new roster link for a signed-in week until it was removed", step);
 }
 
 /**

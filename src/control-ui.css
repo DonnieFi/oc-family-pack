@@ -1305,7 +1305,7 @@
 
 /* People overview and profile */
 .ocfp-people-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
-.ocfp-people-list[hidden], .ocfp-people-form[hidden], .ocfp-people-actions[hidden], .ocfp-people-back[hidden], .ocfp-people-title[hidden] { display: none; }
+.ocfp-people-list[hidden], .ocfp-people-form[hidden], .ocfp-people-actions[hidden], .ocfp-people-back[hidden], .ocfp-people-add[hidden], .ocfp-people-title[hidden] { display: none; }
 .ocfp-person { --ocfp-person-color: var(--family-warm); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; border-radius: 14px; padding: 18px; }
 .ocfp-person:hover, .ocfp-person:focus-visible { border-color: var(--ocfp-person-color); }
 .ocfp-people-avatar { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; color: var(--text-strong); background: color-mix(in oklab, var(--ocfp-person-color) 30%, var(--card)); font: 24px var(--family-display); }

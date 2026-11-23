@@ -149,6 +149,14 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
     let profileOpen = false;
     let saving = false;
     const edited = new Set<number>();
+    const newMembers = new Set<string>();
+    const linkEdits = new Map<string, string | null>();
+    const editWithLink = (member: DirectoryMember) => {
+      const edit = editFrom(member);
+      if (newMembers.has(member.id)) edit.create = true;
+      if (linkEdits.has(member.id)) edit.gatewayProfileId = linkEdits.get(member.id);
+      return edit;
+    };
     const list = h("div", { class: "ocfp-people-list", role: "list" });
     const form = h("div", { class: "ocfp-people-form" });
     const result = h("pre", { class: "ocfp-patch", "aria-label": "Config patch" });
@@ -159,6 +167,48 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
         form.append(h("p", { class: "ocfp-people-note" }, "No one is in the family yet. Add someone with `openclaw family setup`."));
         return;
       }
+      const profileStatus = h("p", { class: "ocfp-people-note", role: "status" });
+      const chooseProfile = h("button", { type: "button", class: "ocfp-btn", disabled: demo }, "Choose OpenClaw profile") as HTMLButtonElement;
+      const profilePicker = h("div", { class: "ocfp-field" });
+      const selectedLink = () => linkEdits.has(member.id) ? linkEdits.get(member.id) : member.gatewayProfileId;
+      profileStatus.textContent = selectedLink() ? "OpenClaw profile connected." : member.login ? "Proxy login configured." : "Roster only.";
+      chooseProfile.addEventListener("click", async () => {
+        chooseProfile.disabled = true;
+        profileStatus.textContent = "Loading OpenClaw profiles…";
+        try {
+          const response = await host.request<{ profiles?: { id?: string; displayName?: string; emails?: string[]; mergedInto?: string }[] }>("users.list", {});
+          if (!profilePicker.isConnected || disposed) return;
+          const link = selectedLink();
+          const select = document.createElement("select");
+          select.setAttribute("aria-label", "OpenClaw profile");
+          select.append(h("option", { value: "" }, member.login ? "No native profile" : "Roster only"));
+          const profiles = response.profiles ?? [];
+          for (const profile of profiles) {
+            if (typeof profile.id !== "string" || typeof profile.displayName !== "string" || profile.id === "gateway-owner" || profile.mergedInto) continue;
+            const used = members.some((other) => other.id !== member.id &&
+              (linkEdits.has(other.id) ? linkEdits.get(other.id) : other.gatewayProfileId) === profile.id);
+            const duplicateName = profiles.some((other) => other.id !== profile.id && other.displayName === profile.displayName);
+            const label = duplicateName ? `${profile.displayName} (${profile.emails?.[0] ?? profile.id})` : profile.displayName;
+            if (!used) select.append(h("option", { value: profile.id }, label));
+          }
+          if (link && !Array.from(select.options).some((option) => option.value === link)) {
+            select.append(h("option", { value: link }, "Current profile"));
+          }
+          select.value = link ?? "";
+          select.disabled = saving;
+          select.addEventListener("change", () => {
+            linkEdits.set(member.id, select.value || null);
+            edited.add(selected);
+            profileStatus.textContent = "Save changes to update the roster link.";
+          });
+          profilePicker.replaceChildren(select);
+          profileStatus.textContent = "If the person is missing, have them sign in to OpenClaw, then reload the list.";
+        } catch {
+          if (!disposed && profilePicker.isConnected) profileStatus.textContent = "Profiles could not load. Try again.";
+        } finally {
+          chooseProfile.disabled = saving;
+        }
+      });
       form.append(
         h("p", { class: "ocfp-person-id" }, `Id ${member.id}`),
         h(
@@ -217,6 +267,7 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
         const key = label.querySelector("input, select")?.getAttribute("aria-label");
         (key === "Email" || key === "Phone" ? contact : key === "Login" || key === "Discord id" || key === "Reminders" ? signIn : identity).append(label);
       }
+      signIn.append(chooseProfile, profilePicker, profileStatus);
       const chosen = applyLobsterChoices(member.lobsterPreferences);
       const unknown = (member.lobsterPreferences ?? []).filter((id, index, all) => !LOBSTERS.some((lobster) => lobster.id === id) && all.indexOf(id) === index);
       const bannerArt = h("div", { class: "ocfp-profile-banner-art" });
@@ -325,7 +376,7 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
             avatar,
             h("strong", {}, member.displayName), h("span", { class: "ocfp-people-role" }, member.role),
             h("span", { class: "ocfp-people-note" }, companion ? companion.name : (member.aliases ?? []).join(", ") || "No aliases"),
-            h("span", { class: "ocfp-people-status" }, member.login ? "Sign-in ready" : "Sign-in needed", " · ", member.discordId ? "Discord linked" : "No Discord", ` · ${member.devices.length} devices`),
+            h("span", { class: "ocfp-people-status" }, member.gatewayProfileId ? "OpenClaw connected" : member.login ? "Proxy login configured" : "Roster only", " · ", member.discordId ? "Discord linked" : "No Discord", ` · ${member.devices.length} devices`),
             ...(edited.has(index) ? [h("span", { class: "ocfp-people-dirty" }, "Edited")] : []));
           if (member.color) button.style.setProperty("--ocfp-person-color", member.color);
           button.addEventListener("click", () => {
@@ -340,8 +391,31 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
       );
     };
     const back = h("button", { type: "button", class: "ocfp-btn ocfp-people-back" }, "← Everyone");
+    const add = h("button", { type: "button", class: "ocfp-btn ocfp-people-add", disabled: demo }, "Add person");
+    add.addEventListener("click", () => {
+      const bytes = crypto.getRandomValues(new Uint8Array(16));
+      const id = `person-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+      selected = members.length;
+      members.push({ id, displayName: "", role: "guest", reminders: "off", devices: [] });
+      newMembers.add(id);
+      edited.add(selected);
+      profileOpen = true;
+      paintForm();
+      syncView();
+      form.querySelector<HTMLInputElement>('input[aria-label="Name"]')?.focus();
+    });
     back.addEventListener("click", () => {
       if (saving) return;
+      const member = members[selected];
+      if (member && newMembers.has(member.id) && !member.displayName.trim()) {
+        newMembers.delete(member.id);
+        linkEdits.delete(member.id);
+        members.splice(selected, 1);
+        const remaining = [...edited].filter((index) => index !== selected);
+        edited.clear();
+        for (const index of remaining) edited.add(index > selected ? index - 1 : index);
+        selected = 0;
+      }
       profileOpen = false;
       paintList();
       syncView();
@@ -350,6 +424,7 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
     const actions = h("div", { class: "ocfp-people-actions" });
     const syncView = () => {
       list.hidden = profileOpen;
+      add.hidden = profileOpen;
       form.hidden = !profileOpen;
       back.hidden = !profileOpen;
       actions.hidden = !profileOpen;
@@ -385,7 +460,7 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
       const targets = edited.size > 0 ? [...edited] : [selected];
       const edits = targets.flatMap((index) => {
         const member = members[index];
-        return member === undefined ? [] : [editFrom(member)];
+        return member === undefined ? [] : [editWithLink(member)];
       });
       if (edits.length === 0) return;
       setSaving(true);
@@ -401,6 +476,8 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
           if (Array.isArray(body?.members)) {
             members.splice(0, members.length, ...body.members.map(memberDraft));
             edited.clear();
+            linkEdits.clear();
+            newMembers.clear();
             paintList();
             paintForm();
           }
@@ -417,7 +494,7 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
       const targets = edited.size > 0 ? [...edited] : [selected];
       const edits = targets.flatMap((index) => {
         const member = members[index];
-        return member === undefined ? [] : [editFrom(member)];
+        return member === undefined ? [] : [editWithLink(member)];
       });
       if (edits.length === 0) return;
       result.textContent = `Checking ${edits.length} ${edits.length === 1 ? "card" : "cards"}…`;
@@ -462,6 +539,7 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
       h("p", { class: "ocfp-people-note" }, persistence),
       h("p", { class: "ocfp-people-note" }, reservation),
       ...(demo ? [h("p", { class: "ocfp-people-note" }, "Demo mode shows the sample family. Turn demo off before previewing a roster patch.")] : []),
+      add,
       list,
       back,
       form,

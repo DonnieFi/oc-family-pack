@@ -6,9 +6,16 @@ The person is the record you add. `openclaw family setup` prints the next step a
 
 Each person is a member in `plugins.entries.oc-family-pack.config.members`.
 
+A parent can add a roster-only person in **People → Add person**. To connect
+someone who already signs in, open their card, choose their OpenClaw profile,
+and save. If they have yet to sign in, use your OpenClaw sign-in or invitation
+flow, then reopen the picker after their first sign-in. To remove the link,
+select **Roster only** or **No native profile** and save. OpenClaw manages access
+grants and conversations separately.
+
 - **name** (required). What the family calls this person. `displayName` is still accepted. When setup adds someone, it sets this to the username with the first letter capitalized. `riley` becomes Riley.
 - **id** (optional). The internal key. Calendar owners, briefs, reminders and Today use it. Omitted means the `profileId`, or else a lower-case slug of the name (`Riley S` becomes `riley-s`). Two people with the same id fail the config, and the error names both.
-- **profileId** (optional). Only for someone who signs in to the Control UI. Lower case. This is the trusted-proxy sign-in username, the `X-Forwarded-User` value. It is separate from the Gateway's internal profile id. The page matches it exactly. Someone without one can't open the Family page as themselves. It is never made up from the name. A member id from the browser is not identity.
+- **profileId** (optional). The lower-case trusted-proxy sign-in username, matched exactly against the `X-Forwarded-User` identity attested by the Gateway. A member can also connect a native OpenClaw profile from People. Family Pack stores that separate link as `gatewayProfileId`.
 - **aliases** (optional). The names the family actually uses in chat, such as `Mom`, `Dad`, or `Aunt Jo`. They are for addressing only. They never grant a page or Discord identity. An alias cannot collide with another person's id, login, or alias.
 - **role** (optional). `parent`, `kid`, or `guest`. Omitted means `guest`. At least one parent is required before the Members step is done.
 - **color** (optional). A CSS color, such as `#3b82f6`. The page uses it. The setup command does not set it.
@@ -100,7 +107,7 @@ Setup checks the shape and does not repeat a bad address. The checklist and the 
 
    The same place in the README example is `{ lat: 45.42, lon: -75.7, label: "Home" }`.
 
-4. **Members.** Done when there is at least one parent. In LAN mode every member must also have a `login`, be in `allowUsers`, and have Gateway scopes that match their roster role. If someone is missing, setup names them and prints the access command. That command names every member and everyone already allowed. A member without an explicit `id` gets a warning: run `openclaw family setup --materialize-ids` before a rename.
+4. **Members.** Done when there is at least one parent. In LAN mode, setup checks that configured proxy logins appear in `allowUsers` with scopes that match their roster roles. People without a proxy login can stay roster-only or connect a native OpenClaw profile. A member without an explicit `id` gets a warning to run `openclaw family setup --materialize-ids` before a rename.
 
 5. **Calendars.** Next is `openclaw family gog`. The steps are below.
 

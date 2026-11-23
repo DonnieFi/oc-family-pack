@@ -685,12 +685,15 @@
     "additionalProperties": false
   },
   "controlUi": {
-    "entry": "dist/control-ui/fa65a3bd806f32d038acd42b136b64167aedb1916a08b055e05ec7d912f0bee0/index.js",
+    "entry": "dist/control-ui/4c4d8a8a72a3c4d4df51237d540482c2bcfdeb036df2865629e4328c3bb50713/index.js",
     "styles": [
-      "dist/control-ui/fa65a3bd806f32d038acd42b136b64167aedb1916a08b055e05ec7d912f0bee0/index.css"
+      "dist/control-ui/4c4d8a8a72a3c4d4df51237d540482c2bcfdeb036df2865629e4328c3bb50713/index.css"
     ]
   },
   "contracts": {
+    "gatewayMethodDispatch": [
+      "authenticated-request"
+    ],
     "tools": [
       "garbage_schedule",
       "family_members",

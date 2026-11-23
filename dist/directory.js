@@ -101,10 +101,14 @@ export function planDirectoryEdit(rawMembers, edits, calendars = []) {
     let changed = false;
     for (const edit of edits) {
         const hits = matchMemberIndexes(working, edit.id);
-        if (hits.length !== 1) {
+        if (edit.create && (hits.length !== 0 || edit.displayName === undefined)) {
+            return { ok: false, error: "That roster ID is already in use or the new person has no name." };
+        }
+        if (!edit.create && hits.length !== 1) {
             return { ok: false, error: hits.length === 0 ? "That person is not in the family." : AMBIGUOUS_REFERENCE(edit.id.trim().toLowerCase()) };
         }
-        const current = working[hits[0]];
+        const index = edit.create ? working.length : hits[0];
+        const current = edit.create ? { id: edit.id } : working[index];
         if (!isRecord(current))
             return { ok: false, error: "That person is not in the family." };
         const next = { ...current };
@@ -135,6 +139,8 @@ export function planDirectoryEdit(rawMembers, edits, calendars = []) {
                     next.login = edit.login;
             }
         }
+        if (edit.gatewayProfileId !== undefined)
+            applyOptional(next, "gatewayProfileId", edit.gatewayProfileId);
         if (edit.aliases !== undefined) {
             const aliases = edit.aliases.map((alias) => alias.trim().toLowerCase()).filter((alias) => alias !== "");
             if (aliases.length === 0)
@@ -165,7 +171,7 @@ export function planDirectoryEdit(rawMembers, edits, calendars = []) {
             next.devices = edit.devices;
         if (JSON.stringify(next) !== JSON.stringify(current))
             changed = true;
-        working[hits[0]] = next;
+        working[index] = next;
     }
     try {
         parseConfig({ members: working, calendars });
