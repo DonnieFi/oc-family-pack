@@ -74,6 +74,39 @@ export function editFrom(member) {
 }
 const RESTRICTED = "Contact cards are for a parent. This sign-in can read the week, and it cannot see emails, phone numbers, Discord ids, or devices.";
 /**
+ * Extracts online OpenClaw profile IDs from a viewer-scoped `system-presence`
+ * response. Never infers online status from device/host/channel entries or
+ * non-profile identities.
+ */
+export function onlineProfileIds(response) {
+    const rows = Array.isArray(response)
+        ? response
+        : response && typeof response === "object" && Array.isArray(response.entries)
+            ? response.entries
+            : [];
+    const ids = new Set();
+    for (const row of rows) {
+        if (!row || typeof row !== "object")
+            continue;
+        const user = row.user;
+        if (!user || typeof user !== "object")
+            continue;
+        const id = user.id;
+        if (typeof id !== "string" || !id.trim() || id === "gateway-owner")
+            continue;
+        const identity = user.identity;
+        if (identity !== undefined) {
+            if (!identity || typeof identity !== "object")
+                continue;
+            const kind = identity.kind;
+            if (kind !== undefined && kind !== "profile")
+                continue;
+        }
+        ids.add(id.trim());
+    }
+    return ids;
+}
+/**
  * People. A parent loads the roster, edits one card, and previews the config
  * patch. A kid sees the restriction and the page does not request the roster.
  */
@@ -118,9 +151,14 @@ export function mountPeoplePage(container, initial) {
         let selected = 0;
         let profileOpen = false;
         let saving = false;
+        let onlineProfiles = new Set();
         const edited = new Set();
         const newMembers = new Set();
         const linkEdits = new Map();
+        const isOnline = (member) => {
+            const link = linkEdits.has(member.id) ? linkEdits.get(member.id) : member.gatewayProfileId;
+            return Boolean(link && onlineProfiles.has(link));
+        };
         const editWithLink = (member) => {
             const edit = editFrom(member);
             if (newMembers.has(member.id))
@@ -143,7 +181,11 @@ export function mountPeoplePage(container, initial) {
             const chooseProfile = h("button", { type: "button", class: "ocfp-btn", disabled: demo }, "Choose OpenClaw profile");
             const profilePicker = h("div", { class: "ocfp-field" });
             const selectedLink = () => linkEdits.has(member.id) ? linkEdits.get(member.id) : member.gatewayProfileId;
-            profileStatus.textContent = selectedLink() ? "OpenClaw profile connected." : member.login ? "Proxy login configured." : "Roster only.";
+            profileStatus.textContent = selectedLink()
+                ? (isOnline(member) ? "OpenClaw profile connected · Online." : "OpenClaw profile connected.")
+                : member.login
+                    ? "Proxy login configured."
+                    : "Roster only.";
             chooseProfile.addEventListener("click", async () => {
                 chooseProfile.disabled = true;
                 profileStatus.textContent = "Loading OpenClaw profiles…";
@@ -321,7 +363,8 @@ export function mountPeoplePage(container, initial) {
                 const avatar = h("span", { class: "ocfp-people-avatar", "aria-hidden": "true" }, member.displayName.slice(0, 1).toUpperCase());
                 if (companion)
                     avatar.append(lobsterArt(companion));
-                const button = h("button", { type: "button", class: "ocfp-person", "aria-label": `Open ${member.displayName}'s profile` }, avatar, h("strong", {}, member.displayName), h("span", { class: "ocfp-people-role" }, member.role), h("span", { class: "ocfp-people-note" }, companion ? companion.name : (member.aliases ?? []).join(", ") || "No aliases"), h("span", { class: "ocfp-people-status" }, member.gatewayProfileId ? "OpenClaw connected" : member.login ? "Proxy login configured" : "Roster only", " · ", member.discordId ? "Discord linked" : "No Discord", ` · ${member.devices.length} devices`), ...(edited.has(index) ? [h("span", { class: "ocfp-people-dirty" }, "Edited")] : []));
+                const online = isOnline(member);
+                const button = h("button", { type: "button", class: "ocfp-person", "aria-label": `Open ${member.displayName}'s profile` }, avatar, h("strong", {}, member.displayName), ...(online ? [h("span", { class: "ocfp-presence-dot", role: "img", "aria-label": "Online", title: "Online in OpenClaw" })] : []), h("span", { class: "ocfp-people-role" }, member.role), h("span", { class: "ocfp-people-note" }, companion ? companion.name : (member.aliases ?? []).join(", ") || "No aliases"), h("span", { class: "ocfp-people-status" }, member.gatewayProfileId ? "OpenClaw connected" : member.login ? "Proxy login configured" : "Roster only", " · ", member.discordId ? "Discord linked" : "No Discord", ` · ${member.devices.length} devices`), ...(edited.has(index) ? [h("span", { class: "ocfp-people-dirty" }, "Edited")] : []));
                 if (member.color)
                     button.style.setProperty("--ocfp-person-color", member.color);
                 button.addEventListener("click", () => {
@@ -486,6 +529,18 @@ export function mountPeoplePage(container, initial) {
         });
         paintList();
         paintForm();
+        if (!demo && host.connection.connected && members.some((member) => Boolean(member.gatewayProfileId))) {
+            void host.request("system-presence", {}).then((presence) => {
+                if (disposed || !host.connection.connected)
+                    return;
+                onlineProfiles = onlineProfileIds(presence);
+                paintList();
+                paintForm();
+            }, () => {
+                if (!disposed)
+                    onlineProfiles = new Set();
+            });
+        }
         actions.append(save, preview, migrate);
         syncView();
         section.replaceChildren(h("div", { class: "ocfp-masthead" }, h("div", {}, h("p", { class: "ocfp-kicker" }, "Family · a place for everyone"), h("h2", { class: "ocfp-title" }, "People"), h("p", { class: "ocfp-subtitle" }, "All your people, together in one place."))), h("p", { class: "ocfp-people-note" }, delivery), h("p", { class: "ocfp-people-note" }, persistence), h("p", { class: "ocfp-people-note" }, reservation), ...(demo ? [h("p", { class: "ocfp-people-note" }, "Demo mode shows the sample family. Turn demo off before previewing a roster patch.")] : []), add, list, back, form, actions, result);

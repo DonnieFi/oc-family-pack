@@ -1400,6 +1400,16 @@
   cursor: default;
 }
 
+.ocfp-presence-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #22c55e 22%, transparent);
+  vertical-align: middle;
+}
+
 @container ocfp (max-width: 760px) {
   .ocfp-people-form { grid-template-columns: 1fr; }
   .ocfp-profile-banner { flex-direction: column; align-items: flex-start; padding: 14px; }

@@ -3,7 +3,7 @@ import { afterEach, test } from "node:test";
 import { parseHTML } from "linkedom";
 import type { ControlUiHost, ControlUiViewContext } from "openclaw/plugin-sdk/control-ui";
 import { DIRECTORY_METHOD, DIRECTORY_PREVIEW_METHOD } from "./directory-contract.ts";
-import { mountPeoplePage } from "./directory-ui.ts";
+import { mountPeoplePage, onlineProfileIds } from "./directory-ui.ts";
 
 const mounted: AbortController[] = [];
 afterEach(() => {
@@ -215,4 +215,48 @@ test("Save changes sends save: true, disables controls while in flight, and refr
   assert.equal(page.container.querySelector(".ocfp-patch")?.textContent, "Saved roster changes to the Gateway config.");
   assert.match(page.container.querySelector(".ocfp-profile-banner")?.textContent ?? "", /Riley Updated’s space/);
   assert.equal(page.container.querySelector(".ocfp-people-dirty"), null);
+});
+
+test("onlineProfileIds extracts only profile-linked presence entries and ignores devices, non-profiles, and invalid data", () => {
+  assert.deepEqual(
+    [...onlineProfileIds([
+      { text: "host", user: { id: "profile-alex", identity: { kind: "profile" } } },
+      { text: "owner", user: { id: "gateway-owner", identity: { kind: "profile" } } },
+      { text: "device", user: { id: "dev-1", identity: { kind: "device" } } },
+      { text: "no-user" },
+      { text: "plain-id", user: { id: "profile-riley" } },
+    ])],
+    ["profile-alex", "profile-riley"],
+  );
+  assert.deepEqual([...onlineProfileIds(null)], []);
+  assert.deepEqual([...onlineProfileIds({ entries: [{ text: "x", user: { id: "profile-sam" } }] })], ["profile-sam"]);
+});
+
+test("People shows an accessible green dot only for linked online profiles and fails closed when presence is denied", async () => {
+  const alex = { ...RILEY, id: "person-alex", displayName: "Alex", role: "parent" as const, gatewayProfileId: "profile-alex" };
+  const riley = { ...RILEY, id: "person-riley", displayName: "Riley", role: "kid" as const, gatewayProfileId: "profile-riley" };
+  const sam = { ...RILEY, id: "person-sam", displayName: "Sam", role: "guest" as const };
+
+  const onlinePage = mount(true, async (method) => {
+    if (method === DIRECTORY_METHOD) return { members: [alex, riley, sam] };
+    if (method === "system-presence") return [{ text: "Alex online", user: { id: "profile-alex", identity: { kind: "profile" } } }];
+    throw new Error(method);
+  });
+  await flush();
+  const cards = [...onlinePage.container.querySelectorAll<HTMLButtonElement>(".ocfp-person")];
+  assert.equal(cards.length, 3);
+  const alexDot = cards[0]?.querySelector(".ocfp-presence-dot");
+  assert.ok(alexDot);
+  assert.equal(alexDot?.getAttribute("role"), "img");
+  assert.equal(alexDot?.getAttribute("aria-label"), "Online");
+  assert.equal(cards[1]?.querySelector(".ocfp-presence-dot"), null);
+  assert.equal(cards[2]?.querySelector(".ocfp-presence-dot"), null);
+
+  const deniedPage = mount(true, async (method) => {
+    if (method === DIRECTORY_METHOD) return { members: [alex] };
+    if (method === "system-presence") throw new Error("missing scope");
+    throw new Error(method);
+  });
+  await flush();
+  assert.equal(deniedPage.container.querySelector(".ocfp-presence-dot"), null);
 });
