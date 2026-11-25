@@ -148,6 +148,21 @@ test("Household Guest previews a separate invite-only role without replacing hos
               "calendar_delete",
             ],
             deny: ["group:runtime", "group:fs", "group:nodes", "group:automation"],
+            sandbox: {
+              tools: {
+                allow: [
+                  "family_schedule",
+                  "family_today",
+                  "family_members",
+                  "garbage_schedule",
+                  "calendar_create",
+                  "calendar_update",
+                  "calendar_move",
+                  "calendar_delete",
+                ],
+                deny: ["group:runtime", "group:fs", "group:nodes", "group:automation"],
+              },
+            },
           },
         },
       },

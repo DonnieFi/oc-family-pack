@@ -243,21 +243,29 @@ function planHouseholdGuest(gateway: unknown, input: AccessPeople, opts: AccessO
     sandbox: "required",
     modelPolicy: { sourceAgent: agent },
   };
+  const householdTools = [
+    "family_schedule",
+    "family_today",
+    "family_members",
+    "garbage_schedule",
+    "calendar_create",
+    "calendar_update",
+    "calendar_move",
+    "calendar_delete",
+  ];
+  const deniedHostTools = ["group:runtime", "group:fs", "group:nodes", "group:automation"];
   const agentPolicy = {
     sandbox: { mode: "all" },
     tools: {
       profile: "minimal",
-      alsoAllow: [
-        "family_schedule",
-        "family_today",
-        "family_members",
-        "garbage_schedule",
-        "calendar_create",
-        "calendar_update",
-        "calendar_move",
-        "calendar_delete",
-      ],
-      deny: ["group:runtime", "group:fs", "group:nodes", "group:automation"],
+      alsoAllow: householdTools,
+      deny: deniedHostTools,
+      sandbox: {
+        tools: {
+          allow: householdTools,
+          deny: deniedHostTools,
+        },
+      },
     },
   };
   return {
