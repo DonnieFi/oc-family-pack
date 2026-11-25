@@ -116,6 +116,11 @@ test("Household Guest previews a separate invite-only role without replacing hos
     gateway: {
       roles: {
         definitions: {
+          "household-parent": {
+            sessions: { others: "invited" },
+            agents: "*",
+            scopes: ["operator.read", "operator.write", "operator.sessions.write", "operator.approvals"],
+          },
           "household-guest": {
             sessions: { others: "invited" },
             agents: ["household"],

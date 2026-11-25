@@ -197,6 +197,11 @@ function planHouseholdGuest(gateway, input, opts) {
     if ("error" in agents)
         return { ok: false, text: agents.error };
     const agent = agents.ids[0];
+    const parentRole = {
+        sessions: { others: "invited" },
+        agents: "*",
+        scopes: SCOPES.parent,
+    };
     const role = {
         sessions: { others: "invited" },
         agents: [agent],
@@ -231,7 +236,7 @@ function planHouseholdGuest(gateway, input, opts) {
             "An administrator can validate this patch with openclaw config patch --stdin --dry-run. Before applying, check that gateway.roles.definitions.household-guest is still absent. OpenClaw administrators assign the role separately.",
             "",
             json({
-                gateway: { roles: { definitions: { "household-guest": role } } },
+                gateway: { roles: { definitions: { "household-parent": parentRole, "household-guest": role } } },
                 agents: { entries: { [agent]: agentPolicy } },
                 session: { dmScope: "per-account-channel-peer" },
             }),
