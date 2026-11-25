@@ -68,7 +68,7 @@ export async function readEvents(config, shown, span, runGog) {
     return readGogCalendars({ ...config, calendars: shown }, span, runGog);
 }
 /** The `family_schedule` tool: sections a parent scans, or title matches, from the calendars `viewer` may see. */
-export async function buildSchedule(config, input, caller, now, runGog, identity) {
+export async function buildSchedule(config, input, caller, now, runGog, identity, options) {
     const timezone = config.timezone;
     const query = input.query === undefined ? [] : words(input.query);
     // A query with no words would match everything, so it reads as no query and keeps the week cap.
@@ -79,7 +79,8 @@ export async function buildSchedule(config, input, caller, now, runGog, identity
         return { error: lookup ? `days must be ${LOOKUP_DAYS_MAX} or fewer.` : `days must be ${SCHEDULE_DAYS_MAX} or fewer without a query.` };
     }
     const members = config.demo ? DEMO_MEMBERS : config.members;
-    const calendars = config.demo ? DEMO_CALENDARS : config.calendars;
+    const configuredCalendars = config.demo ? DEMO_CALENDARS : config.calendars;
+    const calendars = options?.omitSchool ? configuredCalendars.filter((calendar) => calendar.kind !== "school") : configuredCalendars;
     let member = input.member?.trim();
     if (member?.toLowerCase() === "me") {
         if (caller.me === undefined)

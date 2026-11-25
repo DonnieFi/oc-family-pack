@@ -324,3 +324,16 @@ test("family.week is byte-identical to the 00a3483 build, plus viewer identity, 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("school-off mode (showSchool: false) hides school calendars from the week payload while keeping shared and personal calendars", async () => {
+  const on = await buildWeekPayload(parseConfig({ demo: true, timezone: "America/Toronto" }), "2026-09-28", NOW, noWeather, OWNER);
+  assert.equal(on.calendars.some((c) => c.kind === "school"), true);
+  const off = await buildWeekPayload(parseConfig({ demo: true, timezone: "America/Toronto", showSchool: false }), "2026-09-28", NOW, noWeather, OWNER);
+  assert.equal(off.calendars.some((c) => c.kind === "school"), false);
+  assert.equal(off.calendars.some((c) => c.kind === "shared"), true);
+  assert.equal(off.calendar.status, "ok");
+  if (off.calendar.status === "ok") {
+    assert.equal(off.calendar.data.some((e) => e.calendarKey === "school"), false);
+    assert.equal(off.calendar.data.length > 0, true);
+  }
+});

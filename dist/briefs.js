@@ -33,7 +33,10 @@ export function dueBriefs(now, timezone) {
 async function briefEvents(deps, start, end) {
     const { config } = deps;
     const members = config.demo ? DEMO_MEMBERS : config.members;
-    const calendars = config.demo ? DEMO_CALENDARS : config.calendars;
+    const configuredCalendars = config.demo ? DEMO_CALENDARS : config.calendars;
+    const calendars = config.showSchool === false ? configuredCalendars.filter((calendar) => calendar.kind !== "school") : configuredCalendars;
+    if (calendars.length === 0 && config.showSchool === false)
+        return [];
     const span = { range: { start, end, timezone: config.timezone } };
     const read = await (deps.readCalendars ?? ((cfg, range) => readEvents(cfg, calendars, range)))(config, span);
     if (read.status !== "ok")

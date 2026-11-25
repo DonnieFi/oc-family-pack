@@ -100,10 +100,15 @@ function rangeFor(job) {
     return { start: job.date, end, days: inclusiveDays(job.date, end) };
 }
 async function defaultSchedule(deps, input, now) {
-    return buildSchedule(deps.config, input, { viewer: { kind: "owner" } }, now, deps.runGog);
+    return buildSchedule(deps.config, input, { viewer: { kind: "owner" } }, now, deps.runGog, undefined, {
+        omitSchool: deps.config.showSchool === false,
+    });
 }
 async function defaultDetails(deps, start, end) {
-    const calendars = deps.config.demo ? DEMO_CALENDARS : deps.config.calendars;
+    const configuredCalendars = deps.config.demo ? DEMO_CALENDARS : deps.config.calendars;
+    const calendars = deps.config.showSchool === false ? configuredCalendars.filter((calendar) => calendar.kind !== "school") : configuredCalendars;
+    if (calendars.length === 0 && deps.config.showSchool === false)
+        return [];
     try {
         const read = await readEvents(deps.config, calendars, { range: { start, end, timezone: deps.config.timezone } }, deps.runGog);
         if (read.status !== "ok")

@@ -148,11 +148,15 @@ function rangeFor(job: DueHousehold): { start: string; end: string; days: number
 }
 
 async function defaultSchedule(deps: HouseholdDeps, input: ScheduleInput, now: number): Promise<ScheduleOutput> {
-  return buildSchedule(deps.config, input, { viewer: { kind: "owner" } }, now, deps.runGog);
+  return buildSchedule(deps.config, input, { viewer: { kind: "owner" } }, now, deps.runGog, undefined, {
+    omitSchool: deps.config.showSchool === false,
+  });
 }
 
 async function defaultDetails(deps: HouseholdDeps, start: string, end: string): Promise<Detail[] | undefined> {
-  const calendars = deps.config.demo ? DEMO_CALENDARS : deps.config.calendars;
+  const configuredCalendars = deps.config.demo ? DEMO_CALENDARS : deps.config.calendars;
+  const calendars = deps.config.showSchool === false ? configuredCalendars.filter((calendar) => calendar.kind !== "school") : configuredCalendars;
+  if (calendars.length === 0 && deps.config.showSchool === false) return [];
   try {
     const read = await readEvents(deps.config, calendars, { range: { start, end, timezone: deps.config.timezone } }, deps.runGog);
     if (read.status !== "ok") return undefined;

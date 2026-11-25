@@ -69,6 +69,7 @@ export const ConfigSchema = Type.Object(
     afterSchoolTime: Type.Optional(Type.String({ pattern: CLOCK.source })),
     weekendPreviewTime: Type.Optional(Type.String({ pattern: CLOCK.source })),
     weekendPreviewWeekday: Type.Optional(Type.Integer({ minimum: 0, maximum: 6 })),
+    showSchool: Type.Optional(Type.Boolean({ default: true })),
     schoolHints: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_PHRASE }), { maxItems: MAX_PHRASES })),
     closedDayPhrases: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: MAX_PHRASE }), { maxItems: MAX_PHRASES })),
     calendarCacheMinutes: Type.Optional(Type.Integer({ minimum: 0, maximum: 1440 })),
@@ -799,6 +800,9 @@ export function parseConfig(raw: unknown): Config {
   if (value.demo !== undefined && typeof value.demo !== "boolean") {
     throw new ConfigError("demo", "must be true or false");
   }
+  if (value.showSchool !== undefined && typeof value.showSchool !== "boolean") {
+    throw new ConfigError("showSchool", "must be true or false");
+  }
   const demo = value.demo === true;
   const rawMembers = list(value.members, "members");
   const members = rawMembers.map(member);
@@ -840,6 +844,7 @@ export function parseConfig(raw: unknown): Config {
         ? Intl.DateTimeFormat().resolvedOptions().timeZone
         : timezone(value.timezone, "timezone"),
     demo,
+    ...(value.showSchool === undefined ? {} : { showSchool: value.showSchool }),
     ...(value.accessMode === undefined ? {} : { accessMode: oneOf(value.accessMode, "accessMode", ["solo", "lan"] as const) }),
     ...(calendarCacheMinutes === undefined ? {} : { calendarCacheMinutes }),
     gogPath: value.gogPath === undefined ? "gog" : text(value.gogPath, "gogPath"),

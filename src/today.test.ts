@@ -7,6 +7,7 @@ import { parseConfig } from "./config.ts";
 import { TodayPayloadSchema } from "./contract.ts";
 import { GARBAGE_TOMORROW, QUIET_DAY } from "./highlights.ts";
 import { familyHandlers } from "./handlers.ts";
+import { buildToday } from "./today.ts";
 import type { TodayPayload } from "./types.ts";
 
 // Preserve the literal legacy contract while checking the additive household ID.
@@ -131,4 +132,15 @@ test("the family skill states the caller rules, the tools, and that undo is not 
   assert.match(skill, /I can't tell who 'me' is here\. Name the person\./);
   assert.match(skill, /Undo is not available yet/);
   assert.equal(skill.includes("@"), false);
+});
+
+test("school-off mode (showSchool: false) omits school highlights and exceptions from family_today", async () => {
+  const config = parseConfig({
+    demo: true,
+    timezone: "America/Toronto",
+    showSchool: false,
+  });
+  const payload = await buildToday(config, { viewer: { kind: "owner" } }, Date.parse("2026-10-01T12:00:00.000Z"));
+  assert.equal(payload.highlights.some((line) => line.startsWith("🏫")), false);
+  assert.equal(payload.exceptions.some((event) => event.calendarKey === "school"), false);
 });

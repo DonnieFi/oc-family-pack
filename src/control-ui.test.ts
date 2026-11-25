@@ -272,11 +272,23 @@ describe("family page", { concurrency: 1 }, () => {
     const day = page.container.querySelector("#ocfp-day-2026-09-30");
     assert.equal(day?.querySelector(".ocfp-day-events")?.textContent?.includes("Dentist"), true);
     assert.equal(day?.querySelector(".ocfp-day-events")?.textContent?.includes("Math"), false);
-    assert.equal(day?.querySelector(".ocfp-uniform")?.textContent?.includes("PE uniform"), true);
-    const homework = day?.querySelector("details.ocfp-homework");
+    assert.equal(day?.querySelector(".ocfp-uniform"), null);
+    assert.equal(day?.querySelector('[data-event-id="e-uniform"]'), null);
+    assert.equal(page.container.querySelector('.ocfp-uniform-strip .ocfp-uniform-cell[data-date="2026-09-30"]')?.textContent?.includes("PE uniform"), true);
+    const homework = day?.querySelector<HTMLDetailsElement>("details.ocfp-homework");
     assert.equal(homework?.querySelector("summary")?.textContent, "Homework · 1");
     assert.equal(homework?.hasAttribute("open"), false);
     assert.equal(homework?.textContent?.includes("Math worksheet"), true);
+    const hwToggle = page.container.querySelector<HTMLButtonElement>("button.ocfp-homework-toggle");
+    assert.equal(hwToggle?.textContent, "Show homework");
+    assert.equal(hwToggle?.getAttribute("aria-pressed"), "false");
+    hwToggle?.click();
+    assert.equal(homework?.open, true);
+    assert.equal(hwToggle?.textContent, "Hide homework");
+    assert.equal(hwToggle?.getAttribute("aria-pressed"), "true");
+    hwToggle?.click();
+    assert.equal(homework?.open, false);
+    assert.equal(hwToggle?.textContent, "Show homework");
     const alex = [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-chip")].find((chip) => chip.textContent?.startsWith("Alex"));
     alex?.click();
     assert.equal(page.container.querySelector("#ocfp-day-2026-09-30 .ocfp-day-events")?.textContent?.includes("Math"), true);
@@ -460,14 +472,18 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(page.container.querySelector("#ocfp-day-2026-09-30")?.textContent?.includes("Worksheet"), true);
   });
 
-  test("a same-day uniform note stays on that day", async () => {
+  test("a same-day uniform note stays on that day in the uniform strip without duplicating in the schedule grid", async () => {
     const base = week();
     const event = { id: "e-uniform-same", title: "Red Dress Day", start: "2026-09-30", end: "2026-09-30", allDay: true, calendarKey: "cschool" };
     const page = mountPage({ result: { ...base, viewer: { role: "parent", memberId: "alex" }, calendars: [...base.calendars, { key: "cschool", label: "School", kind: "school", ownerIds: ["riley"] }], days: base.days.map((day) => ({ ...day, eventIds: day.date === "2026-09-30" ? [event.id] : [] })), calendar: { status: "ok", warnings: [], data: [event] } } });
     await flush();
-    const today = page.container.querySelector("#ocfp-day-2026-09-30")?.textContent ?? "";
-    assert.match(today, /Uniform/);
-    assert.match(today, /Red Dress Day/);
+    const cell = page.container.querySelector('.ocfp-uniform-strip .ocfp-uniform-cell[data-date="2026-09-30"]');
+    assert.match(cell?.textContent ?? "", /Red Dress Day/);
+    assert.equal(cell?.classList.contains("is-special"), true);
+    const today = page.container.querySelector("#ocfp-day-2026-09-30");
+    assert.equal(today?.querySelector(".ocfp-uniform"), null);
+    assert.equal(today?.textContent?.includes("Red Dress Day"), false);
+    assert.equal(today?.querySelector(".ocfp-day-empty")?.textContent, "Nothing planned");
   });
 
   test("a kid still sees classes on a school calendar they own", async () => {
@@ -544,15 +560,12 @@ describe("family page", { concurrency: 1 }, () => {
     assert.equal(stripWed?.querySelector('[data-event-id="e-uniform"]')?.classList.contains("is-special"), false);
     assert.equal(stripWed?.querySelector('[data-event-id="e-dress"]')?.classList.contains("is-special"), true);
     assert.equal(stripWed?.querySelector('[data-event-id="e-dress"] .ocfp-highlight-tag')?.textContent, "Special");
+    assert.equal(stripWed?.textContent?.includes("Riley"), true);
+    assert.equal(stripWed?.textContent?.includes("PE exam"), false);
     const wednesday = page.container.querySelector("#ocfp-day-2026-09-30");
-    const uniform = wednesday?.querySelector(".ocfp-uniform");
-    assert.equal(uniform?.parentElement, wednesday);
-    assert.equal(uniform?.classList.contains("is-special"), true);
-    assert.equal(wednesday?.querySelector(".ocfp-day-head .ocfp-uniform"), null);
-    assert.equal(uniform?.textContent?.includes("PE uniform"), true);
-    assert.equal(uniform?.textContent?.includes("Riley"), true);
-    assert.equal(uniform?.textContent?.includes("Red Dress Day"), true);
-    assert.equal(uniform?.textContent?.includes("PE exam"), false);
+    assert.equal(wednesday?.querySelector(".ocfp-uniform"), null);
+    assert.equal(wednesday?.querySelector('[data-event-id="e-uniform"]'), null);
+    assert.equal(wednesday?.querySelector('[data-event-id="e-dress"]'), null);
     assert.equal(wednesday?.querySelector(".ocfp-day-events")?.textContent?.includes("PE exam"), true);
     assert.equal(wednesday?.querySelector('[data-event-id="e-exam"]')?.classList.contains("is-signal"), true);
     assert.equal(wednesday?.querySelector('[data-event-id="e-exam"] .ocfp-highlight-tag')?.textContent, "Special");

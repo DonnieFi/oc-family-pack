@@ -658,20 +658,9 @@
   opacity: 0.55;
 }
 
-.ocfp-uniform {
-  margin: 0;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in oklab, var(--text) 2.5%, transparent);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.ocfp-uniform.is-special {
-  border-bottom-color: color-mix(in oklab, var(--family-warm) 45%, var(--border));
-  background: color-mix(in oklab, var(--family-warm) 14%, var(--card));
-  color: var(--text-strong);
+.ocfp-homework-toggle {
+  margin-left: auto;
+  padding: 0 14px;
 }
 
 .ocfp-uniform-item.is-special {
@@ -1183,10 +1172,6 @@
 
   .ocfp-uniform-cell.is-selected {
     display: flex;
-  }
-
-  .ocfp-uniform {
-    padding: 10px 12px;
   }
 
   .ocfp-day-events {

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { briefTick, dueBriefs, type BriefDeps } from "./briefs.ts";
+import { parseConfig } from "./config.ts";
 import type { DeliveryOutcome, DeliveryTarget, DiscordMessage } from "./discord-delivery.ts";
 import type { FamilyStore } from "./store.ts";
 import type { Config } from "./types.ts";
@@ -251,4 +252,46 @@ test("no summary channel or no store: the tick does nothing", async () => {
   const early = rig(store, () => SENT, { store: () => undefined });
   await briefTick(early.deps, at("2026-10-13", 7));
   assert.equal(none.calls.length + early.calls.length, 0);
+});
+
+test("school-off mode (showSchool: false) omits school events from daily briefs while keeping family events", async () => {
+  const store = await freshStore();
+  const schoolCfg = parseConfig({
+    ...CONFIG,
+    showSchool: false,
+    calendars: [
+      { id: "family", label: "Family", kind: "shared", owners: [] },
+      { id: "school-riley", label: "School", kind: "school", owners: ["riley"] },
+    ],
+  });
+  const { deps, calls } = rig(store, () => SENT, {
+    config: schoolCfg,
+    readCalendars: async () => ({
+      status: "ok",
+      warnings: [],
+      data: [
+        {
+          id: "u1",
+          title: "Red Dress Day",
+          start: "2026-10-13",
+          end: "2026-10-14",
+          allDay: true,
+          calendarKey: schoolCfg.calendars.find((c) => c.kind === "school")!.key,
+        },
+        {
+          id: "f1",
+          title: "Dentist",
+          start: "2026-10-13T14:00:00.000Z",
+          end: "2026-10-13T15:00:00.000Z",
+          allDay: false,
+          calendarKey: schoolCfg.calendars[0]!.key,
+        },
+      ],
+    }),
+  });
+  await briefTick(deps, at("2026-10-13", 7));
+  assert.equal(calls.length, 1);
+  const text = JSON.stringify(calls[0]!.messages[0]!.embed);
+  assert.equal(text.includes("Red Dress Day"), false);
+  assert.equal(text.includes("Dentist"), true);
 });

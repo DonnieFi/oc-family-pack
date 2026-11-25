@@ -53,13 +53,22 @@ function toWire({ google: _google, ...event }: FamilyEvent & { google?: GoogleEv
   return event;
 }
 
-function readCalendar(config: Config, shown: CalendarConfig[], week: Week): Promise<CalendarStateOf<FamilyEvent & { google?: GoogleEventFields }>> {
+function readCalendar(
+  config: Config,
+  shown: CalendarConfig[],
+  activeCalendars: CalendarConfig[],
+  week: Week,
+): Promise<CalendarStateOf<FamilyEvent & { google?: GoogleEventFields }>> {
   if (config.demo) {
     const keys = new Set(shown.map((calendar) => calendar.key));
     return Promise.resolve({ status: "ok", data: demoEvents(week).filter((event) => keys.has(event.calendarKey)), warnings: [] });
   }
+  // School-off mode with only school calendars configured renders an empty week cleanly instead of hidden/unconfigured.
+  if (shown.length === 0 && activeCalendars.length === 0 && config.showSchool === false && config.calendars.length > 0) {
+    return Promise.resolve({ status: "ok", data: [], warnings: [] });
+  }
   // A household with calendars, none of them this viewer's, is neither empty nor a setup step.
-  if (shown.length === 0 && config.calendars.length > 0) return Promise.resolve({ status: "hidden" });
+  if (shown.length === 0 && activeCalendars.length > 0) return Promise.resolve({ status: "hidden" });
   return readGogCalendars({ ...config, calendars: shown }, week);
 }
 
@@ -95,18 +104,19 @@ export async function buildWeekPayload(
     throw error;
   }
   const members = config.demo ? DEMO_MEMBERS : config.members;
-  const calendars = config.demo ? DEMO_CALENDARS : config.calendars;
+  const configuredCalendars = config.demo ? DEMO_CALENDARS : config.calendars;
+  const calendars = config.showSchool === false ? configuredCalendars.filter((calendar) => calendar.kind !== "school") : configuredCalendars;
   // Hidden calendars are dropped before anything is read, so no count, warning or list entry reveals them.
   const visible = visibleCalendarIds({ members, calendars }, viewer);
   const shown = calendars.filter((entry) => visible.has(entry.id));
   const viewerMember = memberForViewer({ members }, viewer);
   const kid = viewer.kind !== "owner" && viewerMember?.role === "kid" ? viewerMember : undefined;
   const hidden = kid ? calendars.filter((entry) => !visible.has(entry.id)) : [];
-  const [read, weather] = await Promise.all([readCalendar(config, shown, week), readWeather()]);
+  const [read, weather] = await Promise.all([readCalendar(config, shown, calendars, week), readWeather()]);
   // A failed hidden read stays hidden. Its warning would name a calendar this person cannot see.
   const namedHidden =
     kid && hidden.length > 0 && (read.status === "ok" || read.status === "hidden")
-      ? await readCalendar(config, hidden, week).then((extra) =>
+      ? await readCalendar(config, hidden, calendars, week).then((extra) =>
           extra.status === "ok"
             ? extra.data.filter((event) => eventParticipants(event, members, config.participantOverrides).ids.includes(kid.id))
             : [],

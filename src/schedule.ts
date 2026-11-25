@@ -91,6 +91,7 @@ export async function buildSchedule(
   now: number,
   runGog?: RunGog,
   identity?: () => object | undefined,
+  options?: { omitSchool?: boolean },
 ): Promise<ScheduleOutput> {
   const timezone = config.timezone;
   const query = input.query === undefined ? [] : words(input.query);
@@ -102,7 +103,8 @@ export async function buildSchedule(
     return { error: lookup ? `days must be ${LOOKUP_DAYS_MAX} or fewer.` : `days must be ${SCHEDULE_DAYS_MAX} or fewer without a query.` };
   }
   const members = config.demo ? DEMO_MEMBERS : config.members;
-  const calendars = config.demo ? DEMO_CALENDARS : config.calendars;
+  const configuredCalendars = config.demo ? DEMO_CALENDARS : config.calendars;
+  const calendars = options?.omitSchool ? configuredCalendars.filter((calendar) => calendar.kind !== "school") : configuredCalendars;
   let member = input.member?.trim();
   if (member?.toLowerCase() === "me") {
     if (caller.me === undefined) return { error: ME_UNKNOWN };

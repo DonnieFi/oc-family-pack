@@ -361,3 +361,10 @@ test("an email login without an explicit id keeps the legacy id and its calendar
   assert.equal(config.members[0]?.id, "alex@example.com");
   assert.deepEqual(config.calendars[0]?.owners, ["alex@example.com"]);
 });
+
+test("showSchool accepts booleans and rejects non-booleans", () => {
+  assert.equal(parseConfig({}).showSchool, undefined);
+  assert.equal(parseConfig({ showSchool: false }).showSchool, false);
+  assert.equal(parseConfig({ showSchool: true }).showSchool, true);
+  assert.throws(() => parseConfig({ showSchool: "no" }), /showSchool.*must be true or false/);
+});

@@ -48,7 +48,8 @@ export async function buildToday(config, caller, now, deps = {}) {
     const timezone = config.timezone;
     const today = localDate(now, timezone);
     const members = config.demo ? DEMO_MEMBERS : config.members;
-    const calendars = config.demo ? DEMO_CALENDARS : config.calendars;
+    const configuredCalendars = config.demo ? DEMO_CALENDARS : config.calendars;
+    const calendars = config.showSchool === false ? configuredCalendars.filter((calendar) => calendar.kind !== "school") : configuredCalendars;
     const visible = visibleCalendarIds({ members, calendars }, caller.viewer);
     const shown = calendars.filter((calendar) => visible.has(calendar.id));
     const viewerMember = memberForViewer({ members }, caller.viewer);

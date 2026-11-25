@@ -578,7 +578,7 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
 
     const filters = h("div", { class: "ocfp-filters", role: "group", "aria-label": "Show one person's week" });
     const syncFilters = () => {
-      for (const button of filters.querySelectorAll<HTMLButtonElement>(".ocfp-chip")) {
+      for (const button of filters.querySelectorAll<HTMLButtonElement>(".ocfp-chip[data-member]")) {
         const id = button.dataset.member ?? "";
         button.setAttribute("aria-pressed", String(id === "" ? person === null : person === id));
       }
@@ -765,20 +765,11 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
         )
       : null;
 
+    const hasAnyHomework = dayColumns.some((col) => col.homework.length > 0);
     const grid = h(
       "div",
       { class: `ocfp-week-grid ocfp-panel${entering ? " is-entering" : ""}` },
-      ...dayColumns.map(({ day, date, uniforms, homework, cards, coursesAwaitingPerson }) => {
-        const hasSpecialUniform = uniforms.some((event) => !isRegularUniform(event));
-        const uniformRow = uniforms.length
-          ? h(
-              "p",
-              { class: `ocfp-uniform${hasSpecialUniform ? " is-special" : ""}` },
-              h("span", { class: "ocfp-layer-label" }, "Uniform"),
-              " ",
-              ...renderUniformItems(uniforms),
-            )
-          : null;
+      ...dayColumns.map(({ day, date, homework, cards, coursesAwaitingPerson }) => {
         const homeworkRow = homework.length
           ? h(
               "details",
@@ -808,14 +799,13 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
             h("span", { class: "ocfp-day-weekday" }, fmt.weekday.format(date), day.isToday ? h("span", { class: "ocfp-today-badge" }, "Today") : null),
             h("span", { class: "ocfp-day-number" }, fmt.day.format(date)),
           ),
-          uniformRow,
           h(
             "div",
             { class: "ocfp-day-events" },
             ...(cards.length
               ? cards
               : [
-                  week.calendar.status === "ok" && uniforms.length === 0 && homework.length === 0
+                  week.calendar.status === "ok" && homework.length === 0
                     ? h(
                         "p",
                         { class: "ocfp-day-empty" },
@@ -876,14 +866,36 @@ export function mountFamilyPage(container: HTMLElement, initial: ControlUiViewCo
       ),
     );
 
+    let homeworkToggle: HTMLButtonElement | null = null;
+    const syncHomeworkToggle = () => {
+      if (!homeworkToggle) return;
+      homeworkToggle.setAttribute("aria-pressed", String(homeworkOpen));
+      homeworkToggle.textContent = homeworkOpen ? "Hide homework" : "Show homework";
+    };
+    if (hasAnyHomework) {
+      homeworkToggle = on(
+        h("button", { type: "button", class: "ocfp-chip ocfp-homework-toggle", "aria-pressed": String(homeworkOpen) }, homeworkOpen ? "Hide homework" : "Show homework"),
+        "click",
+        () => {
+          homeworkOpen = !homeworkOpen;
+          for (const node of grid.querySelectorAll<HTMLDetailsElement>("details.ocfp-homework")) {
+            node.open = homeworkOpen;
+          }
+          syncHomeworkToggle();
+        },
+      ) as HTMLButtonElement;
+      filters.append(homeworkToggle);
+      filters.hidden = false;
+    }
     for (const node of grid.querySelectorAll<HTMLDetailsElement>("details.ocfp-homework")) {
       node.addEventListener("toggle", () => {
         homeworkOpen = node.open;
         for (const other of grid.querySelectorAll<HTMLDetailsElement>("details.ocfp-homework")) {
           if (other !== node) other.open = homeworkOpen;
         }
+        syncHomeworkToggle();
       });
-    };
+    }
     syncFilters();
 
     const focused = focusTarget(content);

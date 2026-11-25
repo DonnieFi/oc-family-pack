@@ -150,6 +150,8 @@ export type Config = {
   weekendPreviewTime?: string;
   /** Weekday of the preview, 0 Sunday through 6 Saturday. Omitted means Friday. */
   weekendPreviewWeekday?: number;
+  /** Show school calendars on daily surfaces (Family page, Today, and briefs). Omitted or true keeps them on; false is school-off (summer/break) mode. */
+  showSchool?: boolean;
   /** Phrases that mark a school-logistics event. Empty sends those events with everything else. */
   schoolHints?: string[];
   /** Phrases that mark a weekday closed, so the after-school post stays quiet. Empty means only weekends. */
