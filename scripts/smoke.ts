@@ -207,11 +207,12 @@ function killGroup(child: ChildProcess, onGone?: () => void): void {
   }, HOST_KILL_ESCALATION_MS);
 }
 
-function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load", opts?: { cwd?: string }): Promise<string> {
+function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load", opts?: { cwd?: string | undefined; nodePath?: string | undefined }): Promise<string> {
   return new Promise((resolve, reject) => {
     // Own process group, so a timeout or Ctrl-C can signal the host and
     // anything it spawned rather than orphaning them.
-    const child = spawn(hostBinary, args, { env, cwd: opts?.cwd, stdio: ["ignore", "pipe", "pipe"], detached: true });
+    const childEnv = opts?.nodePath ? { ...env, NODE_PATH: opts.nodePath } : env;
+    const child = spawn(hostBinary, args, { env: childEnv, cwd: opts?.cwd, stdio: ["ignore", "pipe", "pipe"], detached: true });
     const label = `${hostBinary} ${args.join(" ")}`;
     let stdout = "";
     let stderr = "";
@@ -816,8 +817,17 @@ async function main(): Promise<void> {
   // install links `openclaw` instead, and discovery does not follow the link.
   const sourceDir = join(workDir, "source");
   await stagePlugin(sourceDir);
+  let buildNodePath: string | undefined;
   if (allowTested && hostRelease !== pkg.openclaw.build.openclawVersion) {
-    await oc(["plugins", "build"], env, "manifest", { cwd: sourceDir });
+    // Expose only esbuild (never devDependencies' pinned openclaw) so the host
+    // rebuilds and validates the staged Control UI bundle with its own plugin-sdk.
+    buildNodePath = join(workDir, "build-deps");
+    mkdirSync(buildNodePath, { recursive: true });
+    for (const dep of ["esbuild", "@esbuild"]) {
+      const from = join(ROOT, "node_modules", dep);
+      if (existsSync(from)) cpSync(from, join(buildNodePath, dep), { recursive: true });
+    }
+    await oc(["plugins", "build"], env, "manifest", { cwd: sourceDir, nodePath: buildNodePath });
     note(`rebuilt staged Control UI bundle in ${sourceDir} for tested host ${hostRelease} (working tree dist/ untouched)`, "manifest");
   }
   await oc(["plugins", "install", sourceDir, "--force", "--link", "--accept-capabilities"], env);
@@ -830,7 +840,7 @@ async function main(): Promise<void> {
   // satisfy one of them. Say so explicitly instead of implying the plugin broke.
   let validated: { valid?: boolean; errors?: unknown[] };
   try {
-    validated = parseHostJson(await oc(["plugins", "validate", "--json"], env, "manifest"), "manifest", "plugins validate") as {
+    validated = parseHostJson(await oc(["plugins", "validate", "--json"], env, "manifest", { cwd: sourceDir, nodePath: buildNodePath }), "manifest", "plugins validate") as {
       valid?: boolean;
       errors?: unknown[];
     };
