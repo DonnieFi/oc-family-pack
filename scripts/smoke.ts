@@ -207,11 +207,11 @@ function killGroup(child: ChildProcess, onGone?: () => void): void {
   }, HOST_KILL_ESCALATION_MS);
 }
 
-function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load"): Promise<string> {
+function oc(args: string[], env: NodeJS.ProcessEnv, step: Step = "plugin load", opts?: { cwd?: string }): Promise<string> {
   return new Promise((resolve, reject) => {
     // Own process group, so a timeout or Ctrl-C can signal the host and
     // anything it spawned rather than orphaning them.
-    const child = spawn(hostBinary, args, { env, stdio: ["ignore", "pipe", "pipe"], detached: true });
+    const child = spawn(hostBinary, args, { env, cwd: opts?.cwd, stdio: ["ignore", "pipe", "pipe"], detached: true });
     const label = `${hostBinary} ${args.join(" ")}`;
     let stdout = "";
     let stderr = "";
@@ -759,13 +759,19 @@ async function main(): Promise<void> {
   };
   note(`host ${hostVersion}`, "host version");
   const hostRelease = hostVersion.match(/\d+\.\d+\.\d+/)?.[0];
+  const allowTested = process.env.OPENCLAW_SMOKE_ALLOW_TESTED_HOST === "1";
+  const inSupportedRange = hostRelease !== undefined && /^2026\.11\.([3-9]|\d{2,})$/.test(hostRelease);
   if (hostRelease !== pkg.openclaw.build.openclawVersion) {
-    fail(
-      "host version",
-      `installed host ${hostVersion} does not match pinned build.openclawVersion ${pkg.openclaw.build.openclawVersion}; re-run the smoke and bump both together`,
-    );
+    if (!allowTested || !inSupportedRange) {
+      fail(
+        "host version",
+        `installed host ${hostVersion} does not match pinned build.openclawVersion ${pkg.openclaw.build.openclawVersion}; re-run the smoke and bump both together (or set OPENCLAW_SMOKE_ALLOW_TESTED_HOST=1 for a tested >=2026.11.3 host)`,
+      );
+    }
+    note(`testing newer supported host ${hostRelease} while keeping minimum ${pkg.openclaw.compat.pluginApi} and build pin ${pkg.openclaw.build.openclawVersion}`, "host version");
+  } else {
+    note(`pinned build.openclawVersion ${pkg.openclaw.build.openclawVersion} and compat.pluginApi ${pkg.openclaw.compat.pluginApi} match`, "host version");
   }
-  note(`pinned build.openclawVersion ${pkg.openclaw.build.openclawVersion} and compat.pluginApi ${pkg.openclaw.compat.pluginApi} match`, "host version");
 
   // 2. An isolated Gateway on the installed build, with this working tree linked in.
   workDir = mkdtempSync(join(tmpdir(), "ocfp-smoke-"));
@@ -810,6 +816,10 @@ async function main(): Promise<void> {
   // install links `openclaw` instead, and discovery does not follow the link.
   const sourceDir = join(workDir, "source");
   await stagePlugin(sourceDir);
+  if (allowTested && hostRelease !== pkg.openclaw.build.openclawVersion) {
+    await oc(["plugins", "build"], env, "manifest", { cwd: sourceDir });
+    note(`rebuilt staged Control UI bundle in ${sourceDir} for tested host ${hostRelease} (working tree dist/ untouched)`, "manifest");
+  }
   await oc(["plugins", "install", sourceDir, "--force", "--link", "--accept-capabilities"], env);
   note("plugin installed from a clean copy of the working tree", "plugin load");
 
