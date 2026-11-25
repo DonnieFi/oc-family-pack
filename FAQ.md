@@ -100,8 +100,9 @@ Chores are later. They are not in this version.
 
 ## Who can see the Family page?
 
-Anyone signed in with at least `operator.read` can open it, once custom plugin
-UI is on. What they see is scoped.
+Anyone signed in with `operator.read` — or a session-only Multiplayer role with
+`operator.sessions.write` — can open Family week, Today, and delivery status
+once custom plugin UI is on. What they see is always scoped on the server.
 
 Parents, and the shared-token owner, see every calendar. Everyone sees shared
 calendars. A school or personal calendar also goes to its owners when that
@@ -178,6 +179,17 @@ Authelia.
 A member is the household's record of a person, in `plugins.entries.oc-family-pack.config.members`. Only `name` is required. `id` is the household person id: an explicit `id`, otherwise the login, otherwise a lower-case slug of the name. Write the id down with `openclaw family setup --materialize-ids` before renaming someone or changing their login. `role` is `parent`, `kid`, or `guest`, and defaults to guest. Optional fields are `profileId` (or `login`), `gatewayProfileId`, `aliases`, `email`, `phone`, `color`, `discordId`, `reminders` (`dm`, `channel`, or `off`), and `devices`. `displayName` is the older spelling of `name` and still loads.
 
 `profileId` and `login` are the sign-in username, lower case, matched exactly to the trusted-proxy user. They are not the Gateway's internal profile id, and the login is never made up from the name. `gatewayProfileId` is that internal id, matched only when the host attests it on the connection. Someone with no login is not that person on the Family page unless a host-attested profile id matches; they still count in chat when their `discordId` matches. Setup's Members step stays To do until there is a parent. The chips on the Family page filter the week in the view. They do not add a person, and they are not identity. A kid sees their own classes because sign-in matches `profileId`. The fields and the steps are in [SETUP.md](SETUP.md).
+
+## How does Family Pack integrate with OpenClaw Multiplayer?
+
+Version 0.3.0 deepens integration with OpenClaw Multiplayer in four ways:
+
+- **Profile linking in People:** Parents open a card in **People**, click **Choose OpenClaw profile** (or **Reload OpenClaw profiles** after a new sign-in), pick the person's native OpenClaw profile, and save it as `gatewayProfileId`. People suggests a unique email or display-name match without auto-linking.
+- **Online presence:** Linked People cards show a live green online dot backed by OpenClaw's viewer-scoped `system-presence`, failing closed when presence is denied.
+- **Native access presets:** `openclaw family access` previews and prints the native **Household Guest** and invite-only **`household-parent`** presets with account-aware DM isolation (`per-account-channel-peer`), host tool denials, and `sandbox.tools` policy.
+- **Session-only reads:** Household members with `operator.sessions.write` can read Family week, Today, and delivery status without needing broad `operator.read` access.
+
+Creating or inviting a brand-new OpenClaw profile directly from inside People still waits on upstream OpenClaw enrollment hooks; invite or sign them in through OpenClaw first, then click **Reload OpenClaw profiles**.
 
 ## How do I add someone?
 

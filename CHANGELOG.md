@@ -4,6 +4,8 @@
 
 ## 0.3.0 — 2026-11-25
 
+Deeper integration with OpenClaw Multiplayer, plus a cleaner Family week layout and school-off mode.
+
 - Link People roster cards to native OpenClaw profiles (`gatewayProfileId`) from **People → Choose OpenClaw profile**, with a **Reload OpenClaw profiles** action, unique email or display-name match hints (without auto-linking), missing-profile invite guidance, and pre-edit roster authority verification on save.
 - Show an accessible online presence dot on People cards for linked OpenClaw profiles using viewer-scoped `system-presence`, failing closed when presence is unavailable.
 - Preview and print native Household Guest and invite-only `household-parent` access presets (`openclaw family access`), including account-aware DM isolation (`per-account-channel-peer`), host runtime/filesystem/node/automation tool denials, and `sandbox.tools` allow/deny policy on the household guest agent.

@@ -7,13 +7,17 @@ The person is the record you add. `openclaw family setup` prints the next step a
 Each person is a member in `plugins.entries.oc-family-pack.config.members`.
 
 A parent can add a roster-only person in **People → Add person**. To connect
-someone who already signs in through the trusted proxy, open their card, choose their OpenClaw profile,
-and save. If their card already has a proxy login, the native profile must
-verify that login. For someone new, use your host’s enrollment flow, then
-reopen the picker after their first sign-in. Native invitation features vary
-by OpenClaw version and are managed separately from People. To remove the link,
-select **Roster only** or **No native profile** and save. OpenClaw manages access
-grants and conversations separately.
+someone who already has an OpenClaw Multiplayer profile, open their card, click
+**Choose OpenClaw profile**, select their profile (People highlights a unique
+email or display-name match without auto-linking), and save. Connected cards
+also show a live green online presence dot from `system-presence` when that
+person is signed in. If their card already has a proxy login, the native profile
+must verify that login. For someone new, invite them or have them sign in
+through OpenClaw first, then click **Reload OpenClaw profiles** on their card
+and save. Native invitation features vary by OpenClaw version and are managed
+separately from People. To remove the link, select **Roster only** or **No
+native profile** and save. OpenClaw manages access grants and conversations
+separately.
 
 - **name** (required). What the family calls this person. `displayName` is still accepted. When setup adds someone, it sets this to the username with the first letter capitalized. `riley` becomes Riley.
 - **id** (optional). The internal key. Calendar owners, briefs, reminders and Today use it. Omitted means the `profileId`, or else a lower-case slug of the name (`Riley S` becomes `riley-s`). Two people with the same id fail the config, and the error names both.

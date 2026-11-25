@@ -16,7 +16,7 @@ The collection calendar check has one gap. Only literal addresses and localhost 
 ## What it trusts
 
 - **The operator's config.** `gogPath`, `garbageIcsUrl`, the roster, and the channel keys come from Gateway config. Whoever can edit that config can point `gogPath` at any binary, and the Gateway runs it. Protect the config file the same way you protect the Gateway.
-- **The Gateway's sign-in.** In LAN mode the Family page matches the trusted-proxy username to a member's `profileId`. A member id sent by the browser is never treated as identity.
+- **The Gateway's sign-in.** The Family page matches a host-attested OpenClaw Multiplayer profile (`gatewayProfileId`) or, in LAN mode, the trusted-proxy username (`profileId`). If both are present and disagree, the viewer falls back to guest. A member id sent by the browser is never treated as identity.
 - **Discord sender ids.** In chat, who's asking comes from the host's verified Discord sender. Chat that isn't Discord can't say who's asking, so its calendar changes wait for a parent.
 
 ## Calendar changes and the approval stamp

@@ -6,10 +6,10 @@
 
 **The household week in the [OpenClaw](https://github.com/openclaw/openclaw) Control UI: calendars, the day's weather, and a chat with any of your agents.**
 
-Version 0.2.0.
+Version 0.3.0 — now with deeper OpenClaw Multiplayer integration.
 
 [![Version](https://img.shields.io/github/package-json/v/DonnieFi/oc-family-pack?label=version&color=e08a3a)](package.json)
-[![Status](https://img.shields.io/badge/status-0.2.0-orange)](CHANGELOG.md)
+[![Status](https://img.shields.io/badge/status-0.3.0-orange)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/github/license/DonnieFi/oc-family-pack?color=4ea674)](LICENSE)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-%E2%89%A5%202026.11.3-ff5c5c)](https://docs.openclaw.ai/plugins/feature-plugins)
 [![Plugin type](https://img.shields.io/badge/plugin-feature-14b8a6)](https://docs.openclaw.ai/plugins/feature-plugins)
@@ -27,7 +27,9 @@ Version 0.2.0.
 
 ## What it is
 
-Family Pack is an OpenClaw **feature plugin** (`oc-family-pack`) for a household. It adds a **Family** page to the Control UI, a **Today** widget on the dashboard, and family tools for your agents. You see the week you are allowed to see, ask what is on, and change a calendar when the rules below allow it.
+Family Pack is an OpenClaw **feature plugin** (`oc-family-pack`) for a household. It adds a **Family** page and **People** directory to the Control UI, a **Today** widget on the dashboard, and family tools for your agents. You see the week you are allowed to see, ask what is on, and change a calendar when the rules below allow it.
+
+Version 0.3.0 brings **deeper integration with OpenClaw Multiplayer**: parents can link household roster cards directly to native OpenClaw profiles from **People** (with live reload, unique match hints, and native online presence dots), session-only roles can read the Family week and Today without broad read scopes, and `openclaw family access` previews native **Household Guest** and invite-only **`household-parent`** presets with account-aware DM isolation and sandbox tool denials.
 
 The Family page does not need Discord. This version uses Discord for briefs, reminders, and for knowing who "me" is in chat. Control UI chat works as well. You do not pick another messaging service here.
 
@@ -61,7 +63,8 @@ A signed-in kid already sees their own classes without pressing a chip. The Gate
 
 | Feature | What you get | Status |
 | --- | --- | --- |
-| Family page | Monday–Sunday week, a color per person, person chips that filter the week and include that person's classes, Environment Canada weather, and a chat strip | Available |
+| Family page | Monday–Sunday week, dedicated top uniform strip, synced homework toggle, optional school-off mode (`showSchool: false`), person chips that filter the week and include that person's classes, Environment Canada weather, and a chat strip | Available |
+| People & Multiplayer | Native OpenClaw profile linking (`gatewayProfileId`), live online presence dots (`system-presence`), roster editing/saving, and native Household Guest & `household-parent` role presets | Available |
 | Today widget | Up to three highlight lines on the Control UI dashboard for the shared owner and roster parents. A fresh Home gets the card once. If you remove it, the Family page offers to pin it again | Available |
 | Calendar changes | One write path from the page and from chat. A parent approves anything a kid cannot change alone. No undo | Available |
 | Daily and weekly briefs | 07:00 daily and Sunday 20:00 weekly, posted to the Discord summary channel you configure | Available |
@@ -75,13 +78,13 @@ A signed-in kid already sees their own classes without pressing a chip. The Gate
 
 | Requirement | Why |
 | --- | --- |
-| OpenClaw `2026.11.3` or newer, before `2026.12` | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Tested on `2026.11.3`. See [Development](#development) for the post-update smoke. |
+| OpenClaw `2026.11.3` or newer, before `2026.12` | Feature plugin SDK (`feature-contract`, `feature-plugin`, `control-ui`). Built against `2026.11.3` and smoke-verified on `2026.11.3` and `2026.11.5`. See [Development](#development) for the post-update smoke. |
 | Node.js `>=24.16.0 <25` or `>=26.1.0` | Matches the OpenClaw runtime |
 | [`gog`](https://github.com/openclaw/gogcli) with Calendar access | Reads and writes Google Calendar using your default gog sign-in. `gog` runs on the Gateway host. The plugin does not switch between multiple Google accounts; use the default account for the family calendars |
 | **Custom plugin UI** lab enabled | Required for native pages from non-bundled plugins |
 | HTTPS or `127.0.0.1` | Native plugin pages need a secure origin |
 
-The peer range (`>=2026.11.3 <2026.12`) is install-admitting, not a tested claim: only `2026.11.3` is tested, and each later `2026.11` patch is unclaimed until `npm run smoke` passes on it.
+The peer range (`>=2026.11.3 <2026.12`) is install-admitting: the plugin builds against `2026.11.3` and has passed full isolated-Gateway smoke on `2026.11.3` and `2026.11.5`. Each newer `2026.11` patch should be verified with `OPENCLAW_SMOKE_ALLOW_TESTED_HOST=1 npm run smoke`.
 
 Weather uses Environment Canada's public API, so it needs no key and covers Canadian locations only.
 
@@ -171,13 +174,17 @@ A calendar `key` is optional. Set one (`c` plus up to seven letters or digits) b
 
 `morningTime`, `afterSchoolTime`, and `weekendPreviewTime` are optional clock times, `HH:MM` in 24-hour form. Leave a time unset to skip that household brief. `weekendPreviewWeekday` defaults to Friday (`5`). `0` is Sunday and `6` is Saturday. A parent whose reminder mode is `off` does not get the morning direct message; the channel posts still run.
 
+`showSchool` defaults to `true`. Set `showSchool: false` for school-off / summer mode to omit school calendars (uniforms, homework, and school notices) from daily surfaces — the Family page, Today, and briefs — while keeping explicit `family_schedule` chat queries working.
+
+`calendarCacheMinutes` (whole minutes from `0` to `1440`, default `120`) keeps successful Google Calendar reads in memory and drops the cache on watch changes or local writes; `0` disables caching.
+
 `writes` defaults to `confirm`, which holds changes the agent proposes until a parent approves. `on` lets the agent make them, though a kid's change to a shared calendar still waits for a parent. `off` refuses all agent changes. Changes you make yourself on the Family page skip `confirm`, but `off` blocks them too.
 
 ## The Family page
 
 The week runs Monday through Sunday, in the household time zone. Each person has a color. The person chips filter the week in the view. They do not decide who you are, and they do not hide a calendar you are allowed to see.
 
-A school notice stays on the day. A uniform note stays on the day too, names the child, and stays visible on a phone. Homework is collapsed under the day. Classes stay off Everyone until that person is selected. A signed-in kid already sees classes on school calendars they own: the page uses the viewer from `family.week`, and that viewer is the roster person whose `profileId` matches the Gateway sign-in. A parent on Everyone does not see those classes until they pick that child. Pressing a chip filters the view. It does not change which calendars the Gateway sends.
+A school notice stays on the day. Uniform notes appear once in the dedicated **Uniform** strip above the week grid (never duplicated inside the day columns), name the child, highlight special dress days, and follow the selected day on a phone. Homework is collapsed under each day with a synced **Show/Hide homework** toggle in the filter bar. Classes stay off Everyone until that person is selected. A signed-in kid already sees classes on school calendars they own: the page uses the viewer from `family.week`, and that viewer is the roster person whose `profileId` matches the Gateway sign-in. A parent on Everyone does not see those classes until they pick that child. Pressing a chip filters the view. It does not change which calendars the Gateway sends.
 
 The weather card shows current conditions, today's high and low, and the next forecast periods. It only works in Canada. Elsewhere the card says so.
 
@@ -235,7 +242,8 @@ Family Pack reuses what OpenClaw already owns instead of rebuilding it.
 
 | Need | Owned by |
 | --- | --- |
-| Who someone is on the page | The Gateway's trusted-proxy sign-in. The `family.week` Gateway method matches that username exactly to `profileId`. A member id from the browser is not used |
+| Who someone is on the page | OpenClaw Multiplayer identity: the Gateway's host-attested profile (`gatewayProfileId`, linked in **People**) or trusted-proxy sign-in (`profileId`). A member id from the browser is never used |
+| Online presence & roles | OpenClaw `system-presence` (green dot on linked People cards) and native **Household Guest** / invite-only **`household-parent`** presets printed by `openclaw family access` |
 | Who someone is in Discord | The roster `discordId`, set with `openclaw family setup --discord NAME=ID`. In LAN mode, setup also prints the `users.linkChannelIdentity` command that ties it to the person's Gateway profile |
 | Sign-in for each family member | [Multi-user Gateway](https://docs.openclaw.ai/concepts/multi-user). See [Household access](#household-access) |
 | Google Calendar access | `gog`, on the Gateway host |
@@ -302,7 +310,7 @@ After browser-only changes, rebuild and use **Plugins → Advanced → Customize
 
 ### Preparing for the next host
 
-The plugin pins the exact host it was built and tested against: currently `2026.11.3`. A newer host is not claimed until the smoke passes on that binary. The peer range is `>=2026.11.3 <2026.12`, so a later 2026.11 patch is admitted by the range, but only `2026.11.3` is tested.
+The plugin pins the host it builds against (`2026.11.3`) with peer range `>=2026.11.3 <2026.12`, and has passed full isolated-Gateway smoke on `2026.11.3` and `2026.11.5` (`OPENCLAW_SMOKE_ALLOW_TESTED_HOST=1 npm run smoke`).
 
 When a new host is published:
 
@@ -326,7 +334,7 @@ Before the first family day, run this on a test state directory or an isolated G
 
 Only then run the writes/delivery pass: enable writes, prove a kid's shared write is approved by a parent and not by the kid, then enable reminders and briefs for one controlled channel.
 
-OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Tested on OpenClaw `2026.11.3`.** After you run `openclaw update`, run the smoke to check this plugin against your new host:
+OpenClaw plugin APIs are experimental, so this plugin tracks host releases rather than claiming to work everywhere. **Built against `2026.11.3` and smoke-tested on `2026.11.3` & `2026.11.5`.** After you run `openclaw update`, run the smoke to check this plugin against your new host:
 
 ```bash
 npm run smoke
@@ -347,6 +355,7 @@ Shipped work is checked. Chores are still later. This version has no undo, no me
 - [x] Guided setup (`family setup`, `family gog`, `family access`)
 - [x] Garbage day, when you set a city calendar link
 - [x] Family skill
+- [x] Deeper OpenClaw Multiplayer integration (People profile linking, online presence, Household Guest & invite-only parent presets)
 - [ ] Chores
 
 ## FAQ
