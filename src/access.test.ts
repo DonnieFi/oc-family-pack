@@ -147,6 +147,7 @@ test("Household Guest previews a separate invite-only role without replacing hos
         },
       },
     },
+    session: { dmScope: "per-account-channel-peer" },
   });
   assert.match(preview.text, /operator\.sessions\.read.*operator\.sessions\.write/);
   const existing = { ...gateway, roles: { ...roles, definitions: { ...roles.definitions, "household-guest": {} } } };

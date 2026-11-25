@@ -267,6 +267,7 @@ function planHouseholdGuest(gateway: unknown, input: AccessPeople, opts: AccessO
       json({
         gateway: { roles: { definitions: { "household-guest": role } } },
         agents: { entries: { [agent]: agentPolicy } },
+        session: { dmScope: "per-account-channel-peer" },
       }),
     ].join("\n"),
   };
