@@ -238,16 +238,36 @@ function planHouseholdGuest(gateway: unknown, input: AccessPeople, opts: AccessO
     sandbox: "required",
     modelPolicy: { sourceAgent: agent },
   };
+  const agentPolicy = {
+    sandbox: { mode: "all" },
+    tools: {
+      profile: "minimal",
+      alsoAllow: [
+        "family_schedule",
+        "family_today",
+        "family_members",
+        "garbage_schedule",
+        "calendar_create",
+        "calendar_update",
+        "calendar_move",
+        "calendar_delete",
+      ],
+      deny: ["group:runtime", "group:fs", "group:nodes", "group:automation"],
+    },
+  };
   return {
     ok: true,
     text: [
       "Household Guest role preview",
       "OpenClaw 2026.11.5 accepts this configuration. The pinned 2026.11.3 release does not support invite-only roles.",
       "Family week, Today, and delivery status use operator.sessions.read, which operator.sessions.write satisfies without broad Gateway read access.",
-      "Session access is invite-only. Models follow the household agent’s primary and fallback models. The role requires a working sandbox backend.",
+      "Session access is invite-only. Models follow the household agent’s primary and fallback models. The role requires a working sandbox backend, and the household agent denies host runtime, filesystem, node, and automation tools.",
       "An administrator can validate this patch with openclaw config patch --stdin --dry-run. Before applying, check that gateway.roles.definitions.household-guest is still absent. OpenClaw administrators assign the role separately.",
       "",
-      json({ gateway: { roles: { definitions: { "household-guest": role } } } }),
+      json({
+        gateway: { roles: { definitions: { "household-guest": role } } },
+        agents: { entries: { [agent]: agentPolicy } },
+      }),
     ].join("\n"),
   };
 }

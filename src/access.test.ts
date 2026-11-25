@@ -126,6 +126,27 @@ test("Household Guest previews a separate invite-only role without replacing hos
         },
       },
     },
+    agents: {
+      entries: {
+        household: {
+          sandbox: { mode: "all" },
+          tools: {
+            profile: "minimal",
+            alsoAllow: [
+              "family_schedule",
+              "family_today",
+              "family_members",
+              "garbage_schedule",
+              "calendar_create",
+              "calendar_update",
+              "calendar_move",
+              "calendar_delete",
+            ],
+            deny: ["group:runtime", "group:fs", "group:nodes", "group:automation"],
+          },
+        },
+      },
+    },
   });
   assert.match(preview.text, /operator\.sessions\.read.*operator\.sessions\.write/);
   const existing = { ...gateway, roles: { ...roles, definitions: { ...roles.definitions, "household-guest": {} } } };
