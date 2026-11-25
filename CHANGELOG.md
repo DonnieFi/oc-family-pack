@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.3.0 — 2026-11-25
+
+- Link People roster cards to native OpenClaw profiles (`gatewayProfileId`) from **People → Choose OpenClaw profile**, with a **Reload OpenClaw profiles** action, unique email or display-name match hints (without auto-linking), missing-profile invite guidance, and pre-edit roster authority verification on save.
+- Show an accessible online presence dot on People cards for linked OpenClaw profiles using viewer-scoped `system-presence`, failing closed when presence is unavailable.
+- Preview and print native Household Guest and invite-only `household-parent` access presets (`openclaw family access`), including account-aware DM isolation (`per-account-channel-peer`), host runtime/filesystem/node/automation tool denials, and `sandbox.tools` allow/deny policy on the household guest agent.
+- Allow session-only roles (`operator.sessions.write`) to read Family week, Today, and delivery status without granting broader read scopes.
+- Remove the duplicated `UNIFORM` row inside day schedule columns so uniform notes render only in the dedicated top uniform strip (desktop and mobile), and show the empty-day message on uniform-only days.
+- Add a synced **Show/Hide homework** toggle button in the Family week filter bar alongside per-day homework disclosures.
+- Add optional `showSchool: false` (school-off / summer mode) to hide school calendars from daily surfaces (Family page, Today, and briefs) while keeping explicit `family_schedule` chat queries working.
+- Allow running the isolated-Gateway smoke test against newer tested `>=2026.11.3` hosts (`OPENCLAW_SMOKE_ALLOW_TESTED_HOST=1`) while keeping the `>=2026.11.3` minimum pin, bypass env HTTP proxies for loopback WebSockets, and verify roster links across Gateway reloads.
+
 ## 0.2.2 — 2026-11-15
 
 - Add People roster save with validation and disable editing while a save is in progress.
