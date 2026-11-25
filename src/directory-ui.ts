@@ -221,26 +221,52 @@ export function mountPeoplePage(container: HTMLElement, initial: ControlUiViewCo
           select.setAttribute("aria-label", "OpenClaw profile");
           select.append(h("option", { value: "" }, member.login ? "No native profile" : "Roster only"));
           const profiles = response.profiles ?? [];
+          const available: { id: string; displayName: string; emails?: string[]; label: string }[] = [];
           for (const profile of profiles) {
             if (typeof profile.id !== "string" || typeof profile.displayName !== "string" || profile.id === "gateway-owner" || profile.mergedInto) continue;
             const used = members.some((other) => other.id !== member.id &&
               (linkEdits.has(other.id) ? linkEdits.get(other.id) : other.gatewayProfileId) === profile.id);
             const duplicateName = profiles.some((other) => other.id !== profile.id && other.displayName === profile.displayName);
             const label = duplicateName ? `${profile.displayName} (${profile.emails?.[0] ?? profile.id})` : profile.displayName;
-            if (!used) select.append(h("option", { value: profile.id }, label));
+            if (!used) {
+              available.push({ id: profile.id, displayName: profile.displayName, ...(profile.emails ? { emails: profile.emails } : {}), label });
+              select.append(h("option", { value: profile.id }, label));
+            }
           }
           if (link && !Array.from(select.options).some((option) => option.value === link)) {
             select.append(h("option", { value: link }, "Current profile"));
           }
-          select.value = link ?? "";
+          const targetValue = link ?? "";
+          for (const option of Array.from(select.querySelectorAll("option"))) {
+            if ((option.getAttribute("value") ?? "") === targetValue) option.selected = true;
+          }
           select.disabled = saving;
           select.addEventListener("change", () => {
             linkEdits.set(member.id, select.value || null);
             edited.add(selected);
             profileStatus.textContent = "Save changes to update the roster link.";
           });
-          profilePicker.replaceChildren(select);
-          profileStatus.textContent = "If the person is missing, have them sign in to OpenClaw, then reload the list.";
+          const inviteHint = h(
+            "p",
+            { class: "ocfp-people-note" },
+            "Not listed? OpenClaw creates profiles when someone accepts an OpenClaw invite or signs in through your proxy. Save as Roster only for now, then click Reload OpenClaw profiles after they sign in.",
+          );
+          profilePicker.replaceChildren(select, inviteHint);
+          chooseProfile.textContent = "Reload OpenClaw profiles";
+          const memberEmail = member.email?.trim().toLowerCase();
+          const memberName = member.displayName.trim().toLowerCase();
+          const emailMatches = memberEmail
+            ? available.filter((p) => (p.emails ?? []).some((e) => e.trim().toLowerCase() === memberEmail))
+            : [];
+          const nameMatches = memberName
+            ? available.filter((p) => p.displayName.trim().toLowerCase() === memberName)
+            : [];
+          const suggestion = !link ? (emailMatches.length === 1 ? emailMatches[0] : nameMatches.length === 1 ? nameMatches[0] : undefined) : undefined;
+          profileStatus.textContent = suggestion
+            ? `Suggested match: ${suggestion.label}. Select it above and save changes to connect.`
+            : available.length === 0
+              ? "No unlinked OpenClaw profiles found yet. Invite them in OpenClaw or have them sign in, then reload."
+              : "Select an OpenClaw profile above and save changes, or leave as Roster only.";
         } catch {
           if (!disposed && profilePicker.isConnected) profileStatus.textContent = "Profiles could not load. Try again.";
         } finally {

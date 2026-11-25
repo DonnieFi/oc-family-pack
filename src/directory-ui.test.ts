@@ -260,3 +260,32 @@ test("People shows an accessible green dot only for linked online profiles and f
   await flush();
   assert.equal(deniedPage.container.querySelector(".ocfp-presence-dot"), null);
 });
+
+test("People profile picker suggests a unique match without auto-linking and guides reload when missing", async () => {
+  let profiles: { id: string; displayName: string; emails?: string[] }[] = [];
+  const page = mount(true, async (method) => {
+    if (method === DIRECTORY_METHOD) return { demo: false, members: [RILEY] };
+    if (method === "system-presence") return [];
+    if (method === "users.list") return { profiles };
+    throw new Error(method);
+  });
+  await flush();
+  page.container.querySelector<HTMLButtonElement>(".ocfp-person")?.click();
+  const choose = [...page.container.querySelectorAll<HTMLButtonElement>("button.ocfp-btn")].find((b) => b.textContent === "Choose OpenClaw profile");
+  assert.ok(choose);
+  choose.click();
+  await flush();
+  assert.equal(choose.textContent, "Reload OpenClaw profiles");
+  const status = page.container.querySelector('[role="status"]');
+  assert.match(status?.textContent ?? "", /No unlinked OpenClaw profiles found yet/);
+  assert.match(page.container.textContent ?? "", /OpenClaw creates profiles when someone accepts an OpenClaw invite/);
+
+  // Once the person signs in, reloading suggests the unique match without silently mutating the link.
+  profiles = [{ id: "prof-riley", displayName: "Riley", emails: ["riley@example.com"] }];
+  choose.click();
+  await flush();
+  assert.match(status?.textContent ?? "", /Suggested match: Riley/);
+  const select = page.container.querySelector<HTMLSelectElement>('select[aria-label="OpenClaw profile"]');
+  assert.ok(select);
+  assert.equal(select.querySelector("option[selected]")?.getAttribute("value"), "");
+});
