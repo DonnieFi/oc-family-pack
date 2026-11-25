@@ -127,7 +127,7 @@ test("Household Guest previews a separate invite-only role without replacing hos
       },
     },
   });
-  assert.match(preview.text, /Family currently requires broad Gateway read access/);
+  assert.match(preview.text, /operator\.sessions\.read.*operator\.sessions\.write/);
   const existing = { ...gateway, roles: { ...roles, definitions: { ...roles.definitions, "household-guest": {} } } };
   assert.equal(runAccess(existing, "guest-preset", {}, options).ok, false);
   assert.equal(runAccess(lanReady, "guest-preset", {}, options).ok, false);

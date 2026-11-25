@@ -243,7 +243,7 @@ function planHouseholdGuest(gateway: unknown, input: AccessPeople, opts: AccessO
     text: [
       "Household Guest role preview",
       "OpenClaw 2026.11.5 accepts this configuration. The pinned 2026.11.3 release does not support invite-only roles.",
-      "This preset is for testing. Family currently requires broad Gateway read access, so keep existing household roles for Family use.",
+      "Family week, Today, and delivery status use operator.sessions.read, which operator.sessions.write satisfies without broad Gateway read access.",
       "Session access is invite-only. Models follow the household agent’s primary and fallback models. The role requires a working sandbox backend.",
       "An administrator can validate this patch with openclaw config patch --stdin --dry-run. Before applying, check that gateway.roles.definitions.household-guest is still absent. OpenClaw administrators assign the role separately.",
       "",

@@ -124,15 +124,15 @@ test("queries are operator.read session actions, the page write is operator.writ
   ]);
   assert.deepEqual(hooks, [{ name: "before_tool_call", priority: CALENDAR_HOOK_PRIORITY, matcher: writes }]);
   assert.deepEqual(methods, [
-    { method: "family.week", scope: "operator.read" },
-    { method: "family.todayView", scope: "operator.read" },
+    { method: "family.week", scope: "operator.sessions.read" },
+    { method: "family.todayView", scope: "operator.sessions.read" },
     { method: "family.directory", scope: "operator.write" },
     { method: "family.directory.preview", scope: "operator.write" },
-    { method: "family.deliveryStatus", scope: "operator.read" },
+    { method: "family.deliveryStatus", scope: "operator.sessions.read" },
     { method: "family.todayHome", scope: "operator.write" },
     { method: "family.pageWrite", scope: "operator.write" },
   ]);
-  assert.deepEqual(widgets, [{ surface: "widget", id: "family-today", label: "Today", requiredScopes: ["operator.read"] }]);
+  assert.deepEqual(widgets, [{ surface: "widget", id: "family-today", label: "Today", requiredScopes: ["operator.sessions.read"] }]);
   assert.equal(commands, 0);
   assert.deepEqual(cliCommands, ["family"]);
   assert.deepEqual(cli, ["family", "gog", "access", "setup"]);

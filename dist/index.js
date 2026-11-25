@@ -194,12 +194,15 @@ const plugin = defineFeaturePlugin({
         }), { name: SET_REMINDER_MODE_TOOL, optional: true });
         api.registerTool((ctx) => familyContact(config, { senderIsOwner: contactAuthority(ctx) }), { name: FAMILY_CONTACT_TOOL, optional: true });
         // The week is a Gateway method, not a feature query, because only a Gateway
-        // method sees who signed in. Same operator.read scope the queries get.
+        // method sees who signed in. operator.sessions.read is satisfied by
+        // operator.sessions.read, operator.sessions.write, operator.read, and
+        // operator.write so session-only roles (such as household-guest) can load
+        // the Family page and Today widget without broad operator.read.
         api.session.controls.registerControlUiDescriptor({
             surface: "widget",
             id: TODAY_WIDGET_ID,
             label: "Today",
-            requiredScopes: ["operator.read"],
+            requiredScopes: ["operator.sessions.read"],
         });
         api.registerGatewayMethod(WEEK_METHOD, weekMethod(familyWeek(config, {
             grant: familyGrant,
@@ -212,8 +215,8 @@ const plugin = defineFeaturePlugin({
                     return undefined;
                 }
             },
-        }), config), { scope: "operator.read" });
-        api.registerGatewayMethod(TODAY_VIEW_METHOD, todayViewMethod(familyTodayView(config, { grant: familyGrant, log: (line) => api.logger.warn(line), identity: () => store }), config.accessMode), { scope: "operator.read" });
+        }), config), { scope: "operator.sessions.read" });
+        api.registerGatewayMethod(TODAY_VIEW_METHOD, todayViewMethod(familyTodayView(config, { grant: familyGrant, log: (line) => api.logger.warn(line), identity: () => store }), config.accessMode), { scope: "operator.sessions.read" });
         // operator.write: a kid can read the week and cannot read contact details.
         let latestRaw = api.pluginConfig;
         let latestConfig = config;
@@ -230,7 +233,7 @@ const plugin = defineFeaturePlugin({
                 config.members = nextParsed.members;
             },
         }), { scope: "operator.write" });
-        api.registerGatewayMethod(DELIVERY_STATUS_METHOD, deliveryStatusMethod(() => store, () => (config.demo ? DEMO_MEMBERS : config.members)), { scope: "operator.read" });
+        api.registerGatewayMethod(DELIVERY_STATUS_METHOD, deliveryStatusMethod(() => store, () => (config.demo ? DEMO_MEMBERS : config.members)), { scope: "operator.sessions.read" });
         // operator.write so a kid cannot consume the one-time Home seed.
         api.registerGatewayMethod(TODAY_HOME_METHOD, todayHomeMethod(() => store, () => config), { scope: "operator.write" });
         const writePage = pageWrite({
